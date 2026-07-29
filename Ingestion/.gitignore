@@ -1,0 +1,35 @@
+#Env variables
+.env
+
+#Venv
+.venv
+.venv_embed
+.venv_reader
+.vend_index
+
+#Vscode
+.vscode/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+functions/chunking/*.old
+
+#Data folder
+data/
+
+#Test folder
+test/
+
+#Logger
+functions/embeddings/disable_logger.txt
+
+#old folder
+old/
+
+#macOS
+.DS_Store
+
+#runtime logs
+src/ingestion_log.txt
+src/ingestion_output.log
