@@ -320,7 +320,7 @@ class RetrieverQna:
 
                     # referred_contexts (1-based en el prompt)
                     referred_context_ids = response_dict.get("referred_contexts") or []
-                    file_names, pages, globals_col, sims = [], [], [], []
+                    file_names, pages, globals_col = [], [], []
 
                     idxs: List[int] = []
                     if len(referred_context_ids) > 0 and self.context_df is not None:

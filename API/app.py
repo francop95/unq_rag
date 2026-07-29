@@ -8,7 +8,7 @@ from utils.parser import parse_conv_history
 from flask import Flask, request, jsonify, make_response, send_from_directory, abort
 from logging import StreamHandler
 from configs.Configuration import Configuration
-from services.Verion import Verion
+from services.RagWorkflow import RagWorkflow
 from utils.utils import sanitize_data
 
 
@@ -141,10 +141,9 @@ def process_request():
         query_id = data['query_id']
         app.logger.info(f"{query_id} [MAIN] Project: {project}")
 
-        if project == "Verion":
-            use_case_obj = Verion(data)
+        if project == "RagWorkflow":
+            use_case_obj = RagWorkflow(data)
             final_response_filtered = use_case_obj.trigger_workflow(data)
-            #metrics_data = generate_metrics_data(data, query_id)
 
         else:
             app.logger.info(f"{query_id} [MAIN] Unknwon project: {project}")
@@ -153,8 +152,7 @@ def process_request():
         app.logger.error(f"[{query_id}] [MAIN] Exception: {str(e)}")
 
 
-    #app.logger.info(f"[{query_id}] [MAIN] Metrics dict: {metrics_data}")
-    result = make_response(jsonify({"Results": final_response_filtered})) #, "MetricsData":str(metrics_data)}))
+    result = make_response(jsonify({"Results": final_response_filtered}))
     result.headers["Content-Type"] = "application/json"
 
     app.logger.info(f"[{query_id}] [MAIN] Query ID Execution Ends!")

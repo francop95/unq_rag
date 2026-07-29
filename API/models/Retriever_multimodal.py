@@ -26,7 +26,6 @@ class Retriever:
 
         # Estados
         self.message_prompt: List[Dict[str, str]] = []
-        self.retrieval_output = None
         self.default_retriever_output = None
         self.completion_failure = data["completion_failure"]
         self.completion_success = data["completion_success"]

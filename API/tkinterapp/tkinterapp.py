@@ -1,7 +1,5 @@
 import os
 import json
-import uuid
-import queue
 import threading
 import webbrowser
 import tkinter as tk
@@ -16,13 +14,10 @@ env_file = find_dotenv(filename=".env")  # busca desde CWD hacia padres
 load_dotenv(env_file, override=False)
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:5000/get_response")  # <-- ajusta
-API_KEY = os.getenv("API_KEY", "")
 
 # Para links
 DOC_BASE_URL = os.getenv("DOC_BASE_URL", "").rstrip("/")  # p. ej. https://tu-dominio/static/docs
 DOC_BASE_DIR = os.getenv("DOC_BASE_DIR", "").rstrip("/")  # p. ej. /ruta/local/a/pdfs
-
-TIMEOUT = (10, 240)  # (connect, read)
 
 def open_url(url: str):
     """Abre URL en una pestaña nueva. Acepta http(s) o file://"""
@@ -344,7 +339,7 @@ class App(ttk.Frame):
 
         try:
             results = data.get("Results") or data.get("results") or []
-            self._render_results(results, original=data)
+            self._render_results(results)
         except Exception as e:
             self._render_error(f"Error interpretando la respuesta: {e}\n{json.dumps(data, ensure_ascii=False, indent=2)}")
 
@@ -366,7 +361,7 @@ class App(ttk.Frame):
         card.pack(fill="x")
         return card
 
-    def _render_results(self, results: list[dict], original: dict | None = None):
+    def _render_results(self, results: list[dict]):
         for w in self.result_frame.winfo_children():
             w.destroy()
 
@@ -446,14 +441,6 @@ class App(ttk.Frame):
         for p in pages:
             b = ttk.Label(pages_row, text=str(p), style="Badge.TLabel")
             b.pack(side="left", padx=3)
-
-    def _link_label(self, parent, url: str | None):
-        if not url:
-            return  # No mostrar nada si no hay URL válida
-        
-        link_lbl = ttk.Label(parent, text=url, style="Link.TLabel", wraplength=780, justify="left")
-        link_lbl.pack(anchor="w", pady=(2, 0))
-        link_lbl.bind("<Button-1>", lambda e, u=url: open_url(u))
 
 # =========================
 # Main

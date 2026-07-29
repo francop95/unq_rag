@@ -41,14 +41,6 @@ class QueryIntent:
             "ans_type": data["gpt_ans_type"],
         }
         self.model_selected = data["gemini_model"]
-        # self.azure_oai_dynamic_params = {
-        #     "azure_model_name": self.model_selected,
-        #     "max_tokens": 100
-        #     }
-        self.model_dynamic_params = {
-            "model_name": self.model_selected,
-            "max_tokens": 100
-            }
         self.retry_count = 0
         self.max_retries = data["query_intent_max_retries"]
 

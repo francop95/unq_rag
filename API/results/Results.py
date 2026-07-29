@@ -12,7 +12,6 @@ class ResultProcessor:
         self.similarity = 0.0
         self.ans_type = "unknown"
         self.reference = "Context could not be found."
-        self.updated_reference = self.reference
         self.default_response = [
             {
                 "answer": self.answer,

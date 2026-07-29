@@ -2,8 +2,6 @@ import json
 import logging
 from time import perf_counter
 from typing import Any, Dict, List
-import requests
-from tenacity import retry, wait_random_exponential, stop_after_attempt
 import os
 import sys
 import httpx
@@ -16,28 +14,15 @@ sys.path.append(project_root)
 # --- OpenAI (SDK 1.x) ---
 try:
     from openai import OpenAI as _OpenAI
-    from openai import APIConnectionError, APITimeoutError, RateLimitError, APIStatusError
+    from openai import APIStatusError
 except Exception:
     _OpenAI = None
-    APIConnectionError = APITimeoutError = RateLimitError = APIStatusError = Exception
-
-# --- Google Gemini (SDK nuevo) ---
-try:
-    from google import genai as _genai
-except Exception:
-    _genai = None
+    APIStatusError = Exception
 
 
 class Completion:
     def __init__(self) -> None:
-        self.gpt_chat_response = {"choices": [{"message": {"content": ""}}]}
         self.retries = 5
-
-    def generate_headers(self) -> Dict[str, str]:
-        raise NotImplementedError()
-
-    def generate_body(self, messages: List[str]) -> Dict[str, Any]:
-        raise NotImplementedError()
 
     def get_response(self, messages_list: List[str]) -> Any:
         raise NotImplementedError()
@@ -52,6 +37,11 @@ class ModelCompletion(Completion):
 
     def initialize_params(self, data: Dict[str, Any], dynamic_params: Dict = {}) -> None:
         logger.info(f"[{self.query_id}] [GPTCompletion] Initializing params model_type={self.model_type}")
+        if self.model_type != "openai":
+            raise ValueError(f"Unsupported model_type: {self.model_type!r}. Only 'openai' is supported.")
+        if _OpenAI is None:
+            raise RuntimeError("Falta instalar openai>=1.0.0 (pip install openai)")
+
         self._file_id_cache = {}
         self.electric_diagram_path=data["electric_diagram_path"]
         self.tben_diagram_path=data["tben_diagram_path"]
@@ -61,33 +51,22 @@ class ModelCompletion(Completion):
         self.completion_failure = data["completion_failure"]
         self.completion_success = data["completion_success"]
 
-        # -------- OPENAI (SDK 1.x) --------
-        if self.model_type == "openai":
-            if _OpenAI is None:
-                raise RuntimeError("Falta instalar openai>=1.0.0 (pip install openai)")
-            self.OPENAI_MODEL = dynamic_params.get("model") or dynamic_params.get("openai_model") \
-                                or data.get("openai_model1") or data.get("openai_model") or "gpt-4o-mini"
-            self.max_tokens = int(dynamic_params.get('max_tokens') or data.get("max_tokens", 1024))
-            api_key = data.get("openai_keys") or os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise RuntimeError("OPENAI_API_KEY no configurado (env o data['openai_api_key'])")
-            # timeout definido para evitar cuelgues
-            http = httpx.Client(timeout=httpx.Timeout(connect=10.0, read=180.0, write=180.0, pool=5.0))
-            self._openai = _OpenAI(api_key=api_key,http_client=http, max_retries=2)
-            self._gemini = None
-            self.headers = {}
-            self.payload = {}
+        self.OPENAI_MODEL = dynamic_params.get("model") or dynamic_params.get("openai_model") \
+                            or data.get("openai_model1") or data.get("openai_model") or "gpt-4o-mini"
+        self.max_tokens = int(dynamic_params.get('max_tokens') or data.get("max_tokens", 1024))
+        api_key = data.get("openai_keys") or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY no configurado (env o data['openai_api_key'])")
+        # timeout definido para evitar cuelgues
+        http = httpx.Client(timeout=httpx.Timeout(connect=10.0, read=180.0, write=180.0, pool=5.0))
+        self._openai = _OpenAI(api_key=api_key,http_client=http, max_retries=2)
 
-            self.default_response_dict = {
-                "query": "",
-                "response": "",
-                "model_type": self.model_type,
-                "res_status": self.completion_failure,
-            }
-
-    def generate_headers(self, api_key: str) -> Dict[str, str]:
-        # headers para la rama Azure (requests)
-        return {"Content-Type": "application/json", "api-key": api_key}
+        self.default_response_dict = {
+            "query": "",
+            "response": "",
+            "model_type": self.model_type,
+            "res_status": self.completion_failure,
+        }
 
     def _normalize_messages(self, messages):
         """
@@ -97,28 +76,6 @@ class ModelCompletion(Completion):
             return messages
         return messages if isinstance(messages, list) else [messages]
 
-    def generate_body(self, message: List[Dict[str, str]], data: Dict[str, Any]) -> Dict[str, Any]:
-        if self.model_type == "azure":
-            payload = dict(self.payload)
-            payload["messages"] = self._normalize_messages(message)
-            logger.debug(f"[{data['query_id']}] [GPTCompletion] Payload {payload}")
-            return payload
-        # openai / gemini no usan este body
-        return {}
-
-    # ---- reintento REST solo para la rama Azure ----
-    def _tenacity_retry_predicate(self, exception):
-        return isinstance(exception, requests.exceptions.RequestException)
-
-    @retry(wait=wait_random_exponential(multiplier=1, min=2, max=8),
-           stop=stop_after_attempt(3),
-           retry_error_callback=lambda x: x.outcome.result() if x.outcome else None,
-           retry=lambda self, exc: ModelCompletion._tenacity_retry_predicate(self, exc))
-    def make_openai_request(self, endpoint, headers, data):
-        resp = requests.post(endpoint, headers=headers, json=data, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    
     def _messages_to_prompt(self, messages):
         parts = []
         for m in self._normalize_messages(messages):
@@ -172,60 +129,6 @@ class ModelCompletion(Completion):
             safe_text = repr(r)
         return {"choices": [{"message": {"content": safe_text}}]}
 
-    def _call_openai(self, message: list[dict]) -> dict:
-        """
-        1) Si el modelo admite Chat Completions, úsalo (max_tokens).
-        2) Si es de Responses-only o el servidor dice unsupported_parameter, usa Responses (max_output_tokens)
-        y NO envíes temperature/top_p.
-        """
-        model = self.OPENAI_MODEL
-        # --- Ruta Chat Completions, sólo si NO parece responses-only ---
-        if not self._is_responses_only_model(model):
-            try:
-                resp = self._openai.chat.completions.create(
-                    model=model,
-                    messages=self._normalize_messages(message),
-                    max_tokens=self.max_tokens,
-                    temperature=0.7,
-                    top_p=0.95,
-                )
-                content = resp.choices[0].message.content if resp and resp.choices else ""
-                return {"choices": [{"message": {"content": content}}]}
-            except APIStatusError as e:
-                # Si el backend sugiere usar Responses o marca unsupported_parameter, caemos a Responses
-                msg = (str(e) or "").lower()
-                if "unsupported_parameter" not in msg and "use the responses api" not in msg and e.status_code != 400:
-                    raise
-
-        # --- Ruta Responses API (sin temperature/top_p) ---
-        prompt = self._messages_to_prompt(message)
-        try:
-            r = self._openai.responses.create(
-                model=model,
-                input=prompt,
-                max_output_tokens=self.max_tokens,  # Responses usa este nombre
-                # OJO: no enviamos temperature/top_p si el modelo no los soporta
-            )
-        except APIStatusError as e:
-            # último intento: reintentar quitando cualquier sampling param si quedara alguno
-            r = self._openai.responses.create(
-                model=model,
-                input=prompt,
-                max_output_tokens=self.max_tokens,
-            )
-
-        # Si quedó incompleto por tope de tokens, reintenta con más margen
-        if getattr(r, "incomplete_details", None) and getattr(r.incomplete_details, "reason", "") == "max_output_tokens":
-            # duplica o fija un techo alto controlado
-            new_max = max(getattr(self, "max_tokens", 1024) * 2, 1024)
-            r = self._openai.responses.create(
-                model=self.OPENAI_MODEL,
-                input=prompt,
-                max_output_tokens=new_max,
-            )
-
-        return self._normalize_response_to_chat_choice(r)
-    
     def _ensure_file_id(self, file_ref: str) -> str:
         """
         Acepta un file_id existente o un path local.
@@ -324,26 +227,6 @@ class ModelCompletion(Completion):
         return self._normalize_response_to_chat_choice(r)
 
 
-    def _call_gemini(self, message: List[Dict[str, str]]) -> Dict[str, Any]:
-        """
-        Llama a Gemini (google-genai) y normaliza a {"choices":[{"message":{"content": ...}}]}
-        """
-        # Convierte messages a un bloque de texto simple (system + user)
-        parts = []
-        for m in self._normalize_messages(message):
-            c = m.get("content", "")
-            if c:
-                parts.append(str(c))
-        prompt = "\n".join(parts).strip()
-
-        try:
-            resp = self._gemini.models.generate_content(model=self.GEMINI_MODEL, contents=prompt)
-            # SDK suele exponer 'text'; si no, convierte a str
-            content = getattr(resp, "text", None) or str(resp)
-            return {"choices": [{"message": {"content": content}}]}
-        except Exception as e:
-            return {"choices": [{"message": {"content": ""}}], "error": str(e)}
-
     def get_response(self, messages_list: List[List], data: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Normaliza para que sea una lista de prompts (lotes)
         if not messages_list:
@@ -356,23 +239,8 @@ class ModelCompletion(Completion):
         responses: List[Dict[str, Any]] = []
 
         for i, message in enumerate(messages_list):
-            if self.model_type == "azure":
-                body = self.generate_body(message, data)
-                res = self.make_openai_request(self.endpoint, self.headers, body)
-                # Normaliza a formato "choices"
-                try:
-                    content = res["choices"][0]["message"]["content"]
-                except Exception:
-                    content = json.dumps(res, ensure_ascii=False)
-                responses.append({"choices": [{"message": {"content": content}}]})
-            elif self.model_type == "openai":
-                res = self._call_openai_multimodal(message)
-                responses.append(res)
-            elif self.model_type == "gemini":
-                res = self._call_gemini(message)
-                responses.append(res)
-            else:
-                responses.append({"choices": [{"message": {"content": ""}}]})
+            res = self._call_openai_multimodal(message)
+            responses.append(res)
 
             # time_taken por item
             responses[i]["time_taken"] = round(perf_counter() - start, 3)
@@ -412,7 +280,3 @@ class ModelCompletion(Completion):
 
         logger.info(f"[{self.query_id}] [GPTCompletion] processed response")
         return parsed_responses
-
-
-class DefaultCompletion(Completion):
-    pass

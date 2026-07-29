@@ -20,9 +20,12 @@ class Configuration:
     #########################################################################################
 
     ### Electric Diagram Paths
-
-    electric_diagram_path=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "plano_distribucion_electrica.pdf"))
-    tben_diagram_path=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "conexionadoTben.pdf"))
+    # Reutiliza los PDF fuente de Ingestion en vez de mantener copias duplicadas en API/.
+    _ingestion_raw_data_dir = os.path.abspath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "Ingestion", "data", "raw_data"
+    ))
+    electric_diagram_path = os.path.join(_ingestion_raw_data_dir, "Plano distribucion electrica.pdf")
+    tben_diagram_path = os.path.join(_ingestion_raw_data_dir, "conexionadoTben.pdf")
 
     #########################################################################################
 
@@ -115,7 +118,7 @@ class Configuration:
 
     ### PROJECT-SPECIFIC PARAMS
     # project
-    AppSettings__Project = "Verion"
+    AppSettings__Project = "RagWorkflow"
 
     AppSettings__GPTEnabled = True
     AppSettings__CacheEnabled = False

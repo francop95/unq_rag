@@ -16,9 +16,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "../../"))
 sys.path.append(project_root)
 
-#from ApiManager.GeminiAPIManager import GeminiRoundRobinClient
-from google.genai import types
-
 
 logger = logging.getLogger('app.GPTQna')
 
@@ -27,9 +24,6 @@ logger = logging.getLogger('app.GPTQna')
 config = Configuration()
 
 openai_exception_res = {"choices": [{"message": {"content": ""}}]}
-
-azure_embeddings = None
-openai_embeddings = None
 
 
 class GPTQna:
@@ -59,35 +53,11 @@ class GPTQna:
             if r.status != 200:
                 r.wait_for_status()
                 raise RuntimeError
-                pass
             res = await r.json()
             if res["choices"][0]["message"]["content"]:
                 pass
 
             return res
-        
-    # def gemini_completion(self,model: GeminiRoundRobinClient,data: dict, prompt: str) -> dict:
-    #     """
-    #     Envía una solicitud al modelo Gemini de manera asíncrona.
-
-    #     Args:
-    #         prompt (str): El prompt a enviar al modelo.
-
-    #     Returns:
-    #         dict: La respuesta del modelo.
-    #     """
-    #     logger.info(f"[{self.query_id}] [Gemini] Inside gemini_completion()")
-
-    #     try:
-    #         # Realiza la solicitud asíncrona al modelo Gemini
-    #         response = model._generate_content(
-    #             model=data["gemini_model"],
-    #             contents=prompt
-    #         )
-    #         return response.text
-    #     except Exception as e:
-    #         logger.error(f"[{self.query_id}] [Gemini] Error during API call: {str(e)}")
-    #         return {"error": str(e)}
 
     # To clean the response text
     def clean_response(self, response: str) -> str:
@@ -175,7 +145,6 @@ class GPTQna:
             context = similarities["Text"].iloc[i]
 
             gpt_no_answer_str = data["gpt_no_answer_str"]
-            gpt_generic_msg = data["gpt_generic_msg_content"]
             prompt = data["gpt_qna_prompt"].format(
                 gpt_no_answer_str,
                 context,
@@ -223,101 +192,6 @@ class GPTQna:
         responses["file_name"] = list(similarities["File Name"])
 
         return responses
-    
-    # To asynchronously hit Gemini Chat Completion api with different contexts and get the respective responses
-    # def answer_using_gemini(
-    #     self, model: GeminiRoundRobinClient, data: dict
-    # ) -> dict:
-    #     """To find the response for the given query from openai using top n contexts.
-
-    #     Args:
-    #         session (aiohttp.ClientSession): Async session variable.
-    #         query (str): Query string.
-    #         df (str): embeddings dataframe.
-    #         n (int): top n contexts.
-    #         model (pkl): Completion model name.
-    #         embeddings_model (str): embedding model name.
-    #         use_openai (bool, optional): Flag to know whether to use openai or azure openai. Defaults to False.
-
-    #     Returns:
-    #         dict: Final response dict with openai reponse , pages, file names and similarirty scores.
-    #     """
-    #     logger.info(f"[{self.query_id}] [GPT] Inside answer_using_gemini()")
-    #     # To find the best fit context (top 3)
-    #     post_tasks = []
-    #     message_prompt = []
-
-    #     similarities = None
-    #     if data["context_found"]:
-    #         similarities = data["context_dataframe"]
-    #         similarities = similarities.head(data["gpt_top_n_contexts"])
-
-    #     openai_exception_res["choices"][0]["message"][
-    #         "content"
-    #     ] = "No Context identified"
-    #     responses = {}
-    #     responses["response"] = [openai_exception_res]
-    #     responses["page"] = [-1]
-    #     responses["similarities"] = [0]
-    #     responses["file_name"] = [""]
-
-    #     if type(similarities) == pd.DataFrame:
-    #         if similarities.empty:
-    #             logger.info(f"[{data['query_id']}] [GPTQna] No context identified!")
-    #             return responses
-    #     else:
-    #         if not similarities:
-    #             logger.info(f"[{data['query_id']}] [GPTQna] No context identified!")
-    #             return responses
-
-    #     pages = list(similarities["Page Number"])
-
-    #     responses = {}
-
-    #     # try:
-    #     start = perf_counter()
-    #     results=[]
-    #     if data["is_batch_response_enabled"]:
-    #         for i in range(similarities.shape[0]):
-    #             context = similarities["Text"].iloc[i]
-
-    #             gpt_no_answer_str = data["gpt_no_answer_str"]
-    #             prompt = data["gpt_qna_prompt"].format(
-    #                 gpt_no_answer_str,
-    #                 context,
-    #                 data["query"],
-    #             )
-
-    #             results.append(
-    #                     self.gemini_completion(
-    #                         model,data,prompt
-    #                     )
-    #                 )
-    #         logger.info(f"[{self.query_id}] [GPTQna] Time Taken Gemini: {str(round(perf_counter() - start, 3))}"
-    #         )
-    #         logger.info(f"[{self.query_id}] [GPT] Inside answer_using_gemini() : Batch Results: {str(results)}")
-    #     else:
-    #         context = similarities["Text"].tolist()
-    #         gpt_no_answer_str = data["gpt_no_answer_str"]
-    #         prompt = data["gpt_qna_prompt"].format(
-    #                 gpt_no_answer_str,
-    #                 context,
-    #                 data["query"],
-    #             )
-
-    #         results.append(
-    #                 self.gemini_completion(
-    #                         model,data,prompt
-    #                     )
-    #                 )
-
-    #     responses = {}
-    #     responses["response"] = results
-    #     responses["page"] = pages
-    #     responses["similarities"] = list(similarities["Similarity Score"])
-    #     responses["file_name"] = list(similarities["File Name"])
-
-    #     return responses
 
     # To set the azure OpenAI parameters
     def set_azure_openai_params(self,data):
@@ -326,16 +200,12 @@ class GPTQna:
         openai.api_base = data["azure_oai_base"]
         openai.api_version = data["azure_oai_api_version"]
         MODEL = data["azure_oai_model"]
-        EMB_MODEL = data["azure_oai_embedding_model"]
         self.headers = {
             "api-key": str(openai.api_key),
             "Content-Type": "application/json",
         }
         logger.info(f"[{self.query_id}] [GPTQna] Azure openai parameters are set")
         return MODEL
-    
-    # def set_gemini(self,data): 
-    #     return GeminiRoundRobinClient(data["gemini_keys"], max_attempts=5)
 
     # To get the response from gpt4 model for the input query
     async def get_response_from_gpt4(self, data) -> pd.DataFrame:
