@@ -374,3 +374,108 @@ This algorithmic flow outlines the high-level steps involved in handling a reque
     }
 ]
 
+---
+
+## Cambios de esta iteración (medidos)
+
+Todo lo de abajo se validó con `Ingestion/eval/run_eval.py` (54 consultas parafraseadas
+en voz de técnico + 5 fuera de tema). El baseline y el estado final dan **idéntico**:
+recall@10 88.9%, MRR 0.754, gate 5/5 — o sea, ninguna de estas mejoras costó calidad.
+
+### Retrieval: lo que se apagó, y por qué
+
+| Etapa | Estado | Medición |
+|---|---|---|
+| Reranking cross-encoder | **off** | recall@10 61.1% vs 88.9%; MRR 0.193 vs 0.754; 21 de 54 consultas se quedan sin respuesta |
+| BM25 | **off** | apagarlo da resultados idénticos dígito por dígito; 0 de 8 consultas de código puro mejoran |
+| Retrieval visual (CLIP) | **off** | ídem; además inerte por cableado (ver abajo) |
+| Ordenar por fusión RRF | **off** | recall@10 87.0% vs 88.9% ordenando por similitud densa |
+| Selector LLM de secciones | **off** | fallaba en el 100% de las consultas, 2 llamadas al LLM por consulta para un no-op |
+| Umbral de relevancia | **0.50** | 0.35 → gate 3/5; 0.50 → 5/5 con el mismo recall; 0.60 → recall 85.2% |
+
+El patrón es consistente: el índice multi-vector con ~2900 vectores de preguntas
+sintéticas en lenguaje de usuario es tan fuerte que **toda etapa de fusión o reordenado
+o no hace nada o empeora**. Los flags quedan para poder re-medir con otro corpus.
+
+Por qué BM25 y CLIP eran inertes *por construcción*, más allá de no aportar:
+1. El gate de relevancia filtraba por `dense_similarity`, y un candidato que solo
+   encontró BM25/CLIP no tiene esa clave → default 0.0 → nunca pasaba. Medido con
+   `"22B-D010N104"`: 0 candidatos solo-BM25 y 0 solo-CLIP sobrevivían.
+2. El orden final se decidía por `similarity` (la similitud densa), descartando el
+   resultado del RRF que se acababa de calcular.
+
+### Bugs que estaban tapados
+
+Cuatro defectos que no se veían porque su camino estaba apagado o porque fallaban en
+silencio:
+
+- **Todos los prompts llegaban al LLM escapados como HTML.** `sanitize_data` corría
+  sobre el dict de configuración entero, así que la especificación de formato JSON
+  llegaba como `&quot;question_type&quot;: &lt;question_type&gt;`. El escape XSS es para
+  la entrada del usuario, que ya se sanitiza por separado.
+- **`KeyError: 'azure_oai_model3'` en toda clasificación de intención exitosa.**
+  Clasificaba bien y una línea después la excepción borraba el resultado, así que el
+  follow-up nunca reescribía la pregunta. Parecía "clasifica mal".
+- **`KeyError: 'gemini_model'`** en `QueryIntent`, con el modelo fijo a un proveedor que
+  este proyecto no usa.
+- **Los dos planos PDF se subían a OpenAI en cada consulta.** `_file_id_cache` era un
+  atributo de instancia y `ModelCompletion` se crea por request. Latencia de una
+  consulta con planos: **~15s → 7.7s**.
+
+### Funcionalidad nueva
+
+- **Caché de respuestas** (`qnas/ResponseCache.py`), por coincidencia EXACTA del texto
+  normalizado. 13.0s → 0.0016s en una repetición. Es exacta y no semántica por
+  medición: las bandas de similitud se solapan en este dominio ("corriente de ENTRADA"
+  vs "de SALIDA" da 0.916; dos redacciones de la misma pregunta dan 0.872 y 0.929), así
+  que no hay umbral que las separe y un caché semántico devolvería el borne equivocado.
+  Reemplaza a `CachedQna`, que leía de Azure Search y no tenía ruta de escritura.
+- **Conversación / follow-up activado.** No se le pasa el historial al LLM que responde:
+  se clasifica la intención y se REESCRIBE el follow-up como pregunta autónoma antes del
+  retrieval, que es lo único que funciona con búsqueda densa. El caché se saltea cuando
+  llega historial: `"¿y si eso no funciona?"` es el mismo texto en conversaciones
+  distintas.
+- **Filtro de boilerplate en el context expander.** 40 chunks (encabezados, pies,
+  bloques de contacto) dejan de inyectarse como contexto; 0 falsos positivos sobre 708.
+- **CORS cerrado y token opcional.** El default pasó de `"*"` a los orígenes de Vite, y
+  se refleja el `Origin` solo si está en la lista. Con `API_TOKEN` definido,
+  `/get_response` exige `Authorization: Bearer`. Sin la variable, sigue abierta para uso
+  local.
+
+### Estado del índice y la media: van juntos
+
+`sources[].media[].media_path` apunta a archivos bajo `Ingestion/data/media/`, y esos
+nombres llevan un hash del contenido. Una re-ingesta los regenera con nombres distintos,
+así que **el índice y `data/media/` son un solo estado y hay que moverlos juntos**.
+
+Restaurar un índice con la media de otra corrida deja las referencias colgadas: pasó, y
+quedaron 246 de 264 rotas. El síntoma en el frontend son recuadros vacíos en la galería —
+y lo peor es que el eval no lo detecta, porque mide recall de páginas y no abre los
+archivos. Marcaba 90.7% sobre un sistema que no podía mostrar casi ninguna imagen.
+
+Chequeo después de restaurar o re-ingestar:
+
+```bash
+cd Ingestion && python -c "
+import chromadb, os
+col = chromadb.PersistentClient(path='data/chroma_index').get_collection('multimodal_documents')
+media = {m.get('media_path') for m in col.get(include=['metadatas'])['metadatas'] if m.get('media_path')}
+faltan = [p for p in media if not os.path.exists(os.path.join('data', p))]
+print(f'media referenciada: {len(media)} | falta en disco: {len(faltan)}')"
+```
+
+### Cuota de OpenAI agotada
+
+La API no reintenta un 429 de facturación como si fuera throttling. `Ingestion` tampoco
+(ver `llm_json.is_quota_exhausted`): el SDK lanza `RateLimitError` para todo HTTP 429, y sin
+separarlos una cuenta sin crédito se reintenta con backoff exponencial durante horas. Al
+diagnosticar rate limits, chequear primero `grep insufficient_quota` en el log.
+
+### Suite de regresión
+
+```bash
+./run_tests.sh        # desde la raíz del repo: 26 tests de retrieval + 37 de ingesta, ~4s
+```
+
+Cada test corresponde a un bug real que se encontró y arregló. Si alguno se rompe, ese bug
+volvió.

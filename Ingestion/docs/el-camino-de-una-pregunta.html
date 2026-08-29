@@ -1,0 +1,1001 @@
+<title>El camino de una pregunta</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ── Misma paleta que "De 220 páginas a una respuesta": son un par. ────────
+     La diferencia: allá el acento manda el ocre (papel, documentos, recortes);
+     acá manda el acero (la consulta viva, los datos, la electricidad). Mismo
+     sistema, énfasis invertido. ──────────────────────────────────────────── */
+  :root {
+    --papel:        #EDEFF2;
+    --papel-alto:   #F8F9FB;
+    --papel-hondo:  #E2E6EA;
+    --tinta:        #18222D;
+    --tinta-2:      #52616F;
+    --tinta-3:      #7C8895;
+    --acero:        #2C6A8A;   /* acento principal acá */
+    --acero-suave:  #2C6A8A14;
+    --ocre:         #B0530C;   /* secundario: los momentos de decisión */
+    --ocre-suave:   #B0530C14;
+    --regla:        #CBD2D8;
+    --alarma:       #9B2C2C;
+    --bien:         #2F6B43;
+
+    --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    --ancho: 39rem;
+    --ancho-amplio: 58rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --papel:       #121A22;
+      --papel-alto:  #1A242E;
+      --papel-hondo: #0D141A;
+      --tinta:       #E4EAF0;
+      --tinta-2:     #A3B0BC;
+      --tinta-3:     #7C8895;
+      --acero:       #6FB2D4;
+      --acero-suave: #6FB2D420;
+      --ocre:        #E28A45;
+      --ocre-suave:  #E28A4520;
+      --regla:       #2E3B47;
+      --alarma:      #E07A7A;
+      --bien:        #7FBF95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --papel:       #121A22;
+    --papel-alto:  #1A242E;
+    --papel-hondo: #0D141A;
+    --tinta:       #E4EAF0;
+    --tinta-2:     #A3B0BC;
+    --tinta-3:     #7C8895;
+    --acero:       #6FB2D4;
+    --acero-suave: #6FB2D420;
+    --ocre:        #E28A45;
+    --ocre-suave:  #E28A4520;
+    --regla:       #2E3B47;
+    --alarma:      #E07A7A;
+    --bien:        #7FBF95;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .envoltorio { display: flex; flex-direction: column; align-items: center; padding: 0 1.25rem 6rem; }
+  .col   { width: 100%; max-width: var(--ancho); }
+  .ancho { width: 100%; max-width: var(--ancho-amplio); }
+
+  /* ── Tipografía ─────────────────────────────────────────────────────────── */
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(2.3rem, 6.5vw, 3.6rem); font-weight: 700; line-height: 1.04; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(1.5rem, 3.6vw, 2rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }
+  h3 { font-size: 1.1rem; font-weight: 600; line-height: 1.3; margin-bottom: 0.5rem; }
+  p  { margin: 0 0 1.15rem; }
+  a  { color: var(--acero); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--tinta-3);
+  }
+  .bajada { font-size: 1.2rem; color: var(--tinta-2); line-height: 1.55; }
+  .nota   { font-size: 0.95rem; color: var(--tinta-2); }
+  strong  { font-weight: 600; }
+  em      { font-style: italic; }
+  code    { font-family: var(--mono); font-size: 0.87em; background: var(--papel-hondo); padding: 0.1em 0.35em; border-radius: 2px; }
+
+  /* ── Portada ────────────────────────────────────────────────────────────── */
+  header.portada {
+    width: 100%; max-width: var(--ancho);
+    padding: 5.5rem 0 3rem;
+    display: flex; flex-direction: column; gap: 1.5rem;
+  }
+  .sello {
+    display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--tinta-3);
+    padding-bottom: 1.25rem; border-bottom: 1px solid var(--regla);
+  }
+  .sello .punto { color: var(--acero); }
+
+  /* ── Secciones ──────────────────────────────────────────────────────────── */
+  section { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .bloque { display: flex; flex-direction: column; gap: 0; padding-top: 3.5rem; }
+  .titulo-seccion { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+
+  /* ── Acto: acá la estructura NO es una secuencia numerada como en la ingesta.
+        La ingesta es una línea de montaje que corre una vez, offline. Esto pasa
+        en vivo y lo que organiza el relato es el TIEMPO: tres actos, cada uno
+        con lo que realmente tarda, medido. ───────────────────────────────── */
+  .acto { border-top: 2px solid var(--acero); padding: 1.75rem 0 0.5rem; margin-top: 2.5rem; }
+  .acto-cabeza { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+  .reloj {
+    font-family: var(--mono); font-size: 0.82rem; font-weight: 500;
+    color: var(--acero); background: var(--acero-suave);
+    padding: 0.15rem 0.5rem; border-radius: 2px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
+  /* ── Etapa dentro de un acto ────────────────────────────────────────────── */
+  .etapa { padding: 1.4rem 0; border-top: 1px solid var(--regla); }
+  .etapa:first-of-type { border-top: 0; }
+  .etapa > *:last-child { margin-bottom: 0; }
+  .etapa h3 { margin-bottom: 0.5rem; }
+
+  /* ── Bifurcación: los dos puntos donde el camino se parte de verdad ─────── */
+  .bifurcacion { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.25rem 0; }
+  @media (max-width: 34rem) { .bifurcacion { grid-template-columns: 1fr; } }
+  .rama {
+    border: 1px solid var(--regla); border-radius: 3px;
+    background: var(--papel-alto); padding: 0.9rem 1rem;
+  }
+  .rama > *:last-child { margin-bottom: 0; }
+  .rama-si { border-left: 3px solid var(--bien); }
+  .rama-no { border-left: 3px solid var(--ocre); }
+  .rama-titulo {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 0.5rem;
+  }
+  .rama-si  .rama-titulo { color: var(--bien); }
+  .rama-no  .rama-titulo { color: var(--ocre); }
+  .rama p { font-size: 0.95rem; line-height: 1.55; }
+
+  /* ── Tarjetas y cajas ───────────────────────────────────────────────────── */
+  .caja {
+    background: var(--papel-alto);
+    border: 1px solid var(--regla);
+    border-radius: 3px;
+    padding: 1.15rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .caja > *:last-child { margin-bottom: 0; }
+  .caja-titulo {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--tinta-3); margin-bottom: 0.6rem;
+  }
+  .cita-tecnica {
+    font-family: var(--mono); font-size: 0.85rem; line-height: 1.6;
+    background: var(--papel-hondo); border-left: 2px solid var(--acero);
+    padding: 0.85rem 1rem; margin: 1rem 0; overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  .destacado { border-left: 3px solid var(--acero); background: var(--acero-suave); }
+
+  /* ── Tablas ─────────────────────────────────────────────────────────────── */
+  .tabla-envoltorio { overflow-x: auto; margin: 1.25rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--regla); }
+  th {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--tinta-3); font-weight: 500;
+    border-bottom: 1px solid var(--tinta-3);
+  }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mal  { color: var(--alarma); font-weight: 600; }
+  .bien { color: var(--bien);   font-weight: 600; }
+
+  /* ── Dibujos ────────────────────────────────────────────────────────────── */
+  figure { margin: 2rem 0; width: 100%; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    font-family: var(--mono); font-size: 0.72rem; line-height: 1.5;
+    color: var(--tinta-3); margin-top: 0.7rem; text-align: center;
+  }
+  .lienzo { background: var(--papel-alto); border: 1px solid var(--regla); border-radius: 3px; padding: 1.5rem 1rem; }
+
+  svg text { font-family: var(--mono); fill: var(--tinta); }
+  svg .rotulo { font-size: 11px; fill: var(--tinta-2); }
+  svg .rotulo-chico { font-size: 9.5px; fill: var(--tinta-3); }
+  svg .titulo-fig { font-size: 12px; font-weight: 500; fill: var(--tinta); }
+
+  ul { margin: 0 0 1.15rem; padding-left: 1.25rem; }
+  li { margin-bottom: 0.5rem; }
+  li::marker { color: var(--acero); }
+
+  hr { border: 0; border-top: 1px solid var(--regla); margin: 3rem 0 0; width: 100%; }
+
+  footer { padding-top: 3rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .aparece { animation: subir 0.5s ease-out both; }
+    @keyframes subir { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+  :focus-visible { outline: 2px solid var(--acero); outline-offset: 2px; }
+</style>
+
+<div class="envoltorio">
+
+  <header class="portada aparece">
+    <div class="sello">
+      <span>Secadero de pastas · UNQ</span>
+      <span class="punto">◆</span>
+      <span>Cómo se responde una consulta</span>
+    </div>
+    <h1>El camino de<br>una pregunta</h1>
+    <p class="bajada">
+      Lo que pasa en los trece segundos que van desde que el técnico aprieta Enter
+      hasta que aparece la respuesta, con su plano y su tabla al lado.
+      Es la segunda mitad de la historia: la primera es
+      <em>cómo se prepara la documentación</em>.
+    </p>
+  </header>
+
+  <!-- ══════════════════ LA ESCENA ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">La escena</span>
+        <h2>Son las tres de la mañana y el secadero paró</h2>
+      </div>
+
+      <p>
+        El variador que mueve el ventilador de la zona 2 tiene un display de cuatro
+        caracteres. En el display dice <code>F048</code>. Nada más.
+      </p>
+      <p>
+        El técnico escribe en el asistente lo que escribiría en un chat: <em>“el
+        variador me tira el código F048, ¿qué hago?”</em>. No sabe en qué manual está
+        la tabla de fallas, ni en qué página, ni cómo se llama el archivo.
+      </p>
+      <p>
+        Del otro lado hay <strong>5.379 fichas</strong> en un archivero: los pedazos en
+        los que quedaron cortados los cinco documentos del secadero, más una ficha
+        por cada pregunta que cada pedazo sabe responder. La única forma de que esto
+        sirva es que la ficha correcta —la fila de <code>F048</code>, no la tabla
+        entera— llegue arriba, y que la respuesta venga con la referencia de dónde
+        salió, para que el técnico pueda verificarla antes de meter la mano en un
+        tablero de 380 volts.
+      </p>
+
+      <div class="caja destacado">
+        <p>
+          <strong>La regla que ordena todo el diseño:</strong> el sistema puede decir
+          “no sé”. Lo que no puede hacer es inventar un número. Un valor de par
+          inventado, en un tablero, es una persona lastimada. Varias de las decisiones
+          que siguen son más conservadoras de lo necesario justamente por eso.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ DÓNDE SE VA EL TIEMPO ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">Antes de entrar en detalle</span>
+        <h2>Dónde se va el tiempo</h2>
+      </div>
+
+      <p>
+        Lo primero que sorprende al medirlo: <strong>buscar es la parte rápida.</strong>
+        Encontrar la ficha correcta entre 5.379 lleva alrededor de un segundo y medio.
+        Los otros once segundos son el modelo de lenguaje escribiendo la respuesta en
+        castellano.
+      </p>
+
+      <figure class="lienzo">
+        <svg viewBox="0 0 640 200" role="img" aria-label="Barra de tiempo: buscar toma 1,4 segundos; escribir la respuesta toma 10,9 segundos; una pregunta repetida se responde al instante.">
+          <text class="titulo-fig" x="14" y="20">Una consulta completa: 12,9 segundos</text>
+
+          <!-- barra proporcional -->
+          <rect x="14" y="36" width="66" height="30" rx="2" fill="var(--acero-suave)" stroke="var(--acero)"/>
+          <rect x="80" y="36" width="516" height="30" rx="2" fill="var(--ocre-suave)" stroke="var(--ocre)"/>
+          <rect x="596" y="36" width="30" height="30" rx="2" fill="var(--papel-hondo)" stroke="var(--regla)"/>
+
+          <!-- El rótulo grande va DENTRO de su barra: abajo no cabe sin pisar al otro. -->
+          <text x="92" y="55" style="font-size:11px; fill:var(--ocre);">escribir la respuesta · 10,9 s</text>
+          <text class="rotulo-chico" x="14" y="82" style="fill:var(--acero);">buscar 1,4 s</text>
+          <text class="rotulo-chico" x="566" y="82">resto</text>
+
+          <line x1="14" y1="98" x2="626" y2="98" stroke="var(--regla)"/>
+
+          <text class="rotulo" x="14" y="120">Si la pregunta ya se hizo antes, exactamente igual:</text>
+          <rect x="14" y="130" width="10" height="24" rx="2" fill="var(--bien)" opacity="0.75"/>
+          <text class="rotulo" x="34" y="147" style="fill:var(--bien);">instantáneo — no se vuelve a preguntar ni a pagar</text>
+
+          <text class="rotulo-chico" x="14" y="180">Mediana sobre 96 consultas reales registradas por el sistema.</text>
+        </svg>
+        <figcaption>El cuello de botella no es la búsqueda: es redactar.</figcaption>
+      </figure>
+
+      <p>
+        Eso tiene una consecuencia práctica. Cada mejora que reduce el trabajo de
+        búsqueda ahorra décimas; cada mejora que evita <em>tener que redactar</em>
+        —como reconocer una pregunta repetida— ahorra segundos enteros. Por eso el
+        camino empieza, antes que nada, preguntándose si esto ya se contestó.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════ ACTO 1 ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">El camino, en tres actos</span>
+        <h2>Acto 1: antes de buscar</h2>
+      </div>
+
+      <div class="acto">
+        <div class="acto-cabeza">
+          <span class="reloj">menos de 0,1 s</span>
+          <h3>Dos preguntas que se hacen antes de tocar el archivero</h3>
+        </div>
+      </div>
+
+      <div class="etapa">
+        <h3>¿Esta pregunta ya la contestamos?</h3>
+        <p>
+          El sistema guarda las últimas respuestas que dio. Lo que compara es el
+          <strong>texto literal de la pregunta, carácter por carácter</strong>. Si es
+          idéntico, devuelve la respuesta guardada y termina ahí: sin buscar, sin llamar
+          al modelo, sin costo.
+        </p>
+        <p>
+          Idéntico quiere decir idéntico. Si cambia una palabra, una tilde o un signo de
+          pregunta, para el sistema es una pregunta nueva y hace todo el camino largo.
+        </p>
+
+        <div class="caja">
+          <div class="caja-titulo">No confundir dos cosas distintas</div>
+          <p>
+            El “parecido” entre textos <strong>sí</strong> se usa en este sistema: es
+            así como se encuentran los fragmentos en el archivero, en el Acto 2. Pero
+            <strong>no</strong> se usa acá. Buscar un fragmento parecido y equivocarse
+            cuesta un lugar en una lista de diez. Reutilizar una respuesta ya escrita y
+            equivocarse le entrega al técnico el dato de otra pregunta, sin ningún aviso.
+            El mismo error no vale lo mismo en los dos lugares.
+          </p>
+        </div>
+
+        <div class="bifurcacion">
+          <div class="rama rama-si">
+            <div class="rama-titulo">Ya la teníamos</div>
+            <p>Se devuelve tal cual, con sus fuentes y sus imágenes. Instantáneo.</p>
+          </div>
+          <div class="rama rama-no">
+            <div class="rama-titulo">Es nueva</div>
+            <p>Sigue el camino largo. Al final, si la respuesta salió bien, se guarda.</p>
+          </div>
+        </div>
+
+        <p>
+          Dos detalles que parecen chicos y no lo son. <strong>Solo se guardan las
+          respuestas buenas:</strong> si el sistema contestó “no encontré información”,
+          eso no se guarda, porque congelaría el fallo incluso después de agregar el
+          documento que faltaba. Y <strong>el guardado se borra solo cuando cambia el
+          archivero:</strong> cada vez que se re-procesan los manuales, las respuestas
+          viejas se descartan, así nadie recibe una respuesta armada con la versión
+          anterior de la documentación.
+        </p>
+
+        <div class="caja">
+          <div class="caja-titulo">Por qué no alcanza con “parecida”</div>
+          <p>
+            La idea obvia es reconocer preguntas <em>parecidas</em>, no solo idénticas:
+            ahorraría muchos más segundos. Está construida, se midió, y
+            <strong>se dejó afuera</strong>. El dibujo de abajo es la medición que la
+            descartó — no es cómo funciona el sistema, es la razón por la que el sistema
+            compara texto exacto.
+          </p>
+        </div>
+
+        <figure class="lienzo">
+          <svg viewBox="0 0 640 288" role="img" aria-label="Escala de parecido del 85 al 95 por ciento. Las reformulaciones legítimas de la misma pregunta caen entre 87 y 93 por ciento. El par de significado opuesto entrada contra salida cae en 91,6 por ciento, dentro de esa misma banda, así que ningún umbral las separa.">
+            <text class="titulo-fig" x="14" y="20">La medición que descartó el parecido</text>
+            <text class="rotulo-chico" x="14" y="36" style="fill:var(--alarma);">FUNCIONALIDAD NO ACTIVADA · ESTE DIBUJO EXPLICA POR QUÉ</text>
+
+            <!-- Banda verde: dónde caen las reformulaciones legítimas (0.87–0.93) -->
+            <text class="rotulo-chico" x="14" y="66" style="fill:var(--bien);">LA MISMA PREGUNTA, REDACTADA DISTINTO — CAE ACÁ</text>
+            <rect x="168" y="76" width="324" height="30" rx="2" fill="var(--bien)" opacity="0.16" stroke="var(--bien)"/>
+            <text class="rotulo-chico" x="176" y="95" style="fill:var(--bien);">87 % ─────────────── 93 %</text>
+
+            <!-- Marcador rojo: el par opuesto cae DENTRO de la banda -->
+            <line x1="416" y1="70" x2="416" y2="150" stroke="var(--alarma)" stroke-width="2"/>
+            <circle cx="416" cy="121" r="4" fill="var(--alarma)"/>
+            <text class="rotulo-chico" x="426" y="125" style="fill:var(--alarma);">91,6 % · “de ENTRADA” vs “de SALIDA”</text>
+            <text class="rotulo-chico" x="426" y="139" style="fill:var(--alarma);">significado opuesto</text>
+
+            <!-- Eje -->
+            <line x1="60" y1="158" x2="600" y2="158" stroke="var(--tinta-3)"/>
+            <text class="rotulo-chico" x="52" y="174">85 %</text>
+            <text class="rotulo-chico" x="316" y="174">90 %</text>
+            <text class="rotulo-chico" x="580" y="174">95 %</text>
+
+            <line x1="14" y1="196" x2="626" y2="196" stroke="var(--regla)"/>
+
+            <text class="rotulo" x="14" y="216">El par opuesto cae justo en el medio de la banda de las</text>
+            <text class="rotulo" x="14" y="232">reformulaciones legítimas. Cualquier corte que acepte a unas,</text>
+            <text class="rotulo" x="14" y="248">acepta al otro.</text>
+
+            <text class="rotulo-chico" x="14" y="274">Y el parecido no sigue al significado: “no arranca” vs “no para” da 86,5 %; SNK vs SRC, 72 %.</text>
+          </svg>
+          <figcaption>No hay número que separe “la misma pregunta” de “la opuesta”.</figcaption>
+        </figure>
+      </div>
+
+      <div class="etapa">
+        <h3>¿Qué está preguntando, realmente?</h3>
+        <p>
+          Si es la segunda pregunta de una conversación, el texto solo no alcanza.
+          <em>“¿Y el F039?”</em> no se puede buscar: no dice de qué habla. Antes de
+          buscar, el sistema reescribe la pregunta para que se sostenga sola.
+        </p>
+        <div class="cita-tecnica">el técnico escribe:   ¿y el F039?
+el sistema busca:     ¿qué significa el código de falla F039
+                      del variador PowerFlex y cómo se corrige?</div>
+        <p class="nota">
+          Se reescribe la pregunta, no se le manda el historial completo al modelo.
+          Es más barato, y sobre todo hace que la búsqueda funcione: lo que se busca
+          en el archivero es una pregunta completa, no un fragmento de charla.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ ACTO 2 ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">El camino, en tres actos</span>
+        <h2>Acto 2: la búsqueda</h2>
+      </div>
+
+      <div class="acto">
+        <div class="acto-cabeza">
+          <span class="reloj">1,4 s</span>
+          <h3>Traer cuarenta fichas y quedarse con diez</h3>
+        </div>
+      </div>
+
+      <div class="etapa">
+        <h3>Buscar por significado</h3>
+        <p>
+          Antes del detalle, lo concreto: <strong>acá se hace una sola búsqueda, sobre
+          un solo archivero.</strong> El sistema tiene dos archiveros construidos y tres
+          formas de buscar programadas; hoy usa uno y una. El inventario completo está
+          más abajo, en <em>“Tres mejoras que medimos y apagamos”</em>.
+        </p>
+        <p>
+          La pregunta se convierte en un punto —las “coordenadas de significado” que
+          explica el documento de la ingesta— y se buscan las fichas cuyos puntos están
+          más cerca. Al modelo le van a llegar diez fichas, pero se piden
+          <strong>cuarenta</strong>.
+        </p>
+        <p>
+          El motivo es concreto. Cada pedazo de manual está en el archivero varias
+          veces: una por su contenido y una por cada pregunta que sabe responder. Si
+          pedís diez, es normal que ocho sean fichas de pregunta que apuntan todas al
+          mismo párrafo. Medido: seis fichas se convertían en cuatro contenidos
+          distintos. Sin pedir de más, la variedad real de lo que llega se corta a la
+          mitad.
+        </p>
+      </div>
+
+      <div class="etapa">
+        <h3>Limpiar la lista</h3>
+        <p>
+          Las cuarenta fichas pasan por cuatro filtros. Ninguno es cosmético: cada uno
+          existe porque sin él el técnico veía algo mal.
+        </p>
+
+        <figure class="lienzo">
+          <svg viewBox="0 0 640 300" role="img" aria-label="Embudo: de cuarenta candidatos, cuatro filtros dejan diez fichas útiles.">
+            <text class="titulo-fig" x="14" y="20">De 40 candidatos a 10 fichas útiles</text>
+
+            <!-- entrada -->
+            <rect x="14" y="34" width="612" height="26" rx="2" fill="var(--acero-suave)" stroke="var(--acero)"/>
+            <text x="24" y="51" style="font-size:11px;">40 candidatos crudos</text>
+
+            <!-- filtro 1 -->
+            <text class="rotulo-chico" x="14" y="84">FILTRO 1 · DEVOLVER LA FICHA A SU DUEÑO</text>
+            <rect x="14" y="92" width="540" height="24" rx="2" fill="var(--papel-hondo)" stroke="var(--regla)"/>
+            <text class="rotulo" x="24" y="108">una ficha de pregunta no trae la imagen: se recupera la del párrafo real</text>
+
+            <!-- filtro 2 -->
+            <text class="rotulo-chico" x="14" y="140">FILTRO 2 · ELEGIR LA IMAGEN, NO EL TEXTO SUELTO</text>
+            <rect x="14" y="148" width="470" height="24" rx="2" fill="var(--papel-hondo)" stroke="var(--regla)"/>
+            <text class="rotulo" x="24" y="164">del mismo diagrama gana la versión que trae el dibujo</text>
+
+            <!-- filtro 3 -->
+            <text class="rotulo-chico" x="14" y="196">FILTRO 3 · SACAR REPETIDOS</text>
+            <rect x="14" y="204" width="380" height="24" rx="2" fill="var(--papel-hondo)" stroke="var(--regla)"/>
+            <text class="rotulo" x="24" y="220">si un texto está entero dentro de otro, sobra</text>
+
+            <!-- filtro 4 -->
+            <text class="rotulo-chico" x="14" y="252">FILTRO 4 · SACAR RELLENO DE PÁGINA</text>
+            <rect x="14" y="260" width="250" height="24" rx="2" fill="var(--bien)" opacity="0.14" stroke="var(--bien)"/>
+            <text class="rotulo" x="24" y="276" style="fill:var(--bien);">10 fichas distintas y útiles</text>
+          </svg>
+          <figcaption>Cada filtro nació de un error visible en pantalla.</figcaption>
+        </figure>
+
+        <p>
+          <strong>Devolver la ficha a su dueño.</strong> Cuando gana una ficha de
+          pregunta, esa ficha no tiene la imagen ni la tabla: las tiene el párrafo al
+          que apunta. Este paso va a buscarlas. Es literalmente lo que hace que las
+          imágenes lleguen a la pantalla: sin él, la galería aparecía vacía.
+        </p>
+        <p>
+          <strong>Elegir la imagen.</strong> Un diagrama está en el archivero de dos
+          maneras: la descripción escrita con el recorte de imagen, y el texto que se
+          alcanzó a leer con lupa dentro del dibujo. Las dos compiten. Si gana la
+          segunda, el técnico recibe letras sueltas en lugar del plano. Se agrupan y
+          gana siempre la que trae el dibujo.
+        </p>
+        <p>
+          <strong>Sacar repetidos.</strong> El archivero tiene contenido solapado a
+          propósito: un pedazo grande contiene a sus pedazos chicos. Sin este filtro,
+          el mismo párrafo ocupaba 3 de los 10 lugares y se veía como tres fuentes
+          casi idénticas.
+        </p>
+        <p>
+          <strong>Sacar relleno.</strong> Encabezados, pies de página, el bloque de
+          contacto del proveedor. Se detectan porque el mismo texto se repite dentro
+          del mismo documento: <strong>40 de 708</strong> pedazos quedaron marcados
+          como relleno, y ninguno era contenido real.
+        </p>
+      </div>
+
+      <div class="etapa">
+        <h3>¿Sirve algo de esto?</h3>
+        <p>
+          Acá está la bifurcación importante. Buscar por significado
+          <em>siempre</em> devuelve algo: aunque preguntes por una receta de cocina,
+          alguna ficha va a quedar más cerca que las otras. Así que después de limpiar,
+          se mira la distancia real. Si ninguna ficha llega a estar razonablemente
+          cerca de la pregunta, se descarta todo el material.
+        </p>
+
+        <div class="bifurcacion">
+          <div class="rama rama-si">
+            <div class="rama-titulo">Hay material relevante</div>
+            <p>
+              Las diez fichas viajan al modelo, y las que provengan de documentos
+              eléctricos hacen que se adjunten además los dos planos.
+            </p>
+          </div>
+          <div class="rama rama-no">
+            <div class="rama-titulo">Nada llega al umbral</div>
+            <p>
+              No se manda nada del archivero. Se le pide al modelo que responda
+              <em>solo</em> con los planos, y que si tampoco alcanzan, lo diga.
+            </p>
+          </div>
+        </div>
+
+        <p>
+          El umbral está en <strong>0,50</strong>, y no es un número elegido a ojo: se
+          probaron otros. Con 0,35 el sistema empezaba a aceptar preguntas fuera de
+          tema; con 0,60 empezaba a rechazar preguntas legítimas. Sobre cinco preguntas
+          deliberadamente fuera de tema, <strong>las cinco</strong> se rechazan
+          correctamente.
+        </p>
+      </div>
+
+      <div class="etapa">
+        <h3>Completar lo que quedó cortado</h3>
+        <p>
+          Un procedimiento que empieza al pie de una página y sigue en la siguiente
+          quedó partido en dos fichas. Si gana la primera, el técnico recibe la mitad
+          del procedimiento. Antes de mandar, cada ficha se acompaña con lo que venía
+          antes y lo que venía después, marcado como contexto.
+        </p>
+        <p class="nota">
+          Con un cuidado: si el pedazo vecino ya está en la lista por mérito propio, no
+          se agrega de nuevo. Si no, el mismo texto viajaba dos veces y en pantalla
+          aparecían dos fuentes aparentemente iguales.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ ACTO 3 ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">El camino, en tres actos</span>
+        <h2>Acto 3: la respuesta</h2>
+      </div>
+
+      <div class="acto">
+        <div class="acto-cabeza">
+          <span class="reloj">10,9 s</span>
+          <h3>Escribirla, y mostrar de dónde salió</h3>
+        </div>
+      </div>
+
+      <div class="etapa">
+        <h3>Lo que recibe el modelo</h3>
+        <p>
+          No recibe “el manual”. Recibe un paquete armado: las diez fichas numeradas,
+          la pregunta del técnico, y —esto es distinto de lo habitual— <strong>los dos
+          planos eléctricos como archivos PDF de verdad</strong>, no como texto
+          extraído. El modelo los mira como los mirás vos.
+        </p>
+        <p>
+          Cada ficha que tiene una imagen asociada viaja con una nota que le avisa al
+          modelo que esa imagen <em>sí</em> se le va a mostrar al técnico en pantalla.
+          Sin esa nota, el modelo suponía que no había fotos disponibles y se lo decía
+          al usuario, en la misma respuesta en la que la foto estaba a la vista.
+        </p>
+        <p>
+          Y se le pide que devuelva tres cosas: la respuesta, <strong>qué fichas
+          usó</strong>, y si se apoyó en los planos. Eso último es lo que permite
+          mostrar los planos como fuente solo cuando de verdad sirvieron.
+        </p>
+        <p class="nota">
+          Los planos se suben una sola vez y se reutiliza el identificador, guardado en
+          disco. Antes se subían los dos en cada consulta, lo que agregaba varios
+          segundos a cada pregunta.
+        </p>
+      </div>
+
+      <div class="etapa">
+        <h3>Lo que ve el técnico</h3>
+
+        <figure class="lienzo">
+          <svg viewBox="0 0 640 316" role="img" aria-label="Maqueta de la pantalla de respuesta: el texto, las fuentes citadas con su porcentaje, la galería de imágenes y los planos adjuntos.">
+            <text class="titulo-fig" x="14" y="20">La pantalla de respuesta</text>
+
+            <!-- respuesta -->
+            <rect x="14" y="32" width="612" height="74" rx="3" fill="var(--papel)" stroke="var(--regla)"/>
+            <text class="rotulo-chico" x="26" y="50">RESPUESTA</text>
+            <rect x="26" y="58" width="580" height="7" rx="3" fill="var(--tinta-3)" opacity="0.35"/>
+            <rect x="26" y="72" width="540" height="7" rx="3" fill="var(--tinta-3)" opacity="0.35"/>
+            <rect x="26" y="86" width="420" height="7" rx="3" fill="var(--tinta-3)" opacity="0.35"/>
+
+            <!-- fuentes -->
+            <text class="rotulo-chico" x="14" y="130">FUENTES CITADAS · ORDENADAS POR CERCANÍA A LA PREGUNTA</text>
+            <rect x="14" y="140" width="612" height="24" rx="2" fill="var(--papel)" stroke="var(--acero)"/>
+            <text class="rotulo" x="26" y="156">variadorPowerFlex4M · pág. 82</text>
+            <text x="540" y="156" style="font-size:11px; fill:var(--acero);">86 %</text>
+
+            <rect x="14" y="170" width="612" height="24" rx="2" fill="var(--papel)" stroke="var(--regla)"/>
+            <text class="rotulo" x="26" y="186">variadorPowerFlex4M · pág. 56</text>
+            <text x="540" y="186" style="font-size:11px; fill:var(--tinta-2);">71 %</text>
+
+            <!-- galeria -->
+            <text class="rotulo-chico" x="14" y="220">IMÁGENES Y TABLAS DE ESAS PÁGINAS</text>
+            <rect x="14" y="230" width="120" height="46" rx="2" fill="var(--acero-suave)" stroke="var(--acero)"/>
+            <rect x="142" y="230" width="120" height="46" rx="2" fill="var(--acero-suave)" stroke="var(--acero)"/>
+            <rect x="270" y="230" width="120" height="46" rx="2" fill="var(--acero-suave)" stroke="var(--acero)"/>
+            <text class="rotulo-chico" x="26" y="257">recorte</text>
+            <text class="rotulo-chico" x="154" y="257">recorte</text>
+            <text class="rotulo-chico" x="282" y="257">tabla</text>
+
+            <!-- planos -->
+            <rect x="410" y="230" width="216" height="46" rx="2" fill="var(--ocre-suave)" stroke="var(--ocre)"/>
+            <text class="rotulo-chico" x="422" y="250" style="fill:var(--ocre);">PLANOS ADJUNTOS</text>
+            <text class="rotulo-chico" x="422" y="266" style="fill:var(--ocre);">solo si el modelo los usó</text>
+
+            <text class="rotulo-chico" x="14" y="300">Cada recorte se abre en grande. Cada fuente se puede leer completa.</text>
+          </svg>
+          <figcaption>La respuesta nunca viaja sola: viaja con su procedencia.</figcaption>
+        </figure>
+
+        <p>
+          El porcentaje al lado de cada fuente no es decoración: es qué tan cerca estaba
+          esa ficha de la pregunta. Sirve para que el técnico calibre cuánto confiar
+          antes de abrir un tablero.
+        </p>
+        <p>
+          Y hay un ajuste sutil en el orden. Las fuentes se ordenan por ese porcentaje,
+          <em>no</em> por el orden en que el modelo las citó. Sin eso, una imagen con
+          mejor puntaje que el modelo no citó por texto —cosa muy habitual, porque
+          interpreta los dibujos mirándolos, no citándolos— quedaba siempre última.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ LO QUE NO HACEMOS ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">La parte incómoda</span>
+        <h2>Tres mejoras que medimos y apagamos</h2>
+      </div>
+
+      <p>
+        Todo lo de arriba es lo que quedó <em>encendido</em>. El sistema tiene tres
+        etapas más, construidas, funcionando, y deliberadamente apagadas. Están
+        apagadas porque se midieron y empeoraban el resultado. Vale contarlo porque es
+        la parte del trabajo que no se ve.
+      </p>
+
+      <h3 style="margin-top:1.5rem;">El reordenador</h3>
+      <p>
+        La idea es de manual: después de traer las cuarenta fichas, pasarlas por un
+        segundo modelo especializado en decidir cuál responde mejor la pregunta. Todos
+        los tutoriales lo recomiendan. Lo instalamos, lo medimos, y fue el peor
+        resultado de todo el proyecto.
+      </p>
+
+      <figure class="lienzo">
+        <svg viewBox="0 0 640 214" role="img" aria-label="Con el reordenador encendido, la ficha correcta llega en el 61,1 por ciento de las consultas contra 88,9 por ciento sin él, y 21 de 54 preguntas nunca reciben la ficha correcta.">
+          <text class="titulo-fig" x="14" y="20">El reordenador, medido sobre 54 preguntas reales</text>
+
+          <text class="rotulo-chico" x="14" y="46">LLEGA LA FICHA CORRECTA</text>
+          <rect x="14" y="54" width="500" height="24" rx="2" fill="var(--bien)" opacity="0.16" stroke="var(--bien)"/>
+          <text x="24" y="71" style="font-size:11px; fill:var(--bien);">sin reordenador · 88,9 %</text>
+          <rect x="14" y="84" width="344" height="24" rx="2" fill="var(--alarma)" opacity="0.14" stroke="var(--alarma)"/>
+          <text x="24" y="101" style="font-size:11px; fill:var(--alarma);">con reordenador · 61,1 %</text>
+
+          <line x1="14" y1="126" x2="626" y2="126" stroke="var(--regla)"/>
+
+          <text class="rotulo" x="14" y="150">Y de las 54 preguntas, con el reordenador encendido</text>
+          <text class="rotulo" x="14" y="166" style="fill:var(--alarma);">21 nunca recibían la ficha correcta. Ninguna.</text>
+
+          <text class="rotulo-chico" x="14" y="196">El reordenador está entrenado en inglés y en preguntas de uso general.</text>
+        </svg>
+        <figcaption>Una mejora estándar que en este dominio era un daño.</figcaption>
+      </figure>
+
+      <p>
+        La explicación es aburrida y útil: ese reordenador está entrenado con preguntas
+        genéricas en inglés. Enfrentado a <em>“¿cuál es el par de apriete de los bornes
+        de potencia?”</em> contra una tabla en castellano llena de códigos, no entiende
+        qué está mirando, y su opinión desplaza a la de la búsqueda por significado,
+        que sí acierta.
+      </p>
+
+      <h3 style="margin-top:2rem;">Buscar también por palabra exacta y por parecido visual</h3>
+      <p>
+        Además de buscar por significado, el sistema puede buscar por palabra literal
+        —útil para un código de producto como <code>22B-D010N104</code>— y buscar
+        imágenes por parecido visual. Las dos están construidas. Las dos, hoy, no
+        cambian nada: al medirlo, los resultados con y sin ellas eran idénticos.
+      </p>
+      <p>
+        El motivo es de arquitectura y está documentado en el código: el filtro de
+        relevancia mide distancia <em>de significado</em>. Una ficha que encontró la
+        búsqueda literal no tiene ese número, así que el filtro la descarta siempre.
+        Las dos etapas solo podían reordenar lo que la búsqueda por significado ya
+        había traído. Quedan apagadas hasta que eso se resuelva bien, en lugar de
+        dejarlas encendidas dando la impresión de que aportan.
+      </p>
+
+      <h3 style="margin-top:2rem;">Qué queda encendido, en concreto</h3>
+      <p>
+        Puesto todo junto: la ingesta deja <strong>dos archiveros</strong> y el sistema
+        sabe buscar de <strong>tres maneras</strong>. Hoy responde con uno y con una.
+      </p>
+
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>Qué existe</th><th>Tamaño</th><th>Se usa al responder</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Archivero de significado <span class="nota">(texto, tablas y descripciones de figuras)</span></td>
+              <td class="num">5.379 fichas</td>
+              <td class="bien">sí</td>
+            </tr>
+            <tr>
+              <td>Archivero visual <span class="nota">(las imágenes en sí)</span></td>
+              <td class="num">114 fichas</td>
+              <td class="mal">no</td>
+            </tr>
+            <tr><td>Búsqueda por palabra exacta</td><td class="num">—</td><td class="mal">no</td></tr>
+            <tr><td>Reordenador</td><td class="num">—</td><td class="mal">no</td></tr>
+            <tr><td>Completar con los pedazos vecinos</td><td class="num">—</td><td class="bien">sí</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="caja">
+        <div class="caja-titulo">Esto es lo que más se malinterpreta</div>
+        <p>
+          Que el archivero visual no se use <strong>no significa que no lleguen
+          imágenes.</strong> Llegan, y llegan bien: por el archivero de significado.
+          Cada figura tiene ahí su descripción escrita —113 fichas— y esa ficha arrastra
+          la ruta del recorte en disco. En total <strong>292 fichas apuntan a una imagen
+          o una tabla</strong>, y esas son las que llenan la galería que ve el técnico.
+        </p>
+        <p>
+          El archivero visual serviría para lo otro: encontrar un diagrama por su forma,
+          sin que nadie lo haya descrito antes. Eso hoy no se aprovecha.
+        </p>
+      </div>
+
+      <div class="caja destacado">
+        <p>
+          <strong>El patrón se repite tres veces:</strong> la mejora que suena más
+          sofisticada resultó ser la que empeoraba las cosas, y solo se supo al
+          medirla contra preguntas reales de este secadero. Ninguna de las tres se
+          habría descubierto probando el sistema a mano.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ CÓMO SABEMOS ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">Cómo sabemos que funciona</span>
+        <h2>Medir lo que importa, no lo que es fácil</h2>
+      </div>
+
+      <p>
+        Hay 54 preguntas de prueba escritas como las escribiría un técnico, cada una
+        con la página del manual donde está la respuesta. La medición obvia es: ¿trajo
+        esa página? Durante buena parte del proyecto medimos eso, y decía que todo
+        estaba bien.
+      </p>
+      <p>
+        Estaba mal. Traer la página correcta con la fila equivocada, para quien
+        preguntó por <code>F048</code>, es un fallo completo. Así que la medición
+        cambió: ahora se busca <strong>si el dato de la respuesta está literalmente en
+        el texto que se recuperó</strong>. Es más difícil de programar y no depende de
+        cómo estén cortados los pedazos, lo cual permite además comparar dos versiones
+        distintas del archivero.
+      </p>
+
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>Qué se mide</th><th>Resultado</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>La respuesta está en el texto recuperado</td><td class="num bien">95,3 % · 41 de 43</td></tr>
+            <tr><td>Llegan fichas pero sin la respuesta adentro</td><td class="num bien">0</td></tr>
+            <tr><td>Llega la página correcta entre las 10</td><td class="num">88,9 % · 48 de 54</td></tr>
+            <tr><td>Preguntas fuera de tema rechazadas</td><td class="num bien">5 de 5</td></tr>
+            <tr><td>Códigos de falla con su fila exacta</td><td class="num bien">17 de 17</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        La segunda fila es la que más tranquiliza: <strong>de todas las consultas en
+        las que llegó material, en ninguna llegó material sin la respuesta adentro.</strong>
+        Cuando el sistema trae algo, ese algo sirve. Cuando no sirve, no lo trae: se va
+        por la rama de los planos, o dice que no sabe.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════ LÍMITES ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">Lo que todavía no hace bien</span>
+        <h2>Límites, sin maquillaje</h2>
+      </div>
+
+      <ul>
+        <li>
+          <strong>Seis de 54 preguntas no encuentran su página.</strong> Son casi todas
+          especificaciones sueltas dentro de tablas grandes de datos técnicos: el mismo
+          problema de tamaño que ya se resolvió para los códigos de falla, todavía sin
+          resolver para esas tablas.
+        </li>
+        <li>
+          <strong>Once segundos son once segundos.</strong> La búsqueda es rápida; el
+          modelo escribiendo no. Se puede acortar mostrando la respuesta mientras se
+          escribe, pero eso todavía no está.
+        </li>
+        <li>
+          <strong>El guardado solo reconoce preguntas idénticas.</strong> Dos formas de
+          preguntar lo mismo se pagan dos veces. Es a propósito —ver el dibujo del
+          primer acto— pero es una limitación real.
+        </li>
+        <li>
+          <strong>Una pregunta que cruza dos manuales</strong> se responde con lo que
+          esté más cerca, no necesariamente con las dos partes. No está resuelto el
+          caso de armar una respuesta con pedazos de documentos distintos que se
+          necesitan mutuamente.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ══════════════════ RESUMEN ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">Todo junto</span>
+        <h2>El camino completo</h2>
+      </div>
+
+      <figure class="lienzo">
+        <svg viewBox="0 0 640 420" role="img" aria-label="Diagrama del camino completo: la pregunta pasa por el guardado, la reescritura, la búsqueda de cuarenta fichas, los cuatro filtros, el filtro de relevancia que se bifurca, y termina en la respuesta con fuentes.">
+          <defs>
+            <marker id="flecha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--tinta-3)"/>
+            </marker>
+          </defs>
+
+          <!-- pregunta -->
+          <rect x="180" y="12" width="280" height="30" rx="3" fill="var(--acero-suave)" stroke="var(--acero)"/>
+          <text x="196" y="32" style="font-size:11px;">“el variador me tira F048, ¿qué hago?”</text>
+          <line x1="320" y1="42" x2="320" y2="62" stroke="var(--tinta-3)" marker-end="url(#flecha)"/>
+
+          <!-- cache -->
+          <rect x="200" y="62" width="240" height="28" rx="3" fill="var(--papel)" stroke="var(--regla)"/>
+          <text x="216" y="81" style="font-size:11px;">¿ya la contestamos?</text>
+          <line x1="440" y1="76" x2="546" y2="76" stroke="var(--bien)" marker-end="url(#flecha)"/>
+          <text class="rotulo-chico" x="470" y="70" style="fill:var(--bien);">sí</text>
+          <rect x="546" y="62" width="80" height="28" rx="3" fill="var(--bien)" opacity="0.14" stroke="var(--bien)"/>
+          <text x="556" y="81" style="font-size:10px; fill:var(--bien);">devolver</text>
+          <line x1="320" y1="90" x2="320" y2="110" stroke="var(--tinta-3)" marker-end="url(#flecha)"/>
+
+          <!-- reescritura -->
+          <rect x="200" y="110" width="240" height="28" rx="3" fill="var(--papel)" stroke="var(--regla)"/>
+          <text x="216" y="129" style="font-size:11px;">completar la pregunta</text>
+          <line x1="320" y1="138" x2="320" y2="158" stroke="var(--tinta-3)" marker-end="url(#flecha)"/>
+
+          <!-- busqueda -->
+          <rect x="200" y="158" width="240" height="28" rx="3" fill="var(--acero-suave)" stroke="var(--acero)"/>
+          <text x="216" y="177" style="font-size:11px;">buscar 40 entre 5.379 fichas</text>
+          <line x1="320" y1="186" x2="320" y2="206" stroke="var(--tinta-3)" marker-end="url(#flecha)"/>
+
+          <!-- filtros -->
+          <rect x="200" y="206" width="240" height="28" rx="3" fill="var(--papel)" stroke="var(--regla)"/>
+          <text x="216" y="225" style="font-size:11px;">4 filtros → 10 fichas</text>
+          <line x1="320" y1="234" x2="320" y2="254" stroke="var(--tinta-3)" marker-end="url(#flecha)"/>
+
+          <!-- gate -->
+          <rect x="200" y="254" width="240" height="28" rx="3" fill="var(--ocre-suave)" stroke="var(--ocre)"/>
+          <text x="216" y="273" style="font-size:11px;">¿alguna es relevante?</text>
+          <line x1="440" y1="268" x2="546" y2="268" stroke="var(--ocre)" marker-end="url(#flecha)"/>
+          <text class="rotulo-chico" x="466" y="262" style="fill:var(--ocre);">no</text>
+          <rect x="500" y="254" width="126" height="28" rx="3" fill="var(--papel)" stroke="var(--ocre)"/>
+          <text x="510" y="273" style="font-size:10px; fill:var(--ocre);">solo los planos</text>
+          <line x1="320" y1="282" x2="320" y2="302" stroke="var(--tinta-3)" marker-end="url(#flecha)"/>
+
+          <!-- modelo -->
+          <rect x="140" y="302" width="360" height="42" rx="3" fill="var(--papel)" stroke="var(--acero)"/>
+          <text x="156" y="320" style="font-size:11px;">10 fichas + 2 planos en PDF → el modelo</text>
+          <text class="rotulo-chico" x="156" y="336">devuelve la respuesta, qué usó, y si usó los planos</text>
+          <line x1="320" y1="344" x2="320" y2="364" stroke="var(--tinta-3)" marker-end="url(#flecha)"/>
+
+          <!-- salida -->
+          <rect x="140" y="364" width="360" height="30" rx="3" fill="var(--bien)" opacity="0.14" stroke="var(--bien)"/>
+          <text x="156" y="384" style="font-size:11px; fill:var(--bien);">respuesta + fuentes + imágenes + planos usados</text>
+
+          <text class="rotulo-chico" x="14" y="412">Las dos flechas hacia la derecha son las salidas cortas: ya la sabíamos, o no hay material.</text>
+        </svg>
+        <figcaption>Un camino con dos salidas de emergencia, las dos deliberadas.</figcaption>
+      </figure>
+
+      <p>
+        Si hay que quedarse con una sola idea de todo esto: el trabajo difícil no fue
+        conseguir que el sistema responda. Fue conseguir que <strong>diga de dónde
+        sacó la respuesta, y que se calle cuando no la tiene.</strong>
+      </p>
+    </div>
+
+    <hr>
+
+    <div class="col">
+      <footer>
+        <p class="nota">
+          Documento compañero de <em>“De 220 páginas a una respuesta”</em>, que cuenta
+          la otra mitad: cómo se preparan los manuales antes de que llegue la primera
+          pregunta. Todos los números de acá salen de mediciones sobre los cinco
+          documentos del secadero y las 54 preguntas de prueba; las latencias, de 96
+          consultas reales registradas por el sistema.
+        </p>
+      </footer>
+    </div>
+  </section>
+
+</div>

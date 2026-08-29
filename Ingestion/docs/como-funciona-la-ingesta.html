@@ -1,0 +1,1081 @@
+<title>De 220 páginas a una respuesta</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ── Paleta: tinta de plano de ingeniería sobre papel técnico ───────────── */
+  :root {
+    --papel:        #EDEFF2;
+    --papel-alto:   #F8F9FB;
+    --papel-hondo:  #E2E6EA;
+    --tinta:        #18222D;
+    --tinta-2:      #52616F;
+    --tinta-3:      #7C8895;
+    --ocre:         #B0530C;   /* acento: ocre de maquinaria */
+    --ocre-suave:   #B0530C14;
+    --acero:        #2C6A8A;   /* el lado "datos" del sistema */
+    --acero-suave:  #2C6A8A14;
+    --regla:        #CBD2D8;
+    --alarma:       #9B2C2C;
+    --bien:         #2F6B43;
+
+    --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    --ancho: 39rem;
+    --ancho-amplio: 58rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --papel:       #121A22;
+      --papel-alto:  #1A242E;
+      --papel-hondo: #0D141A;
+      --tinta:       #E4EAF0;
+      --tinta-2:     #A3B0BC;
+      --tinta-3:     #7C8895;
+      --ocre:        #E28A45;
+      --ocre-suave:  #E28A4520;
+      --acero:       #6FB2D4;
+      --acero-suave: #6FB2D420;
+      --regla:       #2E3B47;
+      --alarma:      #E07A7A;
+      --bien:        #7FBF95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --papel:       #121A22;
+    --papel-alto:  #1A242E;
+    --papel-hondo: #0D141A;
+    --tinta:       #E4EAF0;
+    --tinta-2:     #A3B0BC;
+    --tinta-3:     #7C8895;
+    --ocre:        #E28A45;
+    --ocre-suave:  #E28A4520;
+    --acero:       #6FB2D4;
+    --acero-suave: #6FB2D420;
+    --regla:       #2E3B47;
+    --alarma:      #E07A7A;
+    --bien:        #7FBF95;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .envoltorio { display: flex; flex-direction: column; align-items: center; padding: 0 1.25rem 6rem; }
+  .col   { width: 100%; max-width: var(--ancho); }
+  .ancho { width: 100%; max-width: var(--ancho-amplio); }
+
+  /* ── Tipografía ─────────────────────────────────────────────────────────── */
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(2.3rem, 6.5vw, 3.6rem); font-weight: 700; line-height: 1.04; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(1.5rem, 3.6vw, 2rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }
+  h3 { font-size: 1.1rem; font-weight: 600; line-height: 1.3; margin-bottom: 0.5rem; }
+  p  { margin: 0 0 1.15rem; }
+  a  { color: var(--acero); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--tinta-3);
+  }
+  .bajada { font-size: 1.2rem; color: var(--tinta-2); line-height: 1.55; }
+  .nota   { font-size: 0.95rem; color: var(--tinta-2); }
+  strong  { font-weight: 600; }
+  em      { font-style: italic; }
+  code    { font-family: var(--mono); font-size: 0.87em; background: var(--papel-hondo); padding: 0.1em 0.35em; border-radius: 2px; }
+
+  /* ── Portada ────────────────────────────────────────────────────────────── */
+  header.portada {
+    width: 100%; max-width: var(--ancho);
+    padding: 5.5rem 0 3rem;
+    display: flex; flex-direction: column; gap: 1.5rem;
+  }
+  .sello {
+    display: flex; align-items: baseline; gap: 0.75rem;
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--tinta-3);
+    padding-bottom: 1.25rem; border-bottom: 1px solid var(--regla);
+  }
+  .sello .punto { color: var(--ocre); }
+
+  /* ── Secciones ──────────────────────────────────────────────────────────── */
+  section { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .bloque { display: flex; flex-direction: column; gap: 0; padding-top: 3.5rem; }
+  .titulo-seccion { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+
+  /* ── Paso: el número codifica la SECUENCIA real del pipeline ───────────── */
+  .paso { display: grid; grid-template-columns: 2.6rem 1fr; gap: 1.1rem; padding: 1.75rem 0; border-top: 1px solid var(--regla); }
+  .paso-num {
+    font-family: var(--mono); font-size: 0.95rem; font-weight: 500;
+    color: var(--ocre); padding-top: 0.15rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .paso-cuerpo > *:last-child { margin-bottom: 0; }
+  .paso h3 { margin-bottom: 0.5rem; }
+
+  /* ── Tarjetas y cajas ───────────────────────────────────────────────────── */
+  .caja {
+    background: var(--papel-alto);
+    border: 1px solid var(--regla);
+    border-radius: 3px;
+    padding: 1.15rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .caja > *:last-child { margin-bottom: 0; }
+  .caja-titulo {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--tinta-3); margin-bottom: 0.6rem;
+  }
+  .cita-tecnica {
+    font-family: var(--mono); font-size: 0.85rem; line-height: 1.6;
+    background: var(--papel-hondo); border-left: 2px solid var(--acero);
+    padding: 0.85rem 1rem; margin: 1rem 0; overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  .destacado { border-left: 3px solid var(--ocre); background: var(--ocre-suave); }
+
+  /* ── Tablas ─────────────────────────────────────────────────────────────── */
+  .tabla-envoltorio { overflow-x: auto; margin: 1.25rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--regla); }
+  th {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--tinta-3); font-weight: 500;
+    border-bottom: 1px solid var(--tinta-3);
+  }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mal  { color: var(--alarma); font-weight: 600; }
+  .bien { color: var(--bien);   font-weight: 600; }
+
+  /* ── Dibujos ────────────────────────────────────────────────────────────── */
+  figure { margin: 2rem 0; width: 100%; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    font-family: var(--mono); font-size: 0.72rem; line-height: 1.5;
+    color: var(--tinta-3); margin-top: 0.7rem; text-align: center;
+  }
+  .lienzo { background: var(--papel-alto); border: 1px solid var(--regla); border-radius: 3px; padding: 1.5rem 1rem; }
+
+  svg text { font-family: var(--mono); fill: var(--tinta); }
+  svg .rotulo { font-size: 11px; fill: var(--tinta-2); }
+  svg .rotulo-chico { font-size: 9.5px; fill: var(--tinta-3); }
+  svg .titulo-fig { font-size: 12px; font-weight: 500; fill: var(--tinta); }
+
+  ul { margin: 0 0 1.15rem; padding-left: 1.25rem; }
+  li { margin-bottom: 0.5rem; }
+  li::marker { color: var(--ocre); }
+
+  hr { border: 0; border-top: 1px solid var(--regla); margin: 3rem 0 0; width: 100%; }
+
+  footer { padding-top: 3rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .aparece { animation: subir 0.5s ease-out both; }
+    @keyframes subir { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+  :focus-visible { outline: 2px solid var(--acero); outline-offset: 2px; }
+</style>
+
+<div class="envoltorio">
+
+  <header class="portada aparece">
+    <div class="sello">
+      <span>Secadero de pastas · UNQ</span>
+      <span class="punto">◆</span>
+      <span>Cómo se prepara la documentación</span>
+    </div>
+    <h1>De 220 páginas<br>a una respuesta</h1>
+    <p class="bajada">
+      Qué le hacemos a los manuales del secadero para que un técnico pueda preguntar
+      <em>“el variador no arranca, ¿qué reviso?”</em> y recibir la respuesta con el plano
+      y la tabla exactos de donde salió.
+    </p>
+  </header>
+
+  <!-- ══════════════════ EL PROBLEMA ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">El problema</span>
+        <h2>Buscar en un PDF no es buscar</h2>
+      </div>
+
+      <p>
+        La documentación del secadero son cinco archivos: el manual del variador de
+        frecuencia, la tesis del proyecto, el catálogo del módulo de entradas y salidas, y
+        dos planos eléctricos. Entre todos, unas <strong>220 páginas</strong>.
+      </p>
+      <p class="nota">
+        Cuatro llegaron como PDF y uno como documento de Word: la tesis se convierte a PDF
+        antes de empezar, porque todo el proceso trabaja sobre la <em>imagen</em> de cada
+        página, no sobre el archivo original. Y los dos planos son hojas escaneadas: no
+        tienen texto que extraer, son la fotografía de un dibujo.
+      </p>
+      <p>
+        Un técnico frente a la máquina detenida no tiene un problema de lectura. Tiene un
+        problema de <em>encontrar</em>. Y el buscador de un PDF solo encuentra las palabras
+        exactas que uno escribe:
+      </p>
+
+      <figure class="lienzo">
+        <svg viewBox="0 0 640 168" role="img" aria-label="El técnico escribe 'no arranca' y el manual dice 'ausencia de habilitación'. El buscador no encuentra nada.">
+          <!-- lo que escribe el técnico -->
+          <rect x="8" y="20" width="248" height="52" rx="3" fill="var(--papel-hondo)" stroke="var(--regla)"/>
+          <text class="rotulo-chico" x="20" y="38">LO QUE ESCRIBE EL TÉCNICO</text>
+          <text class="rotulo" x="20" y="58" style="font-size:13px; fill:var(--tinta);">“no arranca”</text>
+
+          <!-- lo que dice el manual -->
+          <rect x="384" y="20" width="248" height="52" rx="3" fill="var(--papel-hondo)" stroke="var(--regla)"/>
+          <text class="rotulo-chico" x="396" y="38">LO QUE DICE EL MANUAL</text>
+          <text class="rotulo" x="396" y="58" style="font-size:13px; fill:var(--tinta);">“fuente de arranque P106”</text>
+
+          <!-- el hueco -->
+          <line x1="264" y1="46" x2="330" y2="46" stroke="var(--regla)" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <line x1="312" y1="46" x2="376" y2="46" stroke="var(--regla)" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <circle cx="320" cy="46" r="13" fill="var(--papel-alto)" stroke="var(--alarma)" stroke-width="1.5"/>
+          <text x="320" y="51" text-anchor="middle" style="font-size:14px; fill:var(--alarma);">✕</text>
+
+          <text class="rotulo" x="320" y="104" text-anchor="middle">Ni una palabra en común. Ctrl+F no devuelve nada.</text>
+          <text class="rotulo-chico" x="320" y="132" text-anchor="middle">Y la respuesta está en la página 82, en una tabla, en la fila de al lado.</text>
+        </svg>
+      </figure>
+
+      <p>
+        Al problema del vocabulario se le suma otro: <strong>buena parte de lo que un
+        técnico necesita no es texto</strong>. Son planos, diagramas de conexionado, tablas
+        de fallos. Un buscador de texto no ve nada de eso.
+      </p>
+      <p>
+        <em>La ingesta</em> es todo el trabajo que hacemos <strong>una sola vez</strong>,
+        antes de que alguien pregunte, para que después la búsqueda funcione. Es lo que
+        explica este documento.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════ LA IDEA ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">La idea de fondo</span>
+        <h2>Buscar por significado, no por palabras</h2>
+      </div>
+
+      <p>
+        En vez de guardar las páginas como texto, las convertimos en <strong>coordenadas
+        de significado</strong>. Cada fragmento de manual se transforma en una lista de
+        números que ubica <em>de qué habla</em>. Dos textos que hablan de lo mismo caen
+        cerca, aunque no compartan ni una palabra.
+      </p>
+
+      <figure class="lienzo">
+        <svg viewBox="0 0 640 260" role="img" aria-label="Mapa de significado: 'no arranca' cae cerca de 'fuente de arranque P106' y lejos de 'receta de pizza'.">
+          <text class="titulo-fig" x="20" y="24">Mapa de significado (simplificado)</text>
+
+          <!-- ejes suaves -->
+          <line x1="40" y1="220" x2="600" y2="220" stroke="var(--regla)"/>
+          <line x1="40" y1="44"  x2="40"  y2="220" stroke="var(--regla)"/>
+
+          <!-- zona arranque -->
+          <ellipse cx="180" cy="120" rx="112" ry="62" fill="var(--acero-suave)" stroke="var(--acero)" stroke-dasharray="3 4"/>
+          <text class="rotulo-chico" x="180" y="72" text-anchor="middle" style="fill:var(--acero);">FALLAS DE ARRANQUE</text>
+
+          <circle cx="140" cy="112" r="5" fill="var(--acero)"/>
+          <text class="rotulo" x="152" y="110">“el variador no arranca”</text>
+          <text class="rotulo-chico" x="152" y="124">la pregunta del técnico</text>
+
+          <circle cx="150" cy="156" r="5" fill="var(--ocre)"/>
+          <text class="rotulo" x="162" y="154">“fuente de arranque P106”</text>
+          <text class="rotulo-chico" x="162" y="168">la respuesta del manual</text>
+
+          <!-- zona lejana -->
+          <circle cx="520" cy="188" r="5" fill="var(--tinta-3)"/>
+          <text class="rotulo" x="452" y="176" text-anchor="start">“receta de pizza”</text>
+
+          <!-- distancia -->
+          <line x1="146" y1="134" x2="152" y2="150" stroke="var(--ocre)" stroke-width="2"/>
+          <text class="rotulo-chico" x="196" y="196" style="fill:var(--ocre);">cerca → se encuentran</text>
+          <line x1="300" y1="152" x2="506" y2="184" stroke="var(--regla)" stroke-width="1" stroke-dasharray="3 3"/>
+          <text class="rotulo-chico" x="404" y="146" text-anchor="middle">lejos → se descarta</text>
+        </svg>
+        <figcaption>
+          En el dibujo hay dos coordenadas para que se puedan ver. En el sistema real son 3.072.
+        </figcaption>
+      </figure>
+
+      <p>
+        Conviene ver unas de verdad, porque “coordenadas de significado” suena más
+        misterioso de lo que es. Este es el fragmento de la página 82 que vamos a seguir
+        durante todo el documento, y estas son sus coordenadas reales:
+      </p>
+
+      <div class="cita-tecnica">fragmento:    "El variador no arranca desde el teclado integrado."
+
+coordenadas:  [ 0.0042,  0.0197,  0.0106,  0.0026, -0.0204,  0.0017,
+                    … 3.063 números más …
+                -0.0048, -0.0023,  0.0003 ]</div>
+
+      <p class="nota">
+        Eso es literalmente todo lo que el sistema guarda para poder buscar: una lista de
+        3.072 números. Ninguno significa nada por sí solo. Lo único que importa es que la
+        lista de un fragmento que habla de fallas de arranque se parezca a la lista de la
+        pregunta de un técnico sobre fallas de arranque. Quien calcula esa lista es un
+        modelo de OpenAI hecho para eso, y tiene que ser <em>el mismo</em> modelo que se
+        use después con la pregunta del técnico: si no, las listas no serían comparables.
+      </p>
+
+      <p>
+        Esa cercanía es también lo que nos permite <strong>decir “no sé”</strong>. Si nada
+        cae lo bastante cerca de la pregunta, el sistema no improvisa: lo dice. Es como
+        rechaza la pregunta por la receta de pizza.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════ QUÉ ES UN FRAGMENTO ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">La unidad de todo el sistema</span>
+        <h2>Qué es un fragmento</h2>
+      </div>
+
+      <p>
+        Todo lo que viene después gira alrededor de una sola palabra, así que vale
+        detenerse en ella. Un <strong>fragmento</strong> —en la jerga, un
+        <em>chunk</em>— es el pedazo más chico de documentación que tiene sentido
+        entregarle a alguien como respuesta.
+      </p>
+      <p>
+        No es una página: una página trae cinco temas distintos. No es un párrafo
+        cortado por longitud: eso partiría una tabla al medio. Es una unidad de
+        significado, y por eso su tamaño es irregular: en este corpus el más corto tiene
+        <strong>29 caracteres</strong> y el más largo <strong>3.529</strong>. La mitad
+        está por debajo de los 400.
+      </p>
+
+      <h3 style="margin-top:2rem;">La página 82, fragmento por fragmento</h3>
+      <p>
+        Esta es la página que vamos a seguir. Al procesarla quedó partida en
+        <strong>cuatro fragmentos</strong>, y estos son sus textos reales, tal como están
+        guardados hoy en el índice:
+      </p>
+
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Tipo</th><th>Texto guardado</th><th>Tamaño</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="num">1</td><td>texto</td>
+              <td>“Síntomas comunes y acciones correctivas / El motor no arranca.”</td>
+              <td class="num">60 car.</td>
+            </tr>
+            <tr>
+              <td class="num">2</td><td>tabla</td>
+              <td>La tabla de causas, indicación y acción correctiva para el motor que no arranca</td>
+              <td class="num">1.463 car.</td>
+            </tr>
+            <tr>
+              <td class="num">3</td><td>texto</td>
+              <td>“El variador no arranca desde el teclado integrado.”</td>
+              <td class="num">50 car.</td>
+            </tr>
+            <tr>
+              <td class="num">4</td><td>tabla</td>
+              <td>La tabla de causas y acción correctiva para el arranque desde el teclado</td>
+              <td class="num">257 car.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Fijate en el fragmento 3. Son cincuenta caracteres, una sola frase, y por sí solo
+        no responde nada: dice cuál es el síntoma, no qué hacer. El que responde es el 4,
+        la tabla de al lado. Que sean dos fragmentos separados y no uno es una decisión, y
+        el paso 07 existe justamente para que esa separación no rompa la respuesta.
+      </p>
+
+      <h3 style="margin-top:2rem;">Un fragmento no es solo su texto</h3>
+      <p>
+        Cada fragmento se guarda como una ficha con varios campos. Estos son los campos
+        reales del fragmento 3, copiados del índice:
+      </p>
+
+      <div class="cita-tecnica">texto            El variador no arranca desde el teclado integrado.
+tipo             text
+documento        variadorPowerFlex4M.pdf
+página           82
+identificador    chunk_4
+anterior         variadorPowerFlex4M.pdf_82_chunk_3
+siguiente        variadorPowerFlex4M.pdf_82_chunk_5
+de qué va        Este fragmento se encuentra en la
+                 sección de resolución de problemas
+                 del manual del variador PowerFlex 4M
+                 y aborda un problema específico
+                 relacionado con el arranque del
+                 equipo desde el teclado integrado.</div>
+
+      <p>
+        Los tres campos del final son los que hacen la diferencia y ninguno estaba en el
+        PDF. <strong>“Anterior” y “siguiente”</strong> son las que permiten reconstruir un
+        procedimiento partido entre páginas. <strong>“De qué va”</strong> lo escribió un
+        modelo de IA en el paso 05, y se le pega adelante al texto antes de calcular las
+        coordenadas: sin eso, cincuenta caracteres sueltos no se parecen a nada.
+      </p>
+      <p>
+        Y si el fragmento es una figura o una tabla, lleva además la ruta al archivo del
+        recorte en disco. Eso es lo que después llena la galería de imágenes que ve el
+        técnico.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════ EL RECORRIDO ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">El recorrido, paso a paso</span>
+        <h2>Una página real, de principio a fin</h2>
+      </div>
+      <p>
+        Para que no quede abstracto, sigamos <strong>una sola página</strong>: la 82 del
+        manual del variador. Es la tabla de “síntomas comunes y acciones correctivas”, una
+        de las páginas más útiles de todo el corpus.
+      </p>
+    </div>
+
+    <div class="col">
+      <!-- PASO 1 -->
+      <div class="paso">
+        <div class="paso-num">01</div>
+        <div class="paso-cuerpo">
+          <h3>Mirar la página como la miraría una persona</h3>
+          <p>
+            Le mandamos <strong>la imagen de la página</strong> a un modelo de inteligencia
+            artificial que ve, no solo lee. Le pedimos que identifique de qué está hecha:
+            dónde termina un párrafo, dónde empieza una tabla, dónde hay un diagrama.
+          </p>
+          <p class="nota">
+            Esto es distinto de “extraer el texto”. El texto extraído de una tabla queda como
+            una fila de palabras sueltas, sin filas ni columnas. Y de un plano escaneado no
+            sale nada.
+          </p>
+        </div>
+      </div>
+
+      <!-- PASO 2 -->
+      <div class="paso">
+        <div class="paso-num">02</div>
+        <div class="paso-cuerpo">
+          <h3>Cortar la página en piezas con sentido</h3>
+          <p>
+            La página se parte en <em>fragmentos</em>: un fragmento por cada cosa que se
+            puede consultar por separado. No se corta “cada 500 palabras”, se corta por
+            unidades de significado.
+          </p>
+
+          <figure>
+            <svg viewBox="0 0 640 250" role="img" aria-label="Una página se divide en un fragmento de texto, uno de tabla y uno de figura.">
+              <!-- la página -->
+              <rect x="14" y="30" width="150" height="196" rx="2" fill="var(--papel-alto)" stroke="var(--tinta-3)"/>
+              <text class="rotulo-chico" x="89" y="20" text-anchor="middle">PÁGINA 82</text>
+              <!-- lineas de texto simuladas -->
+              <g stroke="var(--tinta-3)" stroke-width="2" opacity="0.45">
+                <line x1="28" y1="48" x2="148" y2="48"/><line x1="28" y1="58" x2="132" y2="58"/>
+              </g>
+              <rect x="28" y="72" width="120" height="66" fill="var(--acero-suave)" stroke="var(--acero)" stroke-width="1"/>
+              <g stroke="var(--acero)" stroke-width="1" opacity="0.6">
+                <line x1="28" y1="88" x2="148" y2="88"/><line x1="28" y1="104" x2="148" y2="104"/>
+                <line x1="28" y1="120" x2="148" y2="120"/><line x1="68" y1="72" x2="68" y2="138"/>
+              </g>
+              <rect x="28" y="150" width="120" height="60" fill="var(--ocre-suave)" stroke="var(--ocre)" stroke-width="1"/>
+              <circle cx="60" cy="180" r="12" fill="none" stroke="var(--ocre)"/>
+              <line x1="76" y1="180" x2="132" y2="180" stroke="var(--ocre)"/>
+
+              <!-- flechas -->
+              <path d="M172 128 L212 128" stroke="var(--tinta-3)" stroke-width="1.5" marker-end="url(#punta)"/>
+              <defs>
+                <marker id="punta" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                  <path d="M0 0 L10 5 L0 10 z" fill="var(--tinta-3)"/>
+                </marker>
+              </defs>
+
+              <!-- fragmentos -->
+              <rect x="224" y="34" width="400" height="52" rx="3" fill="var(--papel-alto)" stroke="var(--regla)"/>
+              <text class="rotulo-chico" x="238" y="52">FRAGMENTO · TEXTO</text>
+              <text class="rotulo" x="238" y="70">“Síntomas comunes y acciones correctivas”</text>
+
+              <rect x="224" y="96" width="400" height="66" rx="3" fill="var(--papel-alto)" stroke="var(--acero)"/>
+              <text class="rotulo-chico" x="238" y="114" style="fill:var(--acero);">FRAGMENTO · TABLA</text>
+              <text class="rotulo" x="238" y="132">Causas / Indicación / Acción correctiva</text>
+              <text class="rotulo-chico" x="238" y="149">se guarda con sus filas y columnas, no como texto suelto</text>
+
+              <rect x="224" y="172" width="400" height="66" rx="3" fill="var(--papel-alto)" stroke="var(--ocre)"/>
+              <text class="rotulo-chico" x="238" y="190" style="fill:var(--ocre);">FRAGMENTO · FIGURA</text>
+              <text class="rotulo" x="238" y="208">recorte de la imagen + su descripción</text>
+              <text class="rotulo-chico" x="238" y="225">el técnico la va a ver, no solo leer sobre ella</text>
+            </svg>
+          </figure>
+        </div>
+      </div>
+
+      <!-- PASO 3 -->
+      <div class="paso">
+        <div class="paso-num">03</div>
+        <div class="paso-cuerpo">
+          <h3>Mirar cada figura por separado</h3>
+          <p>
+            A cada diagrama le sacamos un recorte y lo mandamos <strong>solo</strong>, en una
+            segunda consulta al modelo que ve. La diferencia con describirlo de pasada,
+            mirando la página entera, es grande:
+          </p>
+          <div class="caja">
+            <div class="caja-titulo">Mirando la página completa</div>
+            <p class="nota" style="margin:0 0 0.9rem;">“Un diagrama eléctrico.”</p>
+            <div class="caja-titulo">Mirando solo el recorte</div>
+            <p class="nota" style="margin:0;">
+              “El diagrama muestra las conexiones de un variador de frecuencia, incluyendo
+              terminales de entrada y salida, y las opciones de control SNK y SRC.”
+            </p>
+          </div>
+          <p>
+            Esa descripción es lo que después permite encontrar el diagrama. La imagen queda
+            guardada aparte, para mostrársela al técnico junto con la respuesta.
+          </p>
+        </div>
+      </div>
+
+      <!-- PASO 4 -->
+      <div class="paso">
+        <div class="paso-num">04</div>
+        <div class="paso-cuerpo">
+          <h3>Tirar lo que no sirve</h3>
+          <p>
+            No todo lo que sale del paso anterior es útil, y guardar basura es peor que no
+            guardar nada: compite por el lugar de lo bueno. Se descartan dos cosas.
+          </p>
+          <p>
+            <strong>Recortes vacíos.</strong> A veces el recorte sale en blanco y el modelo
+            lo dice: <em>“La imagen está en blanco y no contiene información visible”</em>.
+            Antes de filtrarlos, esas cuatro imágenes vacías arrastraban dieciséis preguntas
+            de búsqueda perfectamente creíbles, entre ellas <em>“¿cómo identifico los
+            componentes y conexiones del variador?”</em>. Alguien preguntaba eso y recibía
+            una imagen en blanco.
+          </p>
+          <p>
+            <strong>Texto ilegible.</strong> De los planos escaneados intentamos leer las
+            etiquetas impresas. Casi siempre sale ruido:
+          </p>
+          <div class="cita-tecnica">as a =Q ada 218 2 &gt;| &gt; 2 0 w io 3 2 i A</div>
+          <p>
+            De 98 intentos, <strong>7</strong> pasan el control de calidad. Y son justo los
+            que valen: <code>DRIVER RESISTENCIAS … EXTRACTOR</code> del tablero,
+            <code>Inter. Ter. In: 15A</code> de un térmico, o el epígrafe
+            <em>“Figura 1.1: A la izquierda, secadero de pastas eléctrico”</em>.
+          </p>
+        </div>
+      </div>
+
+      <!-- PASO 5 -->
+      <div class="paso">
+        <div class="paso-num">05</div>
+        <div class="paso-cuerpo">
+          <h3>Escribirle a cada fragmento de qué va</h3>
+          <p>
+            Un fragmento arrancado de su página pierde el contexto que lo hacía
+            comprensible. Esta fila de tabla, sola, no se entiende:
+          </p>
+          <div class="cita-tecnica">El variador no arranca desde el teclado integrado.</div>
+          <p>
+            ¿De qué equipo? ¿Es un síntoma, una advertencia, un título? Le pedimos al modelo
+            que escriba una o dos frases que lo ubiquen, y se las <strong>pegamos
+            adelante</strong> antes de calcular sus coordenadas:
+          </p>
+          <div class="cita-tecnica destacado">Este fragmento se encuentra en la sección de resolución de problemas del manual del variador PowerFlex 4M y aborda un problema específico relacionado con el arranque del equipo desde el teclado integrado.
+
+El variador no arranca desde el teclado integrado.</div>
+        </div>
+      </div>
+
+      <!-- PASO 6 -->
+      <div class="paso">
+        <div class="paso-num">06</div>
+        <div class="paso-cuerpo">
+          <h3>Inventar las preguntas que ese fragmento responde</h3>
+          <p>
+            Este es el paso que más rinde de todos, y el más contraintuitivo. Por cada
+            fragmento le pedimos al modelo que escriba las preguntas que ese fragmento
+            <em>contesta</em>, en el idioma en que hablaría un técnico:
+          </p>
+          <div class="caja">
+            <div class="caja-titulo">Las 7 preguntas que generó, textuales</div>
+            <ul style="margin:0; font-size:0.97rem;">
+              <li>¿Por qué el variador no arranca desde el teclado integrado?</li>
+              <li>¿Qué pasos seguir si el variador no responde al intentar arrancar desde el teclado?</li>
+              <li>¿Cómo verificar si el teclado integrado está correctamente configurado?</li>
+              <li>¿Qué indica que el teclado integrado no está habilitado?</li>
+              <li>¿Qué significa que el indicador LED verde sobre la tecla de arranque no esté iluminado?</li>
+              <li>¿Qué parámetro se debe ajustar para habilitar el teclado integrado?</li>
+              <li>¿Qué acción correctiva se debe tomar si el variador no arranca desde el teclado?</li>
+            </ul>
+          </div>
+          <p>
+            Cada una de esas preguntas se guarda como <strong>una entrada más en el índice
+            que apunta al mismo fragmento</strong>. Así, cuando el técnico pregunta con sus
+            palabras, no tiene que parecerse al manual: tiene que parecerse a una pregunta.
+          </p>
+
+          <figure>
+            <svg viewBox="0 0 640 200" role="img" aria-label="Tres preguntas distintas apuntan al mismo fragmento de contenido.">
+              <text class="titulo-fig" x="14" y="18">Varias entradas, un solo contenido</text>
+
+              <rect x="14" y="36" width="228" height="34" rx="3" fill="var(--acero-suave)" stroke="var(--acero)"/>
+              <text class="rotulo" x="26" y="57">“¿por qué no arranca desde el teclado?”</text>
+              <rect x="14" y="80" width="228" height="34" rx="3" fill="var(--acero-suave)" stroke="var(--acero)"/>
+              <text class="rotulo" x="26" y="101">“¿qué significa el LED verde apagado?”</text>
+              <rect x="14" y="124" width="228" height="34" rx="3" fill="var(--acero-suave)" stroke="var(--acero)"/>
+              <text class="rotulo" x="26" y="145">“¿qué parámetro habilita el teclado?”</text>
+
+              <path d="M250 53 C 300 53, 320 97, 366 97" fill="none" stroke="var(--acero)" stroke-width="1.4" marker-end="url(#punta2)"/>
+              <path d="M250 97 L366 97" fill="none" stroke="var(--acero)" stroke-width="1.4" marker-end="url(#punta2)"/>
+              <path d="M250 141 C 300 141, 320 97, 366 97" fill="none" stroke="var(--acero)" stroke-width="1.4" marker-end="url(#punta2)"/>
+              <defs>
+                <marker id="punta2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                  <path d="M0 0 L10 5 L0 10 z" fill="var(--acero)"/>
+                </marker>
+              </defs>
+
+              <rect x="374" y="66" width="252" height="62" rx="3" fill="var(--ocre-suave)" stroke="var(--ocre)"/>
+              <text class="rotulo-chico" x="388" y="86" style="fill:var(--ocre);">EL FRAGMENTO REAL</text>
+              <text class="rotulo" x="388" y="104">la fila de la tabla, con su</text>
+              <text class="rotulo" x="388" y="118">acción correctiva</text>
+
+              <text class="rotulo-chico" x="320" y="182" text-anchor="middle">Se busca por la pregunta. Se entrega el contenido.</text>
+            </svg>
+          </figure>
+          <p class="nota">
+            Por eso el índice tiene muchas más entradas que fragmentos:
+            <strong>87 de cada 100 entradas son preguntas</strong>, casi siete por
+            fragmento. Y está medido que sirve: con una sola pregunta por fragmento el
+            sistema acierta la mitad de las veces que con cuatro, y al subir de cuatro
+            siguió mejorando sin encontrar techo.
+          </p>
+        </div>
+      </div>
+
+      <!-- PASO 7 -->
+      <div class="paso">
+        <div class="paso-num">07</div>
+        <div class="paso-cuerpo">
+          <h3>Juntar lo que quedó cortado entre páginas</h3>
+          <p>
+            Un procedimiento que empieza al pie de una página y termina en la siguiente
+            quedaría partido en dos fragmentos que, por separado, no responden nada. Después
+            de calcular las coordenadas, buscamos fragmentos que hablen de lo mismo aunque
+            estén en páginas distintas, y armamos con ellos un fragmento más grande que
+            convive con los originales.
+          </p>
+        </div>
+      </div>
+
+      <!-- PASO 8 -->
+      <div class="paso">
+        <div class="paso-num">08</div>
+        <div class="paso-cuerpo">
+          <h3>Guardar todo en tres lugares</h3>
+          <div class="tabla-envoltorio">
+            <table>
+              <thead>
+                <tr><th>Dónde</th><th>Qué guarda</th><th>Para qué</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Índice de significado</strong></td>
+                  <td>coordenadas de cada fragmento y de cada pregunta</td>
+                  <td>encontrar por significado</td>
+                </tr>
+                <tr>
+                  <td><strong>Índice visual</strong></td>
+                  <td>coordenadas de las imágenes en sí</td>
+                  <td>buscar por parecido visual</td>
+                </tr>
+                <tr>
+                  <td><strong>Archivos</strong></td>
+                  <td>los recortes de imagen y las tablas completas</td>
+                  <td>mostrárselos al técnico</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Al terminar cada documento se anota su “huella digital”. Si mañana se corre el
+            proceso otra vez y el archivo no cambió, se saltea entero: no se vuelve a pagar
+            por trabajo ya hecho.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ LAS CUENTAS ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">Las cuentas del proceso</span>
+        <h2>De 4 fragmentos a 29 entradas</h2>
+      </div>
+
+      <p>
+        Hay una distinción que conviene tener clara antes de seguir, porque los números
+        no cierran sin ella. <strong>Un fragmento no es una entrada del índice.</strong>
+        Cada fragmento genera varias entradas: una por su propio contenido, y una por cada
+        pregunta que responde. Volvamos a la página 82.
+      </p>
+
+      <figure class="lienzo">
+        <svg viewBox="0 0 640 250" role="img" aria-label="La página 82 produce cuatro fragmentos, que a su vez producen veintinueve entradas en el índice: cuatro de contenido y veinticinco de preguntas.">
+          <text class="titulo-fig" x="14" y="20">La página 82, contada de verdad</text>
+
+          <rect x="14" y="36" width="120" height="30" rx="2" fill="var(--papel-hondo)" stroke="var(--regla)"/>
+          <text x="34" y="56" style="font-size:11px;">1 página</text>
+
+          <text class="rotulo" x="146" y="56">→</text>
+
+          <rect x="168" y="36" width="150" height="30" rx="2" fill="var(--ocre-suave)" stroke="var(--ocre)"/>
+          <text x="182" y="56" style="font-size:11px; fill:var(--ocre);">4 fragmentos</text>
+
+          <text class="rotulo" x="330" y="56">→</text>
+
+          <rect x="352" y="36" width="274" height="30" rx="2" fill="var(--acero-suave)" stroke="var(--acero)"/>
+          <text x="366" y="56" style="font-size:11px; fill:var(--acero);">29 entradas en el índice</text>
+
+          <line x1="14" y1="88" x2="626" y2="88" stroke="var(--regla)"/>
+
+          <text class="rotulo-chico" x="14" y="110">CÓMO SE REPARTEN ESAS 29</text>
+
+          <rect x="14" y="120" width="86" height="24" rx="2" fill="var(--ocre-suave)" stroke="var(--ocre)"/>
+          <text x="26" y="136" style="font-size:10px; fill:var(--ocre);">4 contenidos</text>
+          <rect x="106" y="120" width="520" height="24" rx="2" fill="var(--acero-suave)" stroke="var(--acero)"/>
+          <text x="118" y="136" style="font-size:10px; fill:var(--acero);">25 preguntas que apuntan a esos mismos 4 contenidos</text>
+
+          <text class="rotulo" x="14" y="172">El fragmento 3 —una frase de 50 caracteres— aporta 7 de esas</text>
+          <text class="rotulo" x="14" y="188">entradas: su contenido y las 6 preguntas que sabe responder.</text>
+
+          <line x1="14" y1="208" x2="626" y2="208" stroke="var(--regla)"/>
+          <text class="rotulo-chico" x="14" y="234">Se busca sobre las 29. Se entrega siempre uno de los 4.</text>
+        </svg>
+        <figcaption>Muchas puertas de entrada, el mismo contenido detrás.</figcaption>
+      </figure>
+
+      <h3 style="margin-top:2rem;">Los cinco documentos, en números</h3>
+      <p>
+        Y así se ve el corpus completo después de la última corrida:
+      </p>
+
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>Documento</th><th>Fragmentos</th><th>Preguntas</th><th>Entradas</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Manual del variador PowerFlex 4M</td><td class="num">440</td><td class="num">3.078</td><td class="num">3.518</td></tr>
+            <tr><td>Tesis del proyecto</td><td class="num">193</td><td class="num">1.330</td><td class="num">1.523</td></tr>
+            <tr><td>Catálogo del módulo de E/S</td><td class="num">46</td><td class="num">272</td><td class="num">318</td></tr>
+            <tr><td>Plano de conexionado</td><td class="num">2</td><td class="num">8</td><td class="num">10</td></tr>
+            <tr><td>Plano de distribución eléctrica</td><td class="num">2</td><td class="num">8</td><td class="num">10</td></tr>
+            <tr><td><strong>Total</strong></td><td class="num"><strong>683</strong></td><td class="num"><strong>4.696</strong></td><td class="num"><strong>5.379</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Las dos últimas filas explican por sí solas por qué los planos se tratan aparte:
+        <strong>dos fragmentos cada uno</strong>. Son hojas escaneadas, casi todo dibujo, y
+        no hay texto que cortar. Volvemos sobre eso más adelante.
+      </p>
+      <p>
+        De los 683 fragmentos, 340 son texto, 178 son tablas, 113 son figuras con su
+        descripción, 36 son las uniones entre páginas del paso 07, y 15 son etiquetas
+        leídas de dentro de un plano.
+      </p>
+
+      <h3 style="margin-top:2rem;">Qué decide una IA y qué decide una regla</h3>
+      <p>
+        Para una exposición esta distinción suele ser la pregunta que sigue, así que
+        conviene tenerla explícita. De los ocho pasos, cuatro dependen de un modelo de
+        inteligencia artificial —y por lo tanto cuestan dinero, tardan, y no dan
+        exactamente el mismo resultado dos veces— y cuatro son código común.
+      </p>
+
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>Paso</th><th>Quién decide</th><th>Consecuencia</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>01 · Mirar la página</td><td>IA que ve</td><td>una consulta por página</td></tr>
+            <tr><td>02 · Cortar en fragmentos</td><td>IA</td><td>el corte no es idéntico dos veces</td></tr>
+            <tr><td>03 · Describir cada figura</td><td>IA que ve</td><td>una consulta por recorte</td></tr>
+            <tr><td>04 · Tirar lo que no sirve</td><td>reglas</td><td>siempre igual, gratis</td></tr>
+            <tr><td>05 · Escribir de qué va</td><td>IA</td><td>una consulta por fragmento</td></tr>
+            <tr><td>06 · Inventar las preguntas</td><td>IA</td><td>una consulta por fragmento</td></tr>
+            <tr><td>07 · Unir entre páginas</td><td>cálculo</td><td>siempre igual, gratis</td></tr>
+            <tr><td>08 · Guardar</td><td>código</td><td>siempre igual, gratis</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Contadas de la última corrida: <strong>220</strong> consultas para leer y cortar
+        las páginas —una por página—, <strong>228</strong> para describir recortes de
+        figuras y tablas, y <strong>683</strong> para el contexto y las preguntas, que se
+        piden juntos en una sola consulta por fragmento. En total
+        <strong>1.131 consultas a un modelo de IA</strong>, más 5.379 cálculos de
+        coordenadas, que son un modelo distinto y mucho más barato.
+      </p>
+      <p>
+        Eso es lo que hace que el proceso tarde 24 minutos en vez de segundos, y es
+        también la razón de la “huella digital” del paso 08: un documento que no cambió no
+        se vuelve a procesar.
+      </p>
+
+      <div class="caja destacado">
+        <p>
+          <strong>Y todo esto pasa una sola vez.</strong> Es la diferencia central entre
+          las dos mitades del sistema: acá se paga 24 minutos y unos pocos dólares, una
+          vez, para que después cada consulta de un técnico cueste centavos y tarde
+          segundos.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ EL TAMAÑO IMPORTA ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">La lección más cara del proyecto</span>
+        <h2>El tamaño de cada pieza decide si funciona</h2>
+      </div>
+
+      <p>
+        Todo lo anterior puede estar bien hecho y el sistema fallar igual, por una razón
+        sutil. Las coordenadas de un fragmento son un <strong>promedio</strong> de todo lo
+        que ese fragmento dice. Si mete diez temas distintos, el promedio no se parece a
+        ninguno.
+      </p>
+      <p>
+        La tabla de códigos de falla del variador es el caso perfecto. Es <em>el</em>
+        contenido más valioso del corpus: la consulta típica de un técnico es literalmente
+        <em>“me tira el código F048, ¿qué hago?”</em>.
+      </p>
+
+      <figure>
+        <svg viewBox="0 0 640 256" role="img" aria-label="Un fragmento con diez códigos de falla no discrimina; tres fragmentos de tres códigos sí.">
+          <!-- antes -->
+          <text class="titulo-fig" x="14" y="18">Antes: un fragmento, diez fallas</text>
+          <rect x="14" y="28" width="284" height="76" rx="3" fill="var(--papel-alto)" stroke="var(--alarma)"/>
+          <g class="rotulo-chico">
+            <text x="28" y="48">F12  F13  F33  F38  F39</text>
+            <text x="28" y="66">F40  F41  F42  F43  F48</text>
+            <text x="28" y="90" style="fill:var(--alarma);">promedio de 10 temas → no se parece a ninguno</text>
+          </g>
+          <text class="rotulo-chico" x="14" y="122">Preguntás por F039 →</text>
+          <text class="rotulo" x="14" y="138" style="fill:var(--alarma);">llega otra parte de la tabla</text>
+
+          <!-- despues -->
+          <text class="titulo-fig" x="342" y="18">Después: tres fallas por fragmento</text>
+          <rect x="342" y="28" width="284" height="22" rx="2" fill="var(--papel-alto)" stroke="var(--bien)"/>
+          <text class="rotulo-chico" x="354" y="43">F12  F13  F33</text>
+          <rect x="342" y="55" width="284" height="22" rx="2" fill="var(--papel-alto)" stroke="var(--bien)"/>
+          <text class="rotulo-chico" x="354" y="70">F38  F39  F40</text>
+          <rect x="342" y="82" width="284" height="22" rx="2" fill="var(--papel-alto)" stroke="var(--bien)"/>
+          <text class="rotulo-chico" x="354" y="97">F41  F42  F43</text>
+          <text class="rotulo-chico" x="342" y="122">Preguntás por F039 →</text>
+          <text class="rotulo" x="342" y="138" style="fill:var(--bien);">llega la fila de F039</text>
+
+          <!-- resultado -->
+          <line x1="14" y1="162" x2="626" y2="162" stroke="var(--regla)"/>
+          <text class="rotulo" x="14" y="186">De 17 códigos de falla, ¿en cuántos el sistema entrega la fila correcta?</text>
+          <rect x="14" y="200" width="141" height="26" rx="2" fill="var(--alarma)" opacity="0.16"/>
+          <rect x="14" y="200" width="141" height="26" rx="2" fill="none" stroke="var(--alarma)"/>
+          <text x="24" y="218" style="font-size:12px; fill:var(--alarma);">antes: 8 de 17</text>
+          <rect x="171" y="200" width="300" height="26" rx="2" fill="var(--bien)" opacity="0.16"/>
+          <rect x="171" y="200" width="300" height="26" rx="2" fill="none" stroke="var(--bien)"/>
+          <text x="181" y="218" style="font-size:12px; fill:var(--bien);">después: 17 de 17</text>
+        </svg>
+        <figcaption>
+          Medido consulta por consulta sobre los 17 códigos de falla del manual del variador.
+        </figcaption>
+      </figure>
+
+      <p>
+        Lo llamativo es que la medición <em>anterior</em> decía que todo estaba bien. Se
+        medía si el sistema traía la <strong>página</strong> correcta, y la traía en 16 de
+        17 casos. Pero traer la página correcta con la fila equivocada, para el técnico que
+        preguntó por F048, es un fallo completo.
+      </p>
+      <div class="caja destacado">
+        <p style="margin:0;">
+          <strong>Lo que aprendimos:</strong> la medición tenía que cambiar antes que el
+          sistema. Ahora se verifica que <em>el dato</em> esté en lo que se recupera, no que
+          la página coincida.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ LOS PLANOS ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">Un caso aparte</span>
+        <h2>Los planos no se buscan: se muestran siempre</h2>
+      </div>
+      <p>
+        Los dos planos eléctricos son hojas escaneadas: casi todo su contenido es dibujo.
+        Cortarlos en fragmentos de texto no tiene sentido — rinden dos fragmentos cada uno.
+      </p>
+      <p>
+        Con ellos hacemos otra cosa: <strong>se adjuntan completos en cada consulta</strong>,
+        como quien pone el plano sobre la mesa antes de discutir la falla. El modelo que
+        responde los mira enteros, y por eso puede decir cosas como <em>“la alimentación del
+        variador viene de la bornera R, S, T, pasando por el térmico de 10 A”</em> — que no
+        está escrito en ninguna parte, se lee del dibujo.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════ COSTO Y LÍMITES ══════════════════ -->
+  <section>
+    <div class="col bloque">
+      <div class="titulo-seccion">
+        <span class="eyebrow">Lo que cuesta y lo que no puede</span>
+        <h2>Honestidad sobre los límites</h2>
+      </div>
+
+      <p>
+        Todo el proceso corre <strong>una vez</strong> y tarda alrededor de <strong>24 minutos</strong> para
+        los cinco documentos. Es lento porque cada página y cada fragmento pasan por un
+        modelo de inteligencia artificial: son miles de consultas. Después, responderle a un
+        técnico tarda unos 13 segundos.
+      </p>
+      <p>Y hay tres cosas que conviene saber que <em>no</em> hace:</p>
+      <ul>
+        <li>
+          <strong>No lee números que solo están dibujados.</strong> Si una cota de
+          dimensiones está escrita dentro de la imagen y no en el texto, el sistema describe
+          la figura pero puede no darte el número. Te muestra el dibujo para que lo leas vos.
+        </li>
+        <li>
+          <strong>No inventa cuando no sabe.</strong> Es deliberado: si nada se parece
+          suficiente a la pregunta, responde que no tiene información. Preferimos eso a una
+          respuesta plausible y equivocada sobre una máquina.
+        </li>
+        <li>
+          <strong>No es determinista.</strong> Correr el proceso dos veces sobre el mismo PDF
+          no corta las páginas exactamente igual, porque hay un modelo de IA decidiendo. El
+          resultado es equivalente, no idéntico.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ══════════════════ RESUMEN ══════════════════ -->
+  <section>
+    <div class="ancho bloque">
+      <div class="titulo-seccion" style="max-width: var(--ancho);">
+        <span class="eyebrow">En una imagen</span>
+        <h2>Todo el proceso</h2>
+      </div>
+
+      <figure class="lienzo">
+        <svg viewBox="0 0 900 300" role="img" aria-label="Resumen del proceso: del PDF a los tres almacenes.">
+          <defs>
+            <marker id="p3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--tinta-3)"/>
+            </marker>
+          </defs>
+
+          <!-- fila de pasos -->
+          <g>
+            <rect x="10" y="112" width="96" height="60" rx="3" fill="var(--papel-hondo)" stroke="var(--tinta-3)"/>
+            <text class="rotulo" x="58" y="138" text-anchor="middle">PDF</text>
+            <text class="rotulo-chico" x="58" y="154" text-anchor="middle">manual, plano</text>
+
+            <line x1="110" y1="142" x2="140" y2="142" stroke="var(--tinta-3)" marker-end="url(#p3)"/>
+
+            <rect x="144" y="96" width="120" height="92" rx="3" fill="var(--papel-alto)" stroke="var(--regla)"/>
+            <text class="rotulo-chico" x="204" y="116" text-anchor="middle" style="fill:var(--ocre);">01–03</text>
+            <text class="rotulo" x="204" y="136" text-anchor="middle">ver la página</text>
+            <text class="rotulo" x="204" y="152" text-anchor="middle">y cortarla</text>
+            <text class="rotulo-chico" x="204" y="172" text-anchor="middle">texto · tabla · figura</text>
+
+            <line x1="268" y1="142" x2="298" y2="142" stroke="var(--tinta-3)" marker-end="url(#p3)"/>
+
+            <rect x="302" y="96" width="120" height="92" rx="3" fill="var(--papel-alto)" stroke="var(--regla)"/>
+            <text class="rotulo-chico" x="362" y="116" text-anchor="middle" style="fill:var(--ocre);">04</text>
+            <text class="rotulo" x="362" y="136" text-anchor="middle">tirar lo que</text>
+            <text class="rotulo" x="362" y="152" text-anchor="middle">no sirve</text>
+            <text class="rotulo-chico" x="362" y="172" text-anchor="middle">vacíos · ilegibles</text>
+
+            <line x1="426" y1="142" x2="456" y2="142" stroke="var(--tinta-3)" marker-end="url(#p3)"/>
+
+            <rect x="460" y="96" width="130" height="92" rx="3" fill="var(--ocre-suave)" stroke="var(--ocre)"/>
+            <text class="rotulo-chico" x="525" y="116" text-anchor="middle" style="fill:var(--ocre);">05–07</text>
+            <text class="rotulo" x="525" y="136" text-anchor="middle">contexto,</text>
+            <text class="rotulo" x="525" y="152" text-anchor="middle">preguntas y unir</text>
+            <text class="rotulo-chico" x="525" y="172" text-anchor="middle">lo que más rinde</text>
+
+            <line x1="594" y1="142" x2="624" y2="142" stroke="var(--tinta-3)" marker-end="url(#p3)"/>
+          </g>
+
+          <!-- los tres almacenes -->
+          <text class="rotulo-chico" x="762" y="60" text-anchor="middle" style="fill:var(--ocre);">08</text>
+          <rect x="628" y="72" width="264" height="46" rx="3" fill="var(--acero-suave)" stroke="var(--acero)"/>
+          <text class="rotulo" x="642" y="92">Índice de significado</text>
+          <text class="rotulo-chico" x="642" y="108">fragmentos + preguntas</text>
+
+          <rect x="628" y="126" width="264" height="46" rx="3" fill="var(--acero-suave)" stroke="var(--acero)"/>
+          <text class="rotulo" x="642" y="146">Índice visual</text>
+          <text class="rotulo-chico" x="642" y="162">las imágenes en sí</text>
+
+          <rect x="628" y="180" width="264" height="46" rx="3" fill="var(--papel-hondo)" stroke="var(--tinta-3)"/>
+          <text class="rotulo" x="642" y="200">Archivos</text>
+          <text class="rotulo-chico" x="642" y="216">recortes y tablas completas</text>
+
+          <path d="M624 142 C 626 142, 626 95, 628 95" fill="none" stroke="var(--tinta-3)"/>
+          <path d="M624 142 L628 142" stroke="var(--tinta-3)"/>
+          <path d="M624 142 C 626 142, 626 203, 628 203" fill="none" stroke="var(--tinta-3)"/>
+
+          <text class="rotulo-chico" x="450" y="266" text-anchor="middle">Una sola vez, antes de que nadie pregunte. Después, cada consulta usa lo que quedó guardado.</text>
+        </svg>
+      </figure>
+    </div>
+  </section>
+
+  <hr>
+  <footer class="col">
+    <p class="nota" style="margin:0;">
+      Documento sobre el proceso de ingesta del asistente técnico del secadero de pastas.
+      Los números citados están medidos sobre el corpus real: cinco documentos, unas 220
+      páginas. Detalle técnico y mediciones completas en el README del proyecto.
+    </p>
+  </footer>
+
+</div>
