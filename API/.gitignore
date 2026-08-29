@@ -147,3 +147,6 @@ perf_timings.csv
 
 # macOS
 .DS_Store
+
+# Estado de runtime: caché de respuestas y file_id de OpenAI
+data/

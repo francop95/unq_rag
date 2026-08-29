@@ -164,11 +164,10 @@ class ResultProcessor:
                 for answers in data["gpt_response"]:
                     clubbed_results.append(answers)
 
-        if data["is_cache_enabled"] and data["cache_found"]:
-            data["cache_qna_response"] = self.validate_results(data["cache_qna_response"])
-            if data["cache_qna_response"]:
-                for answers in data["cache_qna_response"]:
-                    clubbed_results.append(answers)
+        # El caché de respuestas devuelve la respuesta ya armada desde
+        # RagWorkflow.trigger_workflow, antes de llegar acá, así que no hay una rama de
+        # "resultados del caché" que juntar. La que había apuntaba a CachedQna (Azure
+        # Search, sin ruta de escritura) y era inalcanzable.
 
         if data["is_greeting_enabled"] and data["generic_ans_found"]:
             data["generic_qna_response"] = self.validate_results(data["generic_qna_response"])

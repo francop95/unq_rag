@@ -88,6 +88,9 @@ class ReadConfig:
 
             # Cache
             is_cache_enabled = config.get("AppSettings__CacheEnabled")
+            response_cache_path = config.get("RESPONSE_CACHE_PATH")
+            response_cache_max_entries = config.get("RESPONSE_CACHE_MAX_ENTRIES")
+            response_cache_ttl_seconds = config.get("RESPONSE_CACHE_TTL_SECONDS")
             min_cache_similarity = config.get("AppSettings__CacheSimilarityThreshold")
             cache_top_n = config.get("AppSettings__CacheTopN")
             cache_guid_column = config.get("CACHE_GUID_COLUMN")
@@ -121,6 +124,7 @@ class ReadConfig:
             retriever_context_limit = config.get("Retriever_Context_Limit")
             retriever_gpt_qna_prompt = config.get("RETRIEVER_GPT_QNA_PROMPT")
             is_retriever = config.get("Retriever_enabled")
+            use_llm_section_selector = config.get("LLM_SECTION_SELECTOR_ENABLED")
             retriever_max_retries = config.get("RETRIEVER_MAX_RETRIES")
 
             #RAG
@@ -154,7 +158,9 @@ class ReadConfig:
             visual_index_name = config.get("VISUAL_INDEX_NAME")
             clip_model = config.get("CLIP_MODEL")
             visual_top_k = int(config.get("VISUAL_TOP_K"))
-            use_bm25 = bool(config.get("USE_BM25"))
+            use_bm25 = bool(config.get("USE_BM25", False))
+            fusion_admits_sparse = bool(config.get("FUSION_ADMITS_SPARSE", False))
+            fusion_decides_order = bool(config.get("FUSION_DECIDES_ORDER", False))
             bm25_top_k = int(config.get("BM25_TOP_K"))
             use_reranking = bool(config.get("USE_RERANKING"))
             reranker_model = config.get("RERANKER_MODEL")
@@ -199,6 +205,9 @@ class ReadConfig:
                 "completion_success": completion_success,
                 "completion_failure": completion_failure,
                 "is_cache_enabled": is_cache_enabled,
+                "response_cache_path": response_cache_path,
+                "response_cache_max_entries": response_cache_max_entries,
+                "response_cache_ttl_seconds": response_cache_ttl_seconds,
                 "min_cache_similarity": min_cache_similarity,
                 "cache_top_n": cache_top_n,
                 "cache_guid_column": cache_guid_column,
@@ -218,6 +227,7 @@ class ReadConfig:
                 "retriever_context_limit": retriever_context_limit,
                 "retriever_gpt_qna_prompt": retriever_gpt_qna_prompt,
                 "is_retriever": is_retriever,
+                "use_llm_section_selector": use_llm_section_selector,
                 "retriever_max_retries": retriever_max_retries,
                 "retriever_qna_max_retries": retriever_qna_max_retries,
                 "url_formatting_enabled": url_formatting_enabled,
@@ -241,6 +251,8 @@ class ReadConfig:
                 "clip_model": clip_model,
                 "visual_top_k": visual_top_k,
                 "use_bm25": use_bm25,
+                "fusion_admits_sparse": fusion_admits_sparse,
+                "fusion_decides_order": fusion_decides_order,
                 "bm25_top_k": bm25_top_k,
                 "use_reranking": use_reranking,
                 "reranker_model": reranker_model,

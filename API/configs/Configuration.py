@@ -42,29 +42,120 @@ class Configuration:
     chroma_local_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Ingestion/data/chroma_index/"))
 
     # Umbral mínimo de similitud (1 - distancia coseno) para considerar que un
-    # chunk recuperado es realmente relevante. Con text-embedding-3-large los
-    # valores observados para preguntas sin buen match en el corpus rondan
-    # 0.30-0.40, así que este default es conservador y probablemente necesite
-    # ajuste empírico contra preguntas reales de producción.
-    MIN_CONTEXT_SIMILARITY_SCORE = 0.35
+    # chunk recuperado es realmente relevante.
+    #
+    # Calibrado midiendo sobre el índice real (10 consultas, text-embedding-3-large,
+    # con Contextual Retrieval activo):
+    #   - En tema:        similitud top-1 entre 0.640 y 0.947
+    #   - Fuera de tema:  similitud top-1 entre 0.232 y 0.440
+    # El valor anterior (0.35) quedaba DENTRO de la banda de fuera-de-tema: una
+    # consulta como "cómo configuro un router wifi" daba 0.440 y pasaba el filtro
+    # como si tuviera contexto relevante. 0.50 cae en el hueco entre ambas bandas,
+    # con más margen del lado de no rechazar preguntas legítimas (rechazarlas es
+    # el error más caro: el LLM pierde el contexto textual y responde solo con los
+    # planos).
+    #
+    # VALIDADO después con el eval set (54 consultas en tema + 5 fuera de tema):
+    #
+    #   umbral   recall@10   gate fuera de tema
+    #    0.35      88.9%          3/5   <- pasan 2 consultas fuera de tema
+    #    0.50      88.9%          5/5   <- óptimo
+    #    0.60      85.2%          5/5   <- pierde 2 consultas legítimas
+    #
+    # 0.50 da el mismo recall que 0.35 con el gate perfecto, y mejor recall que 0.60.
+    # Reproducir con: python eval/run_eval.py --variant min_context_similarity_score=0.35
+    MIN_CONTEXT_SIMILARITY_SCORE = 0.50
 
     #########################################################################################
 
     ### RETRIEVAL AVANZADO (paridad con Ingestion/scripts/hybrid_multimodal_search.py)
 
-    # Índice visual (CLIP) con diagramas/imágenes indexados por Ingestion
-    USE_VISUAL_RETRIEVAL = True
+    # Índice visual (CLIP) con diagramas/imágenes indexados por Ingestion.
+    #
+    # DESACTIVADO por medición: igual que BM25, apagarlo no cambia ni un dígito del
+    # eval. Ahorra cargar el modelo CLIP (~90 MB) en cada arranque de la API.
+    #
+    # Con una salvedad honesta: el eval son consultas de TEXTO, y CLIP existe para
+    # buscar por semejanza visual ("el diagrama que tiene un contactor y tres
+    # fusibles"). Lo que sí está medido es que, como está cableado, es inerte para
+    # cualquier tipo de consulta: un candidato que solo encuentra CLIP no tiene
+    # `dense_similarity` y el gate lo descarta siempre. Si algún día se quiere evaluar
+    # de verdad, hace falta un eval con consultas visuales Y revisar ese cableado.
+    #
+    # Ingestion sigue construyendo la colección `visual_docs` (110 imágenes): es barato
+    # y deja la puerta abierta.
+    USE_VISUAL_RETRIEVAL = False
     VISUAL_INDEX_NAME = "visual_docs"
     CLIP_MODEL = "clip-ViT-B-32"
     VISUAL_TOP_K = 5
 
+    # Cableado de la fusión. Ambos en False = comportamiento medido como mejor.
+    #
+    # FUSION_ADMITS_SPARSE: si un candidato que encontró solo BM25/CLIP puede pasar el
+    #   gate de relevancia (que filtra por similitud densa, una escala que esos
+    #   candidatos no tienen). Activarlo NO cambió nada: recall@10 88.9% igual.
+    # FUSION_DECIDES_ORDER: si el orden final lo decide el score de fusión RRF en vez
+    #   de la similitud densa. Activarlo EMPEORA: recall@10 87.0% (vs 88.9%),
+    #   MRR 0.733 (vs 0.754), 7 consultas sin respuesta en vez de 6.
+    #
+    # O sea: el RRF se calcula y no se usa para ordenar, y está bien que así sea. Se
+    # dejan como flags en vez de borrar el código porque con otro corpus —menos
+    # preguntas sintéticas, o documentos con más códigos— la respuesta puede cambiar,
+    # y ahora medirlo es un `--variant`.
+    FUSION_ADMITS_SPARSE = False
+    FUSION_DECIDES_ORDER = False
+
     # BM25 (sparse retrieval, keywords exactos: códigos de error, modelos, etc.)
-    USE_BM25 = True
+    #
+    # DESACTIVADO por medición: no aporta NADA en este corpus. Apagarlo da resultados
+    # idénticos dígito por dígito sobre el eval set (recall@1/3/5/10 = 36/45/46/48,
+    # MRR 0.754), y en un test de 8 consultas de código puro ("22B-D010N104", "A450",
+    # "d012"...) mejoró 0 de 8.
+    #
+    # La causa era arquitectural, y arreglarla tampoco ayudó (ver FUSION_* abajo):
+    # el motivo de fondo es que el índice es multi-vector con ~2900 vectores de
+    # preguntas sintéticas escritas en lenguaje de usuario. Eso es cobertura de
+    # paráfrasis metida en el índice, y le gana al matching léxico en su propio terreno.
+    #
+    # Apagarlo ahorra construir el índice en RAM en cada arranque. Reactivar es cambiar
+    # esto a True; conviene re-medir con `eval/run_eval.py --variant use_bm25=true`.
+    USE_BM25 = False
     BM25_TOP_K = 10
 
-    # Reranking con cross-encoder sobre los candidatos fusionados (dense+BM25+visual)
-    USE_RERANKING = True
-    RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Reranking con cross-encoder sobre los candidatos fusionados (dense+BM25+visual).
+    # DESACTIVADO a propósito: medido, en esta configuración perjudica.
+    #
+    # El pipeline arma un pool fusionado (denso 10 + BM25 10 → RRF) y después
+    # corta en CHROMA_TOP_N=10 chunks, que son los que ve el LLM. Con reranking,
+    # el corte lo decide el cross-encoder: no solo reordena, también ELIGE cuáles
+    # 10 sobreviven. Y ahí es donde pierde.
+    #
+    # Medido replicando el pipeline real (53 consultas con ground truth):
+    #
+    #   orden                         recall@5  recall@10   MRR   expulsa/rescata
+    #   RRF (sin reranker)              81.1%     94.3%    0.530        --
+    #   bge-reranker-base               73.6%     84.9%    0.511      7 / 2
+    #   mmarco-mMiniLMv2-L12            71.7%     84.9%    0.576      7 / 2
+    #   ms-marco-MiniLM-L-6-v2          64.2%     83.0%    0.471      9 / 3
+    #
+    # "expulsa/rescata" = consultas donde el reranker saca el chunk correcto del
+    # top-10 vs donde lo mete. Los tres modelos expulsan más de lo que rescatan:
+    # en ~5 de 53 consultas el LLM deja de recibir la respuesta. recall@10 es
+    # además la métrica más robusta acá: no le afecta la objeción de que "otro
+    # chunk podría responder igual de bien", porque mide si el chunk correcto
+    # llega o no al contexto.
+    #
+    # CONFIRMADO después con el eval set propio (54 preguntas parafraseadas en voz de
+    # técnico, no las sintéticas del índice), y ahí el daño es MUCHO peor:
+    #
+    #                        recall@1  recall@10   MRR    nunca llega
+    #   RRF (sin reranker)     66.7%     88.9%    0.754      6/54
+    #   mmarco-mMiniLMv2-L12    7.4%     61.1%    0.193     21/54
+    #
+    # La categoría "proceso" pasa de 3/3 a 0/3. Reproducir con:
+    #   python eval/run_eval.py --variant use_reranking=true
+    USE_RERANKING = False
+    RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     RERANK_CANDIDATES_TOP_K = 20
 
     # Context Expansion: agrega texto de chunks vecinos (prev_chunk_id/next_chunk_id)
@@ -93,12 +184,33 @@ class Configuration:
     ### OPENAI PARAMETERS
     OPENAI_MODEL = "gpt-4.1"
     OPENAI_EMB_MODEL = "text-embedding-3-large"
-    OPENAI_KEY = str(os.getenv("openai_key"))
+    # Nombre canónico: OPENAI_API_KEY. Se acepta `openai_key` como alias para no
+    # romper los .env anteriores.
+    #
+    # Cae a "" y no a "None": antes era str(os.getenv(...)), que devolvía el string
+    # "None" cuando la variable no existía. Ese string es truthy, así que anulaba
+    # los `or` que hacen de fallback aguas abajo (LanguageModels) y la key inválida
+    # llegaba hasta la llamada a OpenAI.
+    OPENAI_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("openai_key") or ""
     #########################################################################################
 
     # Followup
-    AppSettings__FollowUpRequired = False
+    #
+    # ACTIVADO. Un asistente de mantenimiento sin conversación obliga a repetir el
+    # contexto en cada pregunta: "y si eso no funciona, qué reviso?" no tenía forma de
+    # saber a qué se refería "eso".
+    #
+    # El mecanismo NO es pasarle el historial al LLM que responde: QueryIntent clasifica
+    # la consulta y, si es un follow-up, la REESCRIBE como pregunta autónoma antes del
+    # retrieval (check_followup). Eso importa porque el retrieval es denso: buscar el
+    # vector de "y si eso no funciona" no recupera nada, mientras que buscar el de "y si
+    # cambiar P106 no hace arrancar el variador, qué reviso" sí.
+    #
+    # Costo: una llamada extra al LLM por consulta (la clasificación de intención), solo
+    # cuando llega historial.
+    AppSettings__FollowUpRequired = True
     QUERY_INTENT_CATEGORIES = ["generic", "new", "follow-up", "invalid"]
+    # Cuántas preguntas anteriores se consideran para decidir si es follow-up
     PREV_CONV_THRESHOLD = 1
 
     # Caching
@@ -121,8 +233,31 @@ class Configuration:
     AppSettings__Project = "RagWorkflow"
 
     AppSettings__GPTEnabled = True
-    AppSettings__CacheEnabled = False
     AppSettings__Batchanswer = False
+
+    # Caché de respuestas por coincidencia EXACTA de la pregunta (ver
+    # qnas/ResponseCache.py). Una consulta repetida cuesta 10-30s y los tokens de dos
+    # PDFs adjuntos; con el caché es instantánea y gratis.
+    #
+    # Es exacto y no semántico por medición, no por simplicidad: se comparó la similitud
+    # coseno de pares de preguntas de este dominio y las bandas se solapan —
+    # "corriente máxima de ENTRADA" vs "de SALIDA" da 0.916, mientras dos redacciones de
+    # la MISMA pregunta dan 0.872 y 0.929. Con el umbral 0.95 que estaba configurado no
+    # habría acertado ninguna reformulación, y bajarlo para capturarlas metería adentro
+    # los pares que significan lo contrario: en mantenimiento eso devuelve el borne o el
+    # parámetro equivocado.
+    #
+    # Antes esto leía de CachedQna sobre Azure Search, que además nunca tuvo ruta de
+    # escritura: consultaba un índice que nadie poblaba, así que siempre fallaba.
+    AppSettings__CacheEnabled = True
+    RESPONSE_CACHE_PATH = os.path.abspath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "data", "response_cache.json"
+    ))
+    RESPONSE_CACHE_MAX_ENTRIES = 500
+    # 0 = sin expiración (no None: Configuration.get() lanza excepción si el valor es
+    # None y no se le pasa un default). Se invalida a mano tras re-ingestar, porque las
+    # respuestas guardadas citan páginas y chunks del índice viejo.
+    RESPONSE_CACHE_TTL_SECONDS = 0
 
     GPT_AND_FOUND = False
     CACHE_FOUND = False
@@ -159,8 +294,36 @@ class Configuration:
     # Retriever
     RETRIEVER_MAX_TOKENS = 1200
     Retriever_Context_Limit = 5000
+    # Ojo: esta bandera elige el camino de respuesta (RetrieverQna, el multimodal
+    # con fuentes/planos/media, vs el viejo GPTQna que no las devuelve). Ver
+    # QuestionAnswer.answer_query. No es la que controla el selector LLM de abajo.
     Retriever_enabled = True
     RETRIEVER_MAX_RETRIES = 1
+
+    # Selector LLM de secciones (Retriever_multimodal, invocado desde
+    # ChromaConnection._candidates_to_df): una llamada extra al LLM que, dado el
+    # top-N recuperado, elige qué secciones dejar pasar al QnA.
+    #
+    # DESACTIVADO. Medido en los logs: fallaba en el 100% de las consultas y
+    # gastaba 2 llamadas al LLM por consulta (la original + el reintento) para
+    # terminar en un no-op. Tenía dos defectos independientes:
+    #
+    #  1. Recibía `base`, el DataFrame ANTES de renombrar columnas, pero
+    #     _build_section_metadata las busca por los nombres configurados
+    #     (TEXT_COLUMN="Text", FILENAME_COLUMN="File Name"...). Ninguno existía en
+    #     `base` (que trae "document"/"file_name"/"page_num"), así que mandaba
+    #     `page_metadata: ""` para TODAS las secciones: el LLM tenía que elegir
+    #     entre los ids 1..N sin ver nada de su contenido.
+    #  2. RETRIEVER_PROMPT pide un formato inválido ({ { sections: [...] } }, con
+    #     llave doble y clave sin comillas). El modelo lo devolvía tal cual y no
+    #     lo parseaba ni json.loads ni el fallback por regex.
+    #
+    # No se arregla porque la etapa es redundante: el QnA ya recibe el texto
+    # COMPLETO de los chunks y elige cuáles citar (referred_contexts), mientras
+    # que este selector decidía sobre snippets de 280 caracteres. Filtrar chunks
+    # antes de que el LLM que responde los vea solo puede bajar el recall — el
+    # mismo motivo por el que se desactivó el reranker (ver USE_RERANKING).
+    LLM_SECTION_SELECTOR_ENABLED = False
 
     # GPT Tokens
     RETRIEVER_MAX_TOKENS = 1200
@@ -221,6 +384,7 @@ class Configuration:
         - Si alguno de los CONTEXTOS contiene información relevante, responde usando EXCLUSIVAMENTE dicha información (y lo observado en los planos).
         - Si hay contradicción entre un contexto textual y el plano principal, prioriza el plano principal y reporta la discrepancia.
         - Los CONTEXTOS pueden venir precedidos por un aviso entre corchetes (p. ej. "[No se encontró contexto textual...]" o "[AVISO: los contextos de abajo tienen baja similitud...]"). Cuando aparezca ese aviso, IGNORA esos contextos como fuente de información y respondé apoyándote ÚNICAMENTE en lo que puedas interpretar de los planos adjuntos. Si los planos tampoco alcanzan, decilo explícitamente en vez de inventar o usar el contexto de baja confianza.
+        - Si un CONTEXTO viene marcado con "[IMAGEN DISPONIBLE para el usuario en la interfaz...]", significa que existe una foto/imagen real de eso que el usuario SÍ va a poder ver (se muestra aparte, junto con tu respuesta, aunque vos no la puedas insertar en el texto). En ese caso NUNCA digas que "no hay fotos/imágenes disponibles" ni que "el material sólo tiene planos, no fotografías": en cambio, decí explícitamente que la imagen está disponible para ver junto con la respuesta (ej. "podés ver la foto del forzador de aire más abajo, junto con esta respuesta").
 
         5) MANEJO DE INCERTIDUMBRE
         Si el contexto/planos NO son suficientes para responder con certeza:
@@ -239,13 +403,20 @@ class Configuration:
         - Si no usaste ningún contexto o no hay info suficiente, devuelve [].
         - Asegúrate de que "referred_contexts" sea siempre una lista de enteros.
 
+        "used_plans": true si para responder te apoyaste en alguno de los planos PDF
+        adjuntos, false si no. Poné false cuando la pregunta no sea técnica o cuando
+        respondas que no hay información suficiente: sirve para decidir si al usuario
+        se le muestran los planos como fuente consultable, y listarlos cuando no los
+        usaste lo confunde.
+
         9) FORMATO DE SALIDA (ESTRICTO)
         Devuelve la respuesta estrictamente en el siguiente FORMATO JSON:
 
         {{
         "output": {{
             "answer": <respuesta>,
-            "referred_contexts": <lista_de_ids>
+            "referred_contexts": <lista_de_ids>,
+            "used_plans": <true|false>
         }}
         }}
 
@@ -258,26 +429,50 @@ class Configuration:
 
 
 
-    NEW_QUERY_INTENT_PROMPT = """
-    current_question: {}
-    previous_question: {}
+    # Clasificador de intención. Reescrito respecto del template original, que era
+    # boilerplate genérico en inglés: clasificaba "¿Y si eso ya está bien configurado,
+    # qué reviso después?" como "new" en vez de "follow-up", con lo cual la pregunta no
+    # se reescribía y el retrieval buscaba el vector de un texto sin ningún ancla
+    # técnica. La reescritura es lo único que hace funcionar un follow-up con retrieval
+    # denso, así que clasificar mal acá es equivalente a no tener conversación.
+    NEW_QUERY_INTENT_PROMPT = """Sos el clasificador de intención de un asistente técnico
+    de mantenimiento de un secadero de pastas industrial (variadores de frecuencia,
+    tableros eléctricos, sensores, PLC).
 
-    1. if the current_question is a greeting, wish, acknowledgement, or showing appreciation or casual human conversation,
-        question_type: "generic"
-        response: <respond appropriately to the current_question>
-    2. if the current_question is invalid, junk, malicious, rude, anti-social, does not make sense, or only of numbers,
-        question_type: "invalid"
-        response: <generate suitable response with reasoning and prompt the user to provide valid question>
-    3. if the current_question is a possible follow-up question to the previous_question (if one exists),
-        question_type: "follow-up"
-        response: <Rephrase the current_question to make it a complete question considering the previous_question>
-    4. if the current_question does not fall into above types,
-        question_type: "new"
-        response: <Identify keywords from the current_question>
-    Always generate only a proper JSON response which is easy to parse as given below,
+    pregunta_actual: {}
+    pregunta_anterior: {}
+
+    Clasificá la pregunta_actual en UNA de estas categorías:
+
+    1. "generic" — es un saludo, agradecimiento, despedida o charla casual.
+       response: <respondé de forma breve y cordial>
+
+    2. "invalid" — es basura, ofensiva, o no tiene ningún sentido.
+       response: <explicá brevemente y pedí una pregunta técnica concreta>
+
+    3. "follow-up" — continúa la pregunta_anterior. ESTA ES LA CATEGORÍA POR DEFECTO
+       cuando hay una pregunta_anterior y la pregunta_actual no se sostiene sola.
+       Señales fuertes de follow-up:
+         - Referencias sin antecedente propio: "eso", "esa", "ahí", "lo anterior",
+           "ese parámetro", "esa tabla", "el mismo".
+         - Continuidad: "y si no funciona", "y después", "y entonces", "qué más",
+           "seguí", "otra opción", "algo más".
+         - Preguntas elípticas que dan por dado el tema: "¿y el borne?", "¿cuánto?",
+           "¿por qué?", "¿y en modo SRC?".
+       response: <la pregunta_actual REESCRITA como pregunta autónoma y completa,
+                  incorporando el tema de la pregunta_anterior, en español. No expliques
+                  nada, devolvé solo la pregunta reescrita.>
+
+    4. "new" — introduce un tema distinto y se entiende por sí sola sin la
+       pregunta_anterior. Si dudás entre "new" y "follow-up" y hay pregunta_anterior,
+       elegí "follow-up": reescribirla de más es inofensivo, no reescribirla rompe la
+       búsqueda.
+       response: <las palabras clave técnicas de la pregunta_actual>
+
+    Devolvé SOLO un objeto JSON válido, sin texto alrededor:
     {{
-        "question_type": <question_type>,
-        "response": <response>
+        "question_type": "generic" | "invalid" | "follow-up" | "new",
+        "response": "..."
     }}
     """
 

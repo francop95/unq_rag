@@ -98,10 +98,20 @@ class RetrieverQna:
             context_blocks = []
             for i, chunk in enumerate(self.context_df.to_dict(orient='records')):
                 content = chunk.get(self.text_column, "")
+                # Si este chunk tiene imagen/diagrama/tabla asociada, el usuario SÍ
+                # va a poder verla (se muestra aparte, en "Fuentes citadas"), aunque
+                # el modelo no pueda incluirla en el texto de la respuesta. Sin esta
+                # marca el modelo asume que no hay fotos disponibles y se lo dice mal
+                # al usuario, incluso citando este mismo context_id.
+                media_note = (
+                    "[IMAGEN DISPONIBLE para el usuario en la interfaz — no digas que "
+                    "no hay fotos/imágenes de esto, decí que está disponible para ver "
+                    "junto con la respuesta]\n" if self._row_has_media(chunk) else ""
+                )
                 context_blocks.append(
                     f"""
                 context_id: {i+1}
-                content:
+                {media_note}content:
                 {content}
                 """.rstrip()
                 )
@@ -231,6 +241,41 @@ class RetrieverQna:
         records = self.context_df.to_dict(orient="records")
         return [i for i, row in enumerate(records) if i not in exclude and self._row_has_media(row)]
 
+    @staticmethod
+    def _attached_plan_sources(data: Dict[str, Any], used_plans: bool) -> List[Dict[str, Any]]:
+        """
+        Los planos que se adjuntaron al LLM, como fuentes consultables.
+
+        ModelCompletion los sube como `input_file` y el prompt le pide priorizarlos,
+        así que buena parte de las respuestas eléctricas sale de ahí — pero los
+        planos no están en el índice de Chroma, así que nunca aparecían en
+        `sources` y el usuario recibía esas respuestas sin ninguna referencia ni
+        forma de abrir el plano. Van sin score porque no se recuperaron por
+        similitud: se adjuntan siempre (ver Configuration.ELECTRIC_DIAGRAM_RELATED_FILES).
+
+        `used_plans` viene del propio modelo (campo del mismo JSON de respuesta, sin
+        llamada extra). Se listan solo si dice que los usó: en una pregunta no
+        técnica los planos igual viajan adjuntos, y mostrarlos como fuente de una
+        respuesta que arranca con "esto no está relacionado con los planos" es
+        contradictorio.
+        """
+        if not used_plans or not data.get("attach_electric_diagrams", True):
+            return []
+
+        paths = [data.get("electric_diagram_path"), data.get("tben_diagram_path")]
+        return [
+            {
+                "file_name": os.path.basename(path),
+                "page": 1,
+                "similarity_score": 0.0,
+                "media": [],
+                "text": "",
+                "is_attached_plan": True,
+            }
+            for path in paths
+            if path and os.path.exists(path)
+        ]
+
     def _build_sources(self, subset) -> List[Dict[str, Any]]:
         """
         Arma la lista de fuentes (citadas por texto y/o con media asociada) con
@@ -277,6 +322,7 @@ class RetrieverQna:
                 "page": page,
                 "similarity_score": similarity,
                 "media": media,
+                "text": row.get(self.text_column, "") or "",
             })
         return sources
 
@@ -288,7 +334,8 @@ class RetrieverQna:
         {
           "output": {
             "answer": "...",
-            "referred_contexts": [1, 2, ...]   # IDs 1-based alineados con context_id del prompt
+            "referred_contexts": [1, 2, ...],  # IDs 1-based alineados con context_id del prompt
+            "used_plans": true                 # si se apoyó en los planos PDF adjuntos
           }
         }
         """
@@ -339,7 +386,11 @@ class RetrieverQna:
                             similarity_score = 0.0
                         else:
                             try:
-                                similarity_score = float(np.mean(sims_vals)) * 100.0
+                                # La columna ya viene en escala 0-100 (la normaliza
+                                # ChromaConnection._normalize_display_score). El *100
+                                # que había acá era de cuando traía la similitud
+                                # coseno cruda en 0-1, y daba scores como 8406.47.
+                                similarity_score = float(np.mean(sims_vals))
                             except Exception:
                                 similarity_score = 0.0
                         # columna 'global' puede no existir en Chroma
@@ -380,7 +431,25 @@ class RetrieverQna:
                         already_seen |= media_keys
                         media_sources.append(s)
 
-                    res_dict["sources"] = cited_sources + media_sources
+                    # Orden final por relevancia real: sin esto, el orden queda
+                    # determinado por cómo el LLM citó los context_id (no por score),
+                    # y las fuentes con media no citadas por texto siempre quedan al
+                    # final aunque tengan mejor score que alguna citada.
+                    res_dict["sources"] = sorted(
+                        cited_sources + media_sources,
+                        key=lambda s: s.get("similarity_score", 0),
+                        reverse=True,
+                    )
+
+                    # Si el modelo no devolvió "used_plans" (p. ej. porque el JSON
+                    # se recuperó por el fallback de regex), se asume que sí los usó
+                    # cuando no hubo contexto textual: en ese caso los planos son la
+                    # única fuente posible de la respuesta y ocultarlos dejaría a la
+                    # respuesta sin ninguna referencia.
+                    used_plans = response_dict.get("used_plans")
+                    if used_plans is None:
+                        used_plans = self.context_df is None or self.context_df.empty
+                    res_dict["sources"] += self._attached_plan_sources(data, bool(used_plans))
 
                     parsed_responses.append(res_dict)
                     data["gpt_ans_found"] = True

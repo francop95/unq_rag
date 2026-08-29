@@ -40,7 +40,21 @@ class QueryIntent:
             "similarity_score": 0,
             "ans_type": data["gpt_ans_type"],
         }
-        self.model_selected = data["gemini_model"]
+        # El modelo se elige según el proveedor configurado en QUERY_INTENT_LLM_TYPE.
+        # Antes estaba fijo en `data["gemini_model"]`, una clave que este proyecto no
+        # define: quedó de cuando el clasificador de intención corría en Gemini. El bug
+        # no se veía porque este camino solo corre con el follow-up activado, y estaba
+        # apagado — al activarlo, toda consulta con historial fallaba con
+        # KeyError: 'gemini_model'. Misma resolución que usa RetrieverQna.
+        if self.model_type == "openai":
+            self.model_selected = data.get("openai_model1") or data.get("openai_model")
+        elif self.model_type == "azure":
+            self.model_selected = data.get("azure_oai_model1")
+        elif self.model_type == "gemini":
+            self.model_selected = data.get("gemini_model")
+        else:
+            raise ValueError(f"query_intent_model_type inválido: {self.model_type}")
+
         self.retry_count = 0
         self.max_retries = data["query_intent_max_retries"]
 
@@ -79,6 +93,13 @@ class QueryIntent:
         Returns:
             Dict[str, Any]: The updated data dictionary.
         """
+        # Ojo: acá había dos referencias a claves de Azure que este proyecto no define
+        # (`azure_oai_model2` en el reintento y `azure_oai_model3` al terminar). La
+        # segunda corría en TODA clasificación exitosa, así que lanzaba KeyError justo
+        # después de haber parseado bien la intención, el except la capturaba y dejaba
+        # `query_intent = None` — con lo cual check_followup nunca reescribía la
+        # pregunta. El follow-up parecía "clasificar mal" cuando en realidad clasificaba
+        # bien y el resultado se descartaba. No se veía porque este camino estaba apagado.
         logger.info(f"[{self.query_id}] [QueryIntent] Query Intent prompt completion start")
         try:
             self.message_prompt = self.get_message_prompt(data)
@@ -96,14 +117,11 @@ class QueryIntent:
                 data["query_intent_raw"] = query_intent
                 data = self.parse_query_intent(data)
                 if ((not data["query_intent"]) and self.retry_count < self.max_retries):
-                    if self.retry_count == self.max_retries - 1:
-                        self.model_selected = data["azure_oai_model2"]
                     logger.info(f"[{self.query_id}] [QueryIntent] Response not found, Retrying with Model: {self.model_selected}, Retry Attempt: {self.retry_count + 1}")
                     self.retry_count += 1
                 else:
                     retry_flag = False
                     self.retry_count = 0
-                    self.model_selected = data["azure_oai_model3"]
         except Exception as e:
             logger.error("[{}][QueryIntentNew] Error in getting query intent: {}".format(self.query_id, e))
             data["query_intent"] = None
@@ -149,10 +167,14 @@ class QueryIntent:
         logger.info(f"[{self.query_id}][QueryIntent]Inside Extract response for regex parsing")
         try:
             query_intent_res = None
-            res = re.search('{\n\s*"question_type"', response)
+            # Raw strings y tolerante al espaciado: el patrón anterior exigía un
+            # salto de línea exacto después de la llave, así que dejaba de matchear
+            # con cualquier cambio de formato del prompt (y generaba SyntaxWarning
+            # por los escapes sin raw string).
+            res = re.search(r'\{\s*"question_type"', response)
             if res:
                 start = res.span()[0]
-                res2 = re.search('\}', response[start:])
+                res2 = re.search(r'\}', response[start:])
                 if res2:
                     end = start + res2.span()[1]
                     query_intent_res = json.loads(response[start:end])

@@ -4,7 +4,7 @@ from results.Results import ResultProcessor
 from qnas.QuestionAnswer import QuestionAnswer
 from models.QueryIntent import QueryIntent
 from contexts.ContextsMap import GetContext
-from qnas.CachedQna import GetCacheQna
+from qnas.ResponseCache import ResponseCache
 from utils.FilterResponse import filter_response, url_formatting
 from utils.FormatResponse import format_response
 import time
@@ -67,6 +67,42 @@ class RagWorkflow:
             }
             writer.writerow(row)
 
+    # Una sola instancia por proceso: cada RagWorkflow se crea por request, y un caché
+    # por request no cachearía nada.
+    _cache_instance = None
+
+    @classmethod
+    def _get_cache(cls, data):
+        """
+        Caché compartido, o None si está desactivado o si la consulta no es cacheable.
+
+        No se cachea una consulta que llega con historial: un follow-up como "¿y si eso
+        no funciona?" es el MISMO texto en conversaciones distintas, así que la clave
+        exacta pegaría con la respuesta de otra conversación. El follow-up además se
+        reescribe a pregunta autónoma DESPUÉS de este punto (QueryIntent.check_followup),
+        con lo cual la clave de acá tampoco representa lo que se termina consultando.
+        """
+        if not data.get("is_cache_enabled"):
+            return None
+
+        history = data.get("conv_history_df")
+        if history is not None:
+            # `history` es un DataFrame: hay que preguntar por .empty, no por su
+            # veracidad (bool(DataFrame) lanza excepción). Y el default de getattr se
+            # evalúa siempre, así que tampoco sirve como atajo.
+            is_empty = history.empty if hasattr(history, "empty") else not history
+            if not is_empty:
+                return None
+        if cls._cache_instance is None:
+            cls._cache_instance = ResponseCache(
+                path=data.get("response_cache_path") or "data/response_cache.json",
+                max_entries=int(data.get("response_cache_max_entries", 500)),
+                ttl_seconds=data.get("response_cache_ttl_seconds"),
+                # Para que el caché se descarte solo si el índice cambió
+                index_path=data.get("chroma_path"),
+            )
+        return cls._cache_instance
+
     def trigger_workflow(self, data):
 
         # --- inicializar timers ---
@@ -81,24 +117,21 @@ class RagWorkflow:
             "process_time": 0.0,
         }
 
-        # if caching is enabled
-        if data["is_cache_enabled"]:
+        # Caché de respuestas por coincidencia exacta (ver ResponseCache: el semántico
+        # se descartó por medición, las bandas de similitud se solapan en este dominio).
+        # Devuelve la respuesta ya armada, con sus fuentes y su media.
+        cache = self._get_cache(data)
+        if cache is not None:
             t_cache = time.perf_counter()
-            logger.info(f"[{self.query_id}] [RagWorkflow] Checking Cached Qna")
-            cache_obj = GetCacheQna(data)
-            data = cache_obj.get_cache_qna(data)
+            cached = cache.get(data["query"])
             timings["cache_time"] = time.perf_counter() - t_cache
 
-            if data["cache_found"]:
-                logger.info(f"[{self.query_id}] [RagWorkflow] Cached Qna Found")
-                t_proc = time.perf_counter()
-                final_response_filtered = self.process_results(data)
-                timings["process_time"] = time.perf_counter() - t_proc
-
+            if cached:
+                logger.info(f"[{self.query_id}] [RagWorkflow] Cache HIT (coincidencia exacta)")
                 timings["total_time"] = time.perf_counter() - t0
                 self._log_timings(data, timings, stage="cache_hit")
-
-                return final_response_filtered
+                return cached
+            logger.info(f"[{self.query_id}] [RagWorkflow] Cache MISS")
 
         # Call QueryIntent module to find the intent of query
         query_intent = None
@@ -168,6 +201,12 @@ class RagWorkflow:
         final_response_filtered = self.process_results(data)
         timings["process_time"] = time.perf_counter() - t_proc
 
+        # Guardar en caché solo las respuestas que el LLM dio por buenas. Cachear un
+        # "no encontré información" congelaría ese fallo incluso después de re-ingestar
+        # el documento que faltaba.
+        if cache is not None and data.get("gpt_ans_found"):
+            cache.put(data["query"], final_response_filtered)
+
         timings["total_time"] = time.perf_counter() - t0
         self._log_timings(data, timings, stage="full_flow")
 
@@ -205,12 +244,6 @@ class RagWorkflow:
         try:
             # conditionally return based on what is enabled!
 
-            # if Cache Enabled and cache answer found
-            if data["is_cache_enabled"] & data["cache_found"]:
-                if data["cache_qna_response"]:
-                    logger.info(f'[{self.query_id}] [RagWorkflow] 1. Returning Cache answer!\n {data["cache_qna_response"]}')
-                    return data["cache_qna_response"]
-                
             # If invalid query found
             if data["invalid_question_found"]:
                 if data["invalid_qna_response"]:

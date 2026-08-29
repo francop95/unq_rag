@@ -42,7 +42,6 @@ class ModelCompletion(Completion):
         if _OpenAI is None:
             raise RuntimeError("Falta instalar openai>=1.0.0 (pip install openai)")
 
-        self._file_id_cache = {}
         self.electric_diagram_path=data["electric_diagram_path"]
         self.tben_diagram_path=data["tben_diagram_path"]
         # Default True: si no se determinó nada (ej. sin contexto relevante),
@@ -129,6 +128,44 @@ class ModelCompletion(Completion):
             safe_text = repr(r)
         return {"choices": [{"message": {"content": safe_text}}]}
 
+    # Caché de file_id compartida por TODO el proceso y respaldada en disco.
+    #
+    # Antes `_file_id_cache` era un atributo de instancia que se reiniciaba en
+    # initialize_params, y ModelCompletion se instancia una vez por request: los dos
+    # planos PDF se subían a OpenAI EN CADA CONSULTA. Es la mayor parte de los ~15s de
+    # latencia y se paga en cada pregunta.
+    #
+    # La clave incluye mtime y tamaño del archivo, así que si se edita un plano se
+    # vuelve a subir solo; y al ser de clase + disco, sobrevive al reinicio del proceso
+    # (que es lo que hacía que la primera consulta tardara 32s en vez de 15s).
+    _shared_file_ids: Dict[str, str] = {}
+    _file_id_store = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "openai_file_ids.json")
+
+    @classmethod
+    def _file_cache_key(cls, path: str) -> str:
+        stat = os.stat(path)
+        return f"{os.path.abspath(path)}|{int(stat.st_mtime)}|{stat.st_size}"
+
+    @classmethod
+    def _load_file_ids(cls) -> None:
+        if cls._shared_file_ids:
+            return
+        try:
+            with open(cls._file_id_store, "r", encoding="utf-8") as f:
+                cls._shared_file_ids = json.load(f)
+            logger.info(f"[GPTCompletion] {len(cls._shared_file_ids)} file_id de OpenAI reusados de disco")
+        except Exception:
+            cls._shared_file_ids = {}
+
+    @classmethod
+    def _save_file_ids(cls) -> None:
+        try:
+            os.makedirs(os.path.dirname(cls._file_id_store), exist_ok=True)
+            with open(cls._file_id_store, "w", encoding="utf-8") as f:
+                json.dump(cls._shared_file_ids, f)
+        except Exception as e:
+            logger.warning(f"[GPTCompletion] No se pudo persistir los file_id: {e}")
+
     def _ensure_file_id(self, file_ref: str) -> str:
         """
         Acepta un file_id existente o un path local.
@@ -138,18 +175,21 @@ class ModelCompletion(Completion):
         if isinstance(file_ref, str) and len(file_ref) <= 64 and not os.path.exists(file_ref):
             return file_ref
 
-        # Si es path, subimos (y cacheamos)
         if not os.path.exists(file_ref):
             raise FileNotFoundError(f"No existe el archivo: {file_ref}")
 
-        if file_ref in self._file_id_cache:
-            return self._file_id_cache[file_ref]
+        self._load_file_ids()
+        key = self._file_cache_key(file_ref)
+        cached = self._shared_file_ids.get(key)
+        if cached:
+            return cached
 
-        created = self._openai.files.create(
-            file=open(file_ref, "rb"),
-            purpose="user_data",
-        )
-        self._file_id_cache[file_ref] = created.id
+        logger.info(f"[{self.query_id}] [GPTCompletion] Subiendo a OpenAI: {os.path.basename(file_ref)}")
+        with open(file_ref, "rb") as fh:
+            created = self._openai.files.create(file=fh, purpose="user_data")
+
+        self._shared_file_ids[key] = created.id
+        self._save_file_ids()
         return created.id
 
     def _build_responses_input(self, messages: list[dict], pdfs: list[str] | None = None):

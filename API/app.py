@@ -27,9 +27,22 @@ app.logger.setLevel(logging.DEBUG)
 for logHandler in app.logger.handlers:
   logHandler.setFormatter(logging.Formatter('[BOT_API.%(module)s][%(levelname)s]%(message)s'))
 
-# Origen permitido para el frontend (React). "*" es cómodo para desarrollo local;
-# en producción conviene restringirlo al dominio real vía esta env var.
-CORS_ALLOWED_ORIGIN = os.getenv("CORS_ALLOWED_ORIGIN", "*")
+# Orígenes permitidos para el frontend (React), separados por coma.
+#
+# El default ya NO es "*": son los dos orígenes del Vite de desarrollo. Con "*" la API
+# quedaba consultable desde cualquier página web que el usuario tuviera abierta, y esta
+# API no tiene autenticación, así que "*" es también "cualquiera en la red puede gastar
+# tu cuota de OpenAI". Para exponerla en una red de planta:
+#   CORS_ALLOWED_ORIGIN="http://ip-del-servidor:5173" API_TOKEN="..." python app.py
+CORS_ALLOWED_ORIGIN = os.getenv(
+    "CORS_ALLOWED_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"
+)
+ALLOWED_ORIGINS = [o.strip() for o in CORS_ALLOWED_ORIGIN.split(",") if o.strip()]
+
+# Token opcional. Si se define API_TOKEN, /get_response exige el header
+# `Authorization: Bearer <token>`. Sin la variable, la API queda abierta como antes
+# (que es lo razonable para correrla en localhost).
+API_TOKEN = os.getenv("API_TOKEN", "").strip()
 
 # Carpeta de media generada por Ingestion (imágenes/diagramas/tablas), servida
 # de solo lectura para que el frontend pueda mostrar lo que citan las fuentes.
@@ -46,10 +59,32 @@ def add_header(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
     response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'none'; img-src 'self'; style-src 'self'; frame-ancestors 'none'; form-action 'self';"
-    response.headers["Access-Control-Allow-Origin"] = CORS_ALLOWED_ORIGIN
+
+    # Se refleja el Origin solo si está en la lista, en vez de mandar "*": así el
+    # navegador bloquea a cualquier otra página. Con "*" configurado explícitamente se
+    # mantiene el comportamiento abierto, para no romper a quien lo necesite.
+    origin = request.headers.get("Origin", "")
+    if "*" in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    elif origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
+
+
+def _token_ok() -> bool:
+    """
+    True si no hay API_TOKEN configurado (modo local abierto) o si el request trae el
+    Bearer correcto. La API llama a OpenAI en cada consulta, así que sin token y con
+    CORS abierto cualquiera en la red puede gastar la cuota.
+    """
+    if not API_TOKEN:
+        return True
+    auth = request.headers.get("Authorization", "")
+    return auth.startswith("Bearer ") and auth[7:].strip() == API_TOKEN
 
 
 @app.route("/media/<path:relpath>", methods=["GET", "OPTIONS"])
@@ -100,6 +135,9 @@ def process_request():
     if request.method == "OPTIONS":
         return make_response("", 204)
 
+    if not _token_ok():
+        return make_response(jsonify({"error": "No autorizado"}), 401)
+
     request_params = request.json
     try:
         app.logger.info("[MAIN] Initialize web app")
@@ -124,8 +162,17 @@ def process_request():
             raise ValueError("Missing required parameter: query")
         config_data["updated_query"] = config_data["query"]
 
-        #santize data dict
-        data  = sanitize_data(config_data)
+        # Los parámetros que vienen del request YA se sanitizaron uno por uno en el loop
+        # de arriba, que es donde corresponde: el escape XSS es para lo que escribe el
+        # usuario, no para la configuración propia.
+        #
+        # Acá antes había un `sanitize_data(config_data)` sobre el dict COMPLETO, que
+        # escapaba también todos los prompts de Configuration. El efecto era que el LLM
+        # recibía sus instrucciones corruptas: la especificación de formato del prompt de
+        # intención llegaba como `&quot;question_type&quot;: &lt;question_type&gt;` en vez
+        # de `"question_type": <question_type>`. Además re-escapaba la entrada del
+        # usuario, convirtiendo un `&` en `&amp;amp;`.
+        data = config_data
 
         app.logger.info(f"[{query_id}] [MAIN] Conv Id: " + str(data["conv_id"]))
         app.logger.info(f"[{query_id}] [MAIN] Query: " + str(data["query"]))
