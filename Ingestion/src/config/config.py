@@ -122,10 +122,6 @@ class DualIndexConfig:
     use_bm25: bool = True
     bm25_weight: float = 0.3
     
-    # Query Expansion
-    use_query_expansion: bool = True
-    max_expanded_terms: int = 3
-    
     # Context Expansion
     use_context_expansion: bool = True
     context_window_size: int = 1

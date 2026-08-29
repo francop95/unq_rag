@@ -7,8 +7,7 @@ MEJORAS 2026 ⭐⭐⭐:
 2. ✅ Contexto expandido (parent-child chunking)
 3. ✅ Reranking con cross-encoder (+20-30% precisión)
 4. ✅ BM25 sparse retrieval (mejor keywords exactos)
-5. ✅ Query expansion (sinónimos técnicos)
-6. ✅ Filtros avanzados de metadata
+5. ✅ Filtros avanzados de metadata
 
 ÍNDICES:
 1. TEXTUAL (OpenAI embeddings) - Texto y tablas
@@ -42,7 +41,6 @@ from task_utils.advanced_retrieval import (
     ContextExpander,
     CrossEncoderReranker,
     BM25Index,
-    QueryExpander,
     MetadataFilter
 )
 
@@ -258,17 +256,6 @@ class HybridMultimodalSearch:
             except Exception as e:
                 print(f"   ⚠️  BM25 no disponible: {e}")
         
-        # Query expansion
-        self.query_expander = None
-        if config.dual.use_query_expansion:
-            try:
-                self.query_expander = QueryExpander(
-                    max_expansions=config.dual.max_expanded_terms
-                )
-                print(f"   ✅ Query Expansion (max_terms={config.dual.max_expanded_terms})")
-            except Exception as e:
-                print(f"   ⚠️  Query Expansion no disponible: {e}")
-        
         # Metadata filter builder
         self.metadata_filter = MetadataFilter()
         print(f"   ✅ Metadata Filter")
@@ -304,18 +291,7 @@ class HybridMultimodalSearch:
         print(f"{'─'*70}\n")
         
         # ══════════════════════════════════════════════════════════
-        # 1. QUERY EXPANSION ⭐
-        # ══════════════════════════════════════════════════════════
-        
-        expanded_queries = [query]
-        if self.query_expander:
-            print("→ Expandiendo query con términos técnicos...")
-            expanded_queries = self.query_expander.expand_query(query)
-            if len(expanded_queries) > 1:
-                print(f"   ✓ Query expandida a {len(expanded_queries)} variantes")
-        
-        # ══════════════════════════════════════════════════════════
-        # 2. CONSTRUIR FILTROS DE METADATA ⭐
+        # 1. CONSTRUIR FILTROS DE METADATA ⭐
         # ══════════════════════════════════════════════════════════
         
         chroma_filter = None
@@ -348,7 +324,7 @@ class HybridMultimodalSearch:
             # Generar embedding de la query con OpenAI
             query_emb = self.openai_client.embeddings.create(
                 model=self.openai_model,
-                input=expanded_queries[0]  # Usar query original
+                input=query
             ).data[0].embedding
             
             # Buscar en Chroma con filtros
@@ -395,7 +371,7 @@ class HybridMultimodalSearch:
         bm25_results = {}
         if self.bm25_index and config.dual.use_bm25:
             print("→ Buscando con BM25 (sparse retrieval)...")
-            sparse_results = self.bm25_index.search(expanded_queries[0], top_k=top_k * 2)  # Usar query original
+            sparse_results = self.bm25_index.search(query, top_k=top_k * 2)
             
             for rank, result in enumerate(sparse_results, start=1):
                 metadata = result['metadata']

@@ -21,7 +21,6 @@ def test_imports():
             ContextExpander,
             CrossEncoderReranker,
             BM25Index,
-            QueryExpander,
             MetadataFilter
         )
         print("   ✅ Todas las clases importadas correctamente")
@@ -40,7 +39,6 @@ def test_imports():
         required_fields = [
             'use_reranking', 'reranker_model', 'rerank_top_k',
             'use_bm25', 'bm25_weight',
-            'use_query_expansion', 'max_expanded_terms',
             'use_context_expansion', 'context_window_size'
         ]
         
@@ -101,7 +99,6 @@ def test_config_loading():
         print(f"   - reranker_model: {config.dual.reranker_model}")
         print(f"   - use_bm25: {config.dual.use_bm25}")
         print(f"   - bm25_weight: {config.dual.bm25_weight}")
-        print(f"   - use_query_expansion: {config.dual.use_query_expansion}")
         print(f"   - use_context_expansion: {config.dual.use_context_expansion}")
         print(f"   - context_window_size: {config.dual.context_window_size}")
         

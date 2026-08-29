@@ -147,8 +147,6 @@ class ConfigReader:
             rerank_top_k=self.get_int("rerank_top_k", 20),
             use_bm25=self.get_bool("use_bm25", True),
             bm25_weight=self.get_float("bm25_weight", 0.3),
-            use_query_expansion=self.get_bool("use_query_expansion", True),
-            max_expanded_terms=self.get_int("max_expanded_terms", 3),
             use_context_expansion=self.get_bool("use_context_expansion", True),
             context_window_size=self.get_int("context_window_size", 1),
         )

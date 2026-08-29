@@ -293,59 +293,6 @@ class BM25Index:
         ]
 
 
-class QueryExpander:
-    """
-    Expansión de queries con sinónimos y términos relacionados.
-    
-    Mejora: Mejor recall
-    """
-    
-    # Diccionario de expansiones técnicas comunes
-    TECHNICAL_EXPANSIONS = {
-        "motor": ["motor", "motor eléctrico", "motor trifásico", "máquina eléctrica"],
-        "diagrama": ["diagrama", "esquema", "plano", "circuit diagram"],
-        "conexión": ["conexión", "conexionado", "cableado", "wiring"],
-        "voltaje": ["voltaje", "tensión", "voltage", "V"],
-        "corriente": ["corriente", "amperaje", "current", "A"],
-        "potencia": ["potencia", "power", "kW", "watts"],
-        "especificación": ["especificación", "spec", "parámetro", "característica"],
-        "procedimiento": ["procedimiento", "proceso", "pasos", "instrucciones"],
-        "instalación": ["instalación", "montaje", "installation", "setup"],
-        "mantenimiento": ["mantenimiento", "service", "maintenance", "revisión"],
-    }
-    
-    def __init__(self, max_expansions: int = 3):
-        """
-        Args:
-            max_expansions: Máximo número de términos expandidos por palabra
-        """
-        self.max_expansions = max_expansions
-    
-    def expand_query(self, query: str) -> List[str]:
-        """
-        Expande una query con términos relacionados.
-        
-        Args:
-            query: Query original
-        
-        Returns:
-            Lista de queries expandidas (incluye original)
-        """
-        expanded_queries = [query]  # Siempre incluir original
-        
-        # Buscar términos expandibles
-        query_lower = query.lower()
-        
-        for term, expansions in self.TECHNICAL_EXPANSIONS.items():
-            if term in query_lower:
-                # Generar variaciones con expansiones
-                for expansion in expansions[:self.max_expansions]:
-                    if expansion != term:
-                        expanded_query = query_lower.replace(term, expansion)
-                        if expanded_query not in expanded_queries:
-                            expanded_queries.append(expanded_query)
-        
-        return expanded_queries[:self.max_expansions + 1]
 
 
 class MetadataFilter:

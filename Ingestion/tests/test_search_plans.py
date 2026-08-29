@@ -30,10 +30,7 @@ for query in queries:
     
     results = searcher.search(
         query=query,
-        top_k=3,
-        use_reranking=True,
-        use_bm25=True,
-        use_query_expansion=True
+        top_k=3
     )
     
     if results:

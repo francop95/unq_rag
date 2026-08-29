@@ -591,12 +591,6 @@ search(
 # Solo imágenes del capítulo "Instalación"
 ```
 
-**Configuración (.env):**
-```ini
-use_query_expansion=true
-max_expanded_terms=3
-```
-
 ### 🗂️ 6. Hierarchical Metadata
 **Problema:** Resultados sin contexto de dónde vienen en el documento
 **Solución:** Metadata indexada durante ingesta
@@ -1097,10 +1091,6 @@ rerank_top_k=20
 # BM25 sparse retrieval
 use_bm25=true
 bm25_weight=0.3
-
-# Query expansion
-use_query_expansion=true
-max_expanded_terms=3
 
 # Context expansion
 use_context_expansion=true
