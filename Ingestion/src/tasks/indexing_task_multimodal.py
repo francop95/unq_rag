@@ -6,6 +6,7 @@ import chromadb
 
 from task import (Task, TaskReturnData)
 from logger import Logger
+from task_utils.chunk_text import readable_chunk_text
 from task_utils.validators.task_validators import TaskSettingPresenceValidator
 
 logger = Logger.get_logger(__name__)
@@ -181,48 +182,11 @@ class AutomaticIndexer(Task):
 
     def _document_text_from_chunk(self, data: Dict[str, Any]) -> str:
         """
-        Convierte original_chunk a texto legible:
-          - si es string -> tal cual
-          - si es JSON y tiene 'table_markdown' -> usa eso
-          - si es tabla con rows -> aplana filas
-          - si es imagen -> usa notes/alt si existen; si no, cadena vacía
+        Convierte original_chunk al texto legible que se almacena en el índice.
+
+        Delega en task_utils.chunk_text.readable_chunk_text, que es la fuente
+        única de esta conversión (antes estaba duplicada acá, en el task de
+        embeddings y en el enriquecedor, y los content_type nuevos se perdían
+        porque había que actualizar los tres a mano).
         """
-        original = data.get("original_chunk", "")
-        ctype = (data.get("content_type") or "").lower()
-
-        if isinstance(original, str):
-            # ¿parece JSON?
-            try:
-                j = json.loads(original)
-            except Exception:
-                j = None
-        else:
-            j = original
-
-        # Tablas
-        if ctype == "table" and isinstance(j, dict):
-            if j.get("table_markdown"):
-                return str(j["table_markdown"])
-            rows = None
-            tj = j.get("table_json")
-            if isinstance(tj, dict):
-                rows = tj.get("rows")
-            if rows and isinstance(rows, list):
-                lines = ["\t".join([("" if c is None else str(c)) for c in r]) for r in rows]
-                return "\n".join(lines[:400])
-            return json.dumps(j, ensure_ascii=False)
-
-        # Imágenes (diagram_visual: faceta visual de ElectricalDiagramProcessor,
-        # copia el mismo original_chunk que una imagen normal)
-        if ctype in ("image", "diagram_visual") and isinstance(j, dict):
-            notes = j.get("notes") or j.get("alt") or ""
-            if isinstance(notes, dict):
-                return notes.get("description") or json.dumps(notes, ensure_ascii=False)
-            return str(notes)
-
-        # Descripción estructurada de diagrama (dict directo, no serializado a string)
-        if ctype == "diagram_description" and isinstance(j, dict):
-            return j.get("description") or json.dumps(j, ensure_ascii=False)
-
-        # Default
-        return original if isinstance(original, str) else json.dumps(original, ensure_ascii=False)
+        return readable_chunk_text(data)

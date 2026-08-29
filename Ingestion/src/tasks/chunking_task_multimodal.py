@@ -31,6 +31,7 @@ from task_utils.diagram_processor import ElectricalDiagramProcessor
 from task_utils.table_processor import TableProcessor
 from task_utils.hierarchy_extractor import DocumentHierarchyExtractor
 from task_utils.technical_validators import TechnicalDocumentValidator
+from task_utils.llm_json import QuotaExhaustedError, raise_if_quota_exhausted
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 logger = Logger.get_logger(__name__)
@@ -163,15 +164,19 @@ class ChunkingTask(Task):
                 page = doc[idx]
                 logger.info(f"Analizando página {page_no}/{total_pages} ...")
 
-                # 1) ANÁLISIS DE COMPLEJIDAD (decidir estrategia)
+                # 1) ANÁLISIS DE COMPLEJIDAD
+                # El análisis se hace SIEMPRE: además de decidir la estrategia,
+                # alimenta el OCR previo de planos escaneados y la variante del
+                # prompt para diagramas. Cuando use_hybrid=false solo se ignora
+                # para la decisión (todo va a LLM), pero se sigue necesitando.
+                page_analysis = ContentAnalyzer.analyze_page(page)
                 if use_hybrid:
-                    page_analysis = ContentAnalyzer.analyze_page(page)
                     strategy = self.hybrid_strategy.decide_strategy(page, file_name)
                     complexity = page_analysis["visual_complexity"]
                     logger.info(f"  Complejidad: {complexity:.2f} | Estrategia: {strategy.value}")
                 else:
                     strategy = ChunkingStrategy.LLM
-                    page_analysis = None
+                    logger.info(f"  Estrategia: llm (chunking híbrido desactivado)")
 
                 # 2) PROCESAMIENTO SEGÚN ESTRATEGIA
                 if strategy == ChunkingStrategy.SYNTACTIC:
@@ -288,6 +293,12 @@ class ChunkingTask(Task):
                         job = future_to_job[future]
                         try:
                             job["llm_json"] = future.result()
+                        except QuotaExhaustedError:
+                            # Sin crédito no hay página que vaya a funcionar: cortar acá
+                            # en vez de loguear el mismo error 86 veces y terminar con un
+                            # documento vacío.
+                            logger.error("Sin crédito en la cuenta de OpenAI: se aborta el chunking")
+                            raise
                         except Exception as e:
                             logger.error(f"Error en LLM para página {job['page_no']}: {e}")
                             job["llm_json"] = {"chunks": []}
@@ -301,6 +312,23 @@ class ChunkingTask(Task):
                         page_no=job["page_no"],
                         image_bytes=job["png_bytes"]
                     )
+
+            # ═══════════════════════════════════════════════════════════
+            # FASE 2.5: pasada DEDICADA por figura/tabla
+            # La llamada de página está segmentando y transcribiendo a la vez, así
+            # que la descripción de cada figura y la transcripción de cada tabla
+            # salen diluidas. Acá se vuelve a llamar al modelo con el recorte
+            # AISLADO y un prompt enfocado, que da descripciones de diagramas
+            # mucho más ricas (componentes, conexiones, valores) y transcripciones
+            # de tabla fieles (celdas combinadas incluidas).
+            # ═══════════════════════════════════════════════════════════
+            if self._task_settings.get("use_dedicated_figure_pass", True):
+                self._enrich_figures_and_tables(
+                    page_chunks=page_chunks,
+                    client=client,
+                    model=model,
+                    stats=stats,
+                )
 
             # ═══════════════════════════════════════════════════════════
             # FASE 3: procesamiento especializado, en orden de página
@@ -318,23 +346,11 @@ class ChunkingTask(Task):
                 for chunk in normalized_chunks:
                     # 3.1) Procesar diagramas eléctricos
                     if self.diagram_processor.is_diagram(chunk):
-                        # Extraer descripción del LLM desde original_chunk
-                        llm_desc = None
-                        try:
-                            original = chunk.get("original_chunk", {})
-                            if isinstance(original, str):
-                                original = json.loads(original)
-                            llm_desc = original.get("notes", {})
-                        except Exception as e:
-                            logger.debug(f"No se pudo extraer llm_desc: {e}")
-                            llm_desc = chunk.get("notes")  # Fallback
-
-                        enhanced_chunks = self.diagram_processor.create_enhanced_diagram_chunks(
-                            chunk, llm_desc
-                        )
+                        enhanced_chunks = self.diagram_processor.create_enhanced_diagram_chunks(chunk)
                         processed_chunks.extend(enhanced_chunks)
                         stats["diagrams_processed"] += 1
-                        logger.info(f"  ✨ Diagrama mejorado → {len(enhanced_chunks)} chunks multi-faceta (visual + OCR + structured)")
+                        facetas = ", ".join(c.get("content_type", "?") for c in enhanced_chunks)
+                        logger.info(f"  ✨ Diagrama mejorado → {len(enhanced_chunks)} chunks ({facetas})")
 
                     # 3.2) Procesar tablas grandes
                     elif chunk.get("content_type") == "table":
@@ -372,11 +388,38 @@ class ChunkingTask(Task):
             def _composite_chunk_id(c: Dict[str, Any]) -> str:
                 return f"{c.get('file_name','')}_{c.get('page_num','')}_{c.get('chunk_id','')}"
 
+            def _figure_group(c: Dict[str, Any]) -> Optional[str]:
+                """
+                Id de la figura a la que pertenece un chunk, si es una de sus facetas.
+                Las facetas de una figura (chunk_3_visual, chunk_3_ocr) son consecutivas
+                en la lista, así que una cadena secuencial plana las volvía vecinas
+                entre sí: medido, 361 de 1544 enlaces apuntaban a una hermana, y el
+                context expander terminaba inyectándole a un diagrama su propio OCR
+                ilegible como "[CONTEXTO SIGUIENTE]". Una figura es UNA unidad de
+                lectura: sus vecinos son el contenido de alrededor, no sus facetas.
+                """
+                chunk_id = str(c.get("chunk_id", ""))
+                for suffix in ("_ocr", "_structured", "_visual"):
+                    if chunk_id.endswith(suffix):
+                        return f"{c.get('file_name','')}_{c.get('page_num','')}_{chunk_id[:-len(suffix)]}"
+                return None
+
             for i, chunk in enumerate(all_chunks_ordered):
-                chunk["prev_chunk_id"] = _composite_chunk_id(all_chunks_ordered[i - 1]) if i > 0 else ""
+                group = _figure_group(chunk)
+
+                # Retroceder/avanzar hasta salir del grupo de facetas propio
+                prev_idx = i - 1
+                while prev_idx >= 0 and group is not None and _figure_group(all_chunks_ordered[prev_idx]) == group:
+                    prev_idx -= 1
+                next_idx = i + 1
+                while (next_idx < len(all_chunks_ordered) and group is not None
+                       and _figure_group(all_chunks_ordered[next_idx]) == group):
+                    next_idx += 1
+
+                chunk["prev_chunk_id"] = _composite_chunk_id(all_chunks_ordered[prev_idx]) if prev_idx >= 0 else ""
                 chunk["next_chunk_id"] = (
-                    _composite_chunk_id(all_chunks_ordered[i + 1])
-                    if i < len(all_chunks_ordered) - 1 else ""
+                    _composite_chunk_id(all_chunks_ordered[next_idx])
+                    if next_idx < len(all_chunks_ordered) else ""
                 )
 
             # ═══════════════════════════════════════════════════════════
@@ -395,25 +438,170 @@ class ChunkingTask(Task):
                 with open(out_path, "w", encoding="utf-8") as f:
                     json.dump(chunk, f, ensure_ascii=False, indent=4)
 
-        # Reporte final de estadísticas
+        # Reporte final de estadísticas (total_pages puede ser 0 en un PDF vacío
+        # o ilegible: se evita la división por cero)
+        pages_divisor = total_pages or 1
         logger.info(f"\n{'='*60}")
         logger.info(f"ESTADÍSTICAS DE CHUNKING")
         logger.info(f"{'='*60}")
         logger.info(f"Total páginas:           {total_pages}")
-        logger.info(f"Páginas sintácticas:     {stats['pages_syntactic']} ({stats['pages_syntactic']/total_pages*100:.1f}%)")
-        logger.info(f"Páginas con LLM:         {stats['pages_llm']} ({stats['pages_llm']/total_pages*100:.1f}%)")
+        logger.info(f"Páginas sintácticas:     {stats['pages_syntactic']} ({stats['pages_syntactic']/pages_divisor*100:.1f}%)")
+        logger.info(f"Páginas con LLM:         {stats['pages_llm']} ({stats['pages_llm']/pages_divisor*100:.1f}%)")
         logger.info(f"Diagramas procesados:    {stats['diagrams_processed']}")
         logger.info(f"Tablas divididas:        {stats['tables_split']}")
         logger.info(f"Imágenes nativas (sin LLM): {stats['native_images_extracted']}")
+        logger.info(f"Figuras re-descritas:     {stats.get('figures_enriched', 0)}")
+        logger.info(f"Tablas re-transcritas:    {stats.get('tables_enriched', 0)}")
         logger.info(f"Total chunks:            {stats['total_chunks']}")
-        
+
         # Estimar ahorro
         if use_hybrid and stats['pages_syntactic'] > 0:
-            estimated_savings = stats['pages_syntactic'] / total_pages * 100
+            estimated_savings = stats['pages_syntactic'] / pages_divisor * 100
             logger.info(f"Ahorro estimado:         {estimated_savings:.1f}% (~${estimated_savings * 0.03:.2f})")
         logger.info(f"{'='*60}\n")
         
         return base_output_dir
+
+    # ===============================
+    # Pasada dedicada por figura / tabla
+    # ===============================
+    _FIGURE_SYSTEM_PROMPT = (
+        "Eres un especialista en documentación técnica industrial. Recibirás UNA "
+        "figura recortada de un manual (diagrama eléctrico, esquema, plano o foto de "
+        "equipo) y debes describirla para que sea recuperable por búsqueda semántica.\n\n"
+        "Devuelve SOLO un objeto JSON con estas claves:\n"
+        '- "diagram_type": tipo ("wiring_diagram", "schematic", "block_diagram", '
+        '"connection_diagram", "circuit_diagram", "panel_layout", "photo", "chart", "other")\n'
+        '- "description": 2-4 frases describiendo qué muestra y para qué sirve\n'
+        '- "components": lista de componentes identificables con su etiqueta ("motor M1", "contactor K1", "borne X1:3")\n'
+        '- "connections": lista de conexiones o recorridos visibles ("L1 → K1 → motor M1")\n'
+        '- "ratings": objeto con valores nominales visibles ({"voltage": "480V AC", "current": "12A"})\n'
+        '- "labels": lista de TODOS los textos/números legibles en la figura\n\n'
+        "Usa listas vacías u objetos vacíos si algo no aplica. No inventes: describe "
+        "únicamente lo que se ve. Responde en el idioma de la figura (español si está en español)."
+    )
+
+    _TABLE_SYSTEM_PROMPT = (
+        "Eres un especialista en transcripción de tablas técnicas. Recibirás UNA tabla "
+        "recortada de un manual y debes transcribirla con exactitud.\n\n"
+        "Devuelve SOLO un objeto JSON con estas claves:\n"
+        '- "table_markdown": la tabla completa en Markdown, con encabezados\n'
+        '- "rows": array de arrays con TODAS las filas (la primera es el encabezado)\n'
+        '- "caption": título o pie de la tabla si es visible, si no ""\n'
+        '- "notes": aclaraciones de la tabla (llamadas, notas al pie) si las hay\n\n'
+        "Reglas: respetá las unidades tal como aparecen; si una celda está combinada, "
+        "repetí su valor en cada columna que abarca; si una celda está vacía usá \"\". "
+        "No resumas ni omitas filas. Transcribí exactamente lo que se ve."
+    )
+
+    def _enrich_figures_and_tables(
+        self,
+        page_chunks: Dict[int, List[Dict[str, Any]]],
+        client,
+        model: str,
+        stats: Dict[str, int],
+    ) -> None:
+        """
+        Reemplaza en sitio la descripción/transcripción de cada figura y tabla con
+        el resultado de una llamada dedicada al modelo de visión sobre su recorte.
+        """
+        from task_utils.llm_json import (
+            LLMJsonClient, image_content_part, text_content_part, run_parallel,
+        )
+
+        # Recolectar los chunks que tienen un recorte propio
+        targets: List[Dict[str, Any]] = []
+        for page_no, chunks in page_chunks.items():
+            for chunk in chunks:
+                ctype = chunk.get("content_type")
+                if ctype not in ("image", "table"):
+                    continue
+                try:
+                    payload = json.loads(chunk["original_chunk"]) if isinstance(
+                        chunk.get("original_chunk"), str
+                    ) else chunk.get("original_chunk")
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                image_path = payload.get("image_path")
+                if image_path and os.path.isfile(image_path):
+                    targets.append(
+                        {"chunk": chunk, "payload": payload, "image_path": image_path,
+                         "ctype": ctype, "page_no": page_no}
+                    )
+
+        if not targets:
+            logger.info("Pasada dedicada de figuras: no hay recortes que enriquecer")
+            return
+
+        concurrency = max(1, int(self._task_settings.get("figure_pass_concurrency", 3)))
+        logger.info(
+            f"Pasada dedicada de figuras/tablas: {len(targets)} recortes "
+            f"con concurrencia={concurrency}"
+        )
+
+        llm = LLMJsonClient(client=client, model=model, temperature=0.0)
+
+        def worker(target: Dict[str, Any]):
+            image_part = image_content_part(target["image_path"])
+            if image_part is None:
+                return None
+
+            is_table = target["ctype"] == "table"
+            system = self._TABLE_SYSTEM_PROMPT if is_table else self._FIGURE_SYSTEM_PROMPT
+            hint = (
+                f"Tabla recortada de la página {target['page_no']}."
+                if is_table else
+                f"Figura recortada de la página {target['page_no']}."
+            )
+            return llm.complete_json(
+                system_prompt=system,
+                user_content=[text_content_part(hint), image_part],
+                label=f"figure_pass_p{target['page_no']}",
+            )
+
+        results = run_parallel(targets, worker, concurrency, label="figure_pass")
+
+        enriched_figures = 0
+        enriched_tables = 0
+        for target, result in zip(targets, results):
+            if not isinstance(result, dict):
+                continue
+
+            chunk = target["chunk"]
+            payload = target["payload"]
+
+            if target["ctype"] == "table":
+                markdown = result.get("table_markdown")
+                rows = result.get("rows")
+                if not markdown and not rows:
+                    continue
+                if markdown:
+                    payload["table_markdown"] = markdown
+                if isinstance(rows, list) and rows:
+                    payload["table_json"] = {"rows": rows}
+                for key in ("caption", "notes"):
+                    if result.get(key):
+                        payload[key] = result[key]
+                enriched_tables += 1
+            else:
+                # La descripción estructurada va en `notes`, que es de donde el
+                # resto del pipeline (diagram_processor, embeddings, indexer) ya
+                # lee la representación textual de una imagen.
+                if not result.get("description") and not result.get("labels"):
+                    continue
+                payload["notes"] = result
+                enriched_figures += 1
+
+            chunk["original_chunk"] = json.dumps(payload, ensure_ascii=False)
+
+        stats["figures_enriched"] = enriched_figures
+        stats["tables_enriched"] = enriched_tables
+        logger.info(
+            f"Pasada dedicada completada: {enriched_figures} figuras y "
+            f"{enriched_tables} tablas re-descritas"
+        )
 
     # ===============================
     # Prompts / payload para el LLM
@@ -739,6 +927,8 @@ class ChunkingTask(Task):
                     return _ensure_chunks_json(text)
 
                 except RateLimitError as e:
+                    # Falta de crédito también es 429: cortar en vez de reintentar
+                    raise_if_quota_exhausted(e, "chunking multimodal")
                     if attempt < max_retries - 1:
                         delay = self._retry_delay_from_error(e, attempt, base_delay, max_delay)
                         logger.warning(f"Rate limit alcanzado. Reintentando en {delay:.1f}s... (intento {attempt + 1}/{max_retries})")

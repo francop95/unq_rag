@@ -116,28 +116,42 @@ class SemanticRechunker:
 
     def _group_by_page_proximity(self, chunks: List[Dict[str, Any]]) -> List[List[int]]:
         """
-        Agrupa chunks solo por proximidad de páginas (fallback sin embeddings).
+        Agrupa chunks por proximidad de páginas (fallback sin embeddings).
+
+        El corte se hace por DOS criterios: salto de página mayor a max_pages_gap y
+        tamaño acumulado por encima de max_superchunk_size. Sin el límite de tamaño,
+        un documento con páginas consecutivas caía todo en un único grupo gigante
+        (las páginas contiguas siempre están dentro del gap), y el super-chunk
+        resultante había que partirlo después a la mitad de forma arbitraria.
         """
         groups = []
         current_group = []
+        current_size = 0
         last_page = None
-        
+
         for i, chunk in enumerate(chunks):
             page = self._get_page_num(chunk)
-            
-            if last_page is None or page - last_page <= self.max_pages_gap:
-                current_group.append(i)
-            else:
+            text_len = len(str(chunk.get("original_chunk", "")))
+
+            # abs(): si la entrada no viniera ordenada, cualquier salto rompe el grupo
+            page_break = last_page is not None and abs(page - last_page) > self.max_pages_gap
+            size_break = bool(current_group) and (current_size + text_len) > self.max_superchunk_size
+
+            if page_break or size_break:
                 if len(current_group) >= self.min_chunks_for_merge:
                     groups.append(current_group)
                 current_group = [i]
-            
+                current_size = text_len
+            else:
+                current_group.append(i)
+                current_size += text_len
+
             last_page = page
-        
+
         # Último grupo
         if len(current_group) >= self.min_chunks_for_merge:
             groups.append(current_group)
-        
+
         return groups
     
     def create_superchunks(self,
@@ -168,7 +182,8 @@ class SemanticRechunker:
                 # Dividir en sub-grupos más pequeños
                 sub_superchunks = self._split_large_superchunk(
                     grouped_chunks,
-                    combined_text
+                    combined_text,
+                    group_idx
                 )
                 superchunks.extend(sub_superchunks)
             else:
@@ -231,21 +246,45 @@ class SemanticRechunker:
     
     def _split_large_superchunk(self,
                                chunks: List[Dict[str, Any]],
-                               combined_text: str) -> List[Dict[str, Any]]:
-        """Divide super-chunk muy grande en partes más pequeñas."""
-        # Estrategia simple: dividir chunks en grupos más pequeños
-        max_chunks_per_group = len(chunks) // 2
-        
-        sub_groups = [
-            chunks[i:i + max_chunks_per_group]
-            for i in range(0, len(chunks), max_chunks_per_group)
-        ]
-        
+                               combined_text: str,
+                               group_idx: int = 0) -> List[Dict[str, Any]]:
+        """
+        Divide un super-chunk demasiado grande en partes más pequeñas.
+
+        `group_idx` es el índice del grupo de origen y es necesario para que los
+        chunk_id sean únicos en todo el documento: antes las partes se numeraban
+        con un contador local, así que dos grupos distintos generaban ambos
+        "superchunk_0_part1" y colisionaban entre sí.
+        """
+        # Acumula chunks hasta llenar max_superchunk_size (en vez de partir a la
+        # mitad, que dejaba partes que seguían excediendo el límite).
+        sub_groups: List[List[Dict[str, Any]]] = []
+        current: List[Dict[str, Any]] = []
+        current_size = 0
+
+        for chunk in chunks:
+            text_len = len(str(chunk.get("original_chunk", "")))
+            if current and current_size + text_len > self.max_superchunk_size:
+                sub_groups.append(current)
+                current = [chunk]
+                current_size = text_len
+            else:
+                current.append(chunk)
+                current_size += text_len
+        if current:
+            sub_groups.append(current)
+
         superchunks = []
-        for i, sub_group in enumerate(sub_groups):
+        part_num = 0
+        for sub_group in sub_groups:
+            # Un "super-chunk" de un solo chunk es una copia del chunk original:
+            # no aporta contexto extra y duplica contenido en el índice.
+            if len(sub_group) < self.min_chunks_for_merge:
+                continue
+            part_num += 1
             text = self._combine_chunks_text(sub_group)
-            superchunk = self._build_superchunk(sub_group, text, i)
-            superchunk["chunk_id"] = f"{superchunk['chunk_id']}_part{i+1}"
+            superchunk = self._build_superchunk(sub_group, text, group_idx)
+            superchunk["chunk_id"] = f"superchunk_{group_idx}_part{part_num}"
             superchunks.append(superchunk)
         
         return superchunks

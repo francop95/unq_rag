@@ -19,14 +19,23 @@ logger = Logger.get_logger(__name__)
 
 
 class TechnicalValidator:
-    """Clase base para validadores técnicos."""
-    
+    """
+    Clase base para validadores técnicos.
+
+    IMPORTANTE sobre la semántica del retorno: `is_fatal=True` significa que el
+    chunk es INUTILIZABLE y debe descartarse. Las advertencias de calidad
+    (unidades faltantes, diagrama sin descripción, OCR sospechoso, etc.) NO son
+    fatales: se adjuntan como metadata para diagnóstico, pero el chunk se
+    conserva. Descartar por advertencia hacía perder contenido legítimo
+    (diagramas sin descripción, tablas de especificaciones puramente numéricas).
+    """
+
     def validate(self, chunk: Dict[str, Any]) -> Tuple[bool, List[str]]:
         """
         Valida un chunk.
-        
+
         Returns:
-            (is_valid, warnings)
+            (is_fatal, warnings)
         """
         raise NotImplementedError
 
@@ -55,12 +64,12 @@ class SpecificationTableValidator(TechnicalValidator):
         }
     
     def validate(self, chunk: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """Valida tabla de especificaciones."""
+        """Valida tabla de especificaciones. Devuelve (is_fatal, warnings)."""
         warnings = []
-        
+
         if chunk.get("content_type") != "table":
-            return True, []
-        
+            return False, []
+
         try:
             # Obtener datos de tabla
             original = chunk.get("original_chunk", "{}")
@@ -68,14 +77,21 @@ class SpecificationTableValidator(TechnicalValidator):
                 table_data = json.loads(original)
             else:
                 table_data = original
-            
-            table_json = table_data.get("table_json", {})
-            rows = table_json. get("rows", [])
-            
+
+            table_json = table_data.get("table_json") or {}
+            rows = table_json.get("rows", [])
+
             if not rows:
+                # Sin filas estructuradas todavía puede haber markdown útil (o el
+                # recorte de imagen de la tabla). Solo es fatal si no hay NADA.
+                has_markdown = bool(str(table_data.get("table_markdown") or "").strip())
+                has_image = bool(table_data.get("image_path"))
+                if has_markdown or has_image:
+                    warnings.append("Tabla sin filas estructuradas (se usa markdown/imagen)")
+                    return False, warnings
                 warnings.append("Tabla vacía")
-                return False, warnings
-            
+                return True, warnings
+
             # Verificar valores numéricos sin unidades
             numeric_without_units = self._find_numeric_without_units(rows)
             if numeric_without_units > len(rows) * 0.5:
@@ -93,15 +109,13 @@ class SpecificationTableValidator(TechnicalValidator):
                     f"Tabla tiene muchas celdas vacías "
                     f"({empty_cells}/{total_cells})"
                 )
-            
-            # Si hay advertencias críticas, marcar como inválido
-            is_valid = len(warnings) == 0
-            
-            return is_valid, warnings
-        
+
+            # Advertencias de calidad: no descartan la tabla
+            return False, warnings
+
         except Exception as e:
             logger.warning(f"Error validando tabla: {e}")
-            return True, [f"Error en validación: {str(e)}"]
+            return False, [f"Error en validación: {str(e)}"]
     
     def _find_numeric_without_units(self, rows: List[List[str]]) -> int:
         """Cuenta celdas con números pero sin unidades."""
@@ -151,12 +165,12 @@ class ProcedureValidator(TechnicalValidator):
     """
     
     def validate(self, chunk: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """Valida procedimiento."""
+        """Valida procedimiento. Devuelve (is_fatal, warnings) — nunca es fatal."""
         warnings = []
-        
+
         if chunk.get("content_type") != "text":
-            return True, []
-        
+            return False, []
+
         text = str(chunk.get("original_chunk", "")).lower()
         
         # Detectar si parece ser un procedimiento
@@ -166,10 +180,10 @@ class ProcedureValidator(TechnicalValidator):
         ]
         
         is_procedure = any(keyword in text for keyword in procedure_keywords)
-        
+
         if not is_procedure:
-            return True, []
-        
+            return False, []
+
         # Verificar numeración secuencial
         numbers = re.findall(r'(?:step|paso)\s+(\d+)', text, re.IGNORECASE)
         
@@ -189,10 +203,8 @@ class ProcedureValidator(TechnicalValidator):
         # Verificar longitud mínima (procedimiento muy corto es sospechoso)
         if len(text) < 100:
             warnings.append("Procedimiento muy corto (posible fragmentación)")
-        
-        is_valid = len(warnings) == 0
-        
-        return is_valid, warnings
+
+        return False, warnings
 
 
 class OCRCorruptionDetector(TechnicalValidator):
@@ -214,14 +226,21 @@ class OCRCorruptionDetector(TechnicalValidator):
         ]
     
     def validate(self, chunk: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """Valida texto para detectar OCR corrupto."""
+        """Valida texto para detectar OCR corrupto. Devuelve (is_fatal, warnings) — nunca es fatal."""
         warnings = []
-        
+
+        # Solo aplica a contenido textual: el original_chunk de tablas/imágenes es
+        # un JSON (lleno de {, ", [, :) que disparaba el heurístico de "alto ratio
+        # de caracteres especiales" y hacía descartar tablas/diagramas legítimos.
+        ctype = (chunk.get("content_type") or "").lower()
+        if ctype not in ("", "text", "superchunk", "diagram_text"):
+            return False, []
+
         text = str(chunk.get("original_chunk", ""))
-        
+
         if len(text) < 20:
-            return True, []
-        
+            return False, []
+
         # Buscar patrones de corrupción
         for pattern in self.corruption_patterns:
             matches = re.findall(pattern, text)
@@ -255,28 +274,59 @@ class OCRCorruptionDetector(TechnicalValidator):
                 f"Muchas palabras sin vocales ({len(words_without_vowels)}/{len(words)}). "
                 f"Ejemplos: {words_without_vowels[:3]}"
             )
-        
-        is_valid = len(warnings) == 0
-        
-        return is_valid, warnings
+
+        return False, warnings
 
 
 class DiagramLabelValidator(TechnicalValidator):
     """
     Valida que diagramas tengan labels/texto legible.
-    
+
     Para imágenes marcadas como diagramas, verifica:
     - Tiene descripción o notas
     - OCR encontró texto legible
+    - La descripción no declara que la imagen no tiene contenido
     """
-    
+
+    # El modelo de visión avisa cuando el recorte salió vacío ("La imagen está en
+    # blanco y no contiene información visible"). Ese chunk no solo es inútil: el
+    # enriquecedor le genera preguntas ENCIMA, y salen plausibles — medido en la
+    # ingesta anterior, 4 imágenes en blanco de la página 9 arrastraron 16 preguntas,
+    # entre ellas "¿Cómo puedo identificar los componentes y conexiones del variador
+    # PowerFlex 4M?". Esa pregunta matchea una consulta real y devuelve una imagen
+    # vacía, con lo cual es peor que no tener nada.
+    _EMPTY_IMAGE_PATTERNS = re.compile(
+        r"imagen (está|esta) en blanco"
+        r"|no contiene informaci[óo]n visible"
+        r"|imagen (en blanco|vac[íi]a)"
+        r"|sin contenido visible"
+        r"|no se (pueden|puede) identificar (componentes|elementos)"
+        r"|no hay (informaci[óo]n|contenido) (visible|alguna|alguno)",
+        re.IGNORECASE,
+    )
+
     def validate(self, chunk: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """Valida diagrama."""
+        """
+        Valida diagrama. Devuelve (is_fatal, warnings).
+
+        Es fatal solo si la descripción declara explícitamente que la imagen no tiene
+        contenido: en ese caso tampoco sirve para CLIP (no hay nada que ver). Una
+        imagen sin descripción, en cambio, NO se descarta: sigue siendo indexable en
+        el índice visual, y descartarla perdía su única representación.
+        """
         warnings = []
-        
-        if chunk.get("content_type") != "image":
-            return True, []
-        
+
+        if (chunk.get("content_type") or "").lower() not in ("image", "diagram_visual"):
+            return False, []
+
+        from task_utils.chunk_text import readable_chunk_text
+        description = readable_chunk_text(chunk)
+        if description and self._EMPTY_IMAGE_PATTERNS.search(description):
+            return True, [
+                f"Imagen sin contenido según la descripción del modelo: "
+                f"{' '.join(description.split())[:70]}"
+            ]
+
         # Verificar si tiene notas/descripción
         try:
             original = chunk.get("original_chunk", "{}")
@@ -319,10 +369,8 @@ class DiagramLabelValidator(TechnicalValidator):
         
         except Exception as e:
             logger.debug(f"Error validando diagrama: {e}")
-        
-        is_valid = len(warnings) == 0
-        
-        return is_valid, warnings
+
+        return False, warnings
 
 
 class TechnicalDocumentValidator:
@@ -343,23 +391,25 @@ class TechnicalDocumentValidator:
     def validate_chunk(self, chunk: Dict[str, Any]) -> Tuple[bool, List[str]]:
         """
         Valida chunk con todos los validadores aplicables.
-        
+
         Returns:
-            (is_valid, all_warnings)
+            (is_usable, all_warnings) — is_usable=False SOLO si algún validador
+            marcó el chunk como fatal (contenido inutilizable). Las advertencias
+            de calidad no descartan el chunk.
         """
         all_warnings = []
-        is_valid = True
-        
+        is_fatal = False
+
         for validator in self.validators:
-            valid, warnings = validator.validate(chunk)
-            
-            if not valid:
-                is_valid = False
-            
+            fatal, warnings = validator.validate(chunk)
+
+            if fatal:
+                is_fatal = True
+
             if warnings:
                 all_warnings.extend(warnings)
-        
-        return is_valid, all_warnings
+
+        return (not is_fatal), all_warnings
     
     def validate_chunks(self, 
                        chunks: List[Dict[str, Any]]) -> Tuple[List[Dict], Dict[str, Any]]:
@@ -390,18 +440,23 @@ class TechnicalDocumentValidator:
             else:
                 invalid_chunks.append(chunk)
                 logger.warning(
-                    f"Chunk inválido (página {chunk.get('page_num')}): {warnings}"
+                    f"Chunk descartado por contenido inutilizable "
+                    f"(página {chunk.get('page_num')}, id {chunk.get('chunk_id')}): {warnings}"
                 )
-        
+
+        chunks_with_warnings = sum(1 for c in chunks if c.get("validation_warnings"))
         report = {
             "total": len(chunks),
             "valid": len(valid_chunks),
             "invalid": len(invalid_chunks),
+            "with_warnings": chunks_with_warnings,
             "warnings_by_type": warnings_by_type
         }
-        
+
         logger.info(
-            f"Validación técnica: {report['valid']}/{report['total']} chunks válidos"
+            f"Validación técnica: {report['valid']}/{report['total']} chunks conservados "
+            f"({report['invalid']} descartados por contenido inutilizable, "
+            f"{chunks_with_warnings} con advertencias no bloqueantes)"
         )
-        
+
         return valid_chunks, report

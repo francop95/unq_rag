@@ -51,11 +51,11 @@ class IngestionMetrics:
     
     @property
     def deduplication_savings(self) -> float:
-        """% de chunks que fueron duplicados y eliminados."""
-        unique_before_dedup = self.valid_chunks
-        if unique_before_dedup == 0:
+        """% de chunks duplicados que se eliminaron (incluye los quitados aguas arriba)."""
+        total_before_dedup = self.total_chunks + self.duplicate_chunks
+        if total_before_dedup == 0:
             return 0.0
-        return (unique_before_dedup - self.unique_chunks) / unique_before_dedup
+        return self.duplicate_chunks / total_before_dedup
     
     @property
     def chunks_per_page(self) -> float:
@@ -92,14 +92,24 @@ class IngestionQualityAnalyzer:
         self.warnings: List[str] = []
     
     def analyze_chunks(self, chunks: List[Dict[str, Any]],
-                      file_name: str = "") -> IngestionMetrics:
+                      file_name: str = "",
+                      total_pages: int = 0,
+                      duplicates_removed: int = 0) -> IngestionMetrics:
         """
         Analiza batch de chunks y retorna métricas de calidad.
-        
+
         Args:
-            chunks: Chunks extraídos (antes de validación/dedup)
+            chunks: Chunks a analizar
             file_name: Nombre del archivo procesado
-        
+            total_pages: Páginas del documento. Si es 0 se infiere contando las
+                páginas distintas presentes en los chunks. Antes quedaba fijo en 1
+                ("se asigna después", pero nunca se asignaba), así que
+                chunks_per_page era igual al total de chunks y disparaba la
+                recomendación falsa "muchos chunks por página" en todo documento.
+            duplicates_removed: Duplicados que ya eliminó el pipeline aguas arriba.
+                Necesario porque `chunks` llega YA deduplicado y por lo tanto la
+                tasa de deduplicación medida sobre esta lista siempre daba 0%.
+
         Returns:
             IngestionMetrics con análisis completo
         """
@@ -155,13 +165,23 @@ class IngestionQualityAnalyzer:
             content_types=content_types
         )
         
+        # Páginas reales: distintas páginas presentes en los chunks (los
+        # super-chunks traen rangos "8-11", se toma la de inicio).
+        if total_pages <= 0:
+            pages = set()
+            for chunk in chunks:
+                page_raw = str(chunk.get("page_num", "")).split("-")[0].strip()
+                if page_raw:
+                    pages.add(page_raw)
+            total_pages = len(pages) or 1
+
         return IngestionMetrics(
             file_name=file_name,
-            total_pages=1,  # Se asigna después
+            total_pages=total_pages,
             total_chunks=total_chunks,
             valid_chunks=valid_chunks,
             invalid_chunks=total_chunks - valid_chunks,
-            duplicate_chunks=total_chunks - unique_chunks,
+            duplicate_chunks=(total_chunks - unique_chunks) + duplicates_removed,
             unique_chunks=unique_chunks,
             avg_chunk_length=avg_length,
             avg_confidence=avg_confidence,

@@ -19,8 +19,17 @@ class ChunkValidator:
     """
     Valida y filtra chunks según reglas de calidad.
     """
-    
-    def __init__(self, 
+
+    # El mínimo de longitud está pensado para prosa: un chunk de texto de 20
+    # caracteres casi nunca aporta. Pero las etiquetas/descripciones derivadas de
+    # media son cortas por naturaleza y siguen siendo el único texto buscable de
+    # esa figura ("Diagrama de curva en S", "Diagrama del teclado integrado"), así
+    # que para estos tipos solo se exige contenido no vacío.
+    _MIN_LENGTH_EXEMPT_TYPES = {
+        "image", "table", "diagram_visual", "diagram_description", "diagram_text",
+    }
+
+    def __init__(self,
                  min_length: int = 50,
                  max_length: int = 8000,
                  confidence_threshold: float = 0.0):
@@ -46,11 +55,13 @@ class ChunkValidator:
             return False, "missing_original_chunk"
         
         text = str(chunk.get("original_chunk", "")).strip()
-        
+
         # Verificar longitud
-        if len(text) < self.min_length:
-            return False, f"too_short ({len(text)} < {self.min_length})"
-        
+        content_type = str(chunk.get("content_type", "")).lower()
+        min_length = 1 if content_type in self._MIN_LENGTH_EXEMPT_TYPES else self.min_length
+        if len(text) < min_length:
+            return False, f"too_short ({len(text)} < {min_length})"
+
         if len(text) > self.max_length:
             return False, f"too_long ({len(text)} > {self.max_length})"
         
@@ -106,32 +117,41 @@ class ChunkValidator:
 class ChunkDeduplicator:
     """
     Detecta y elimina chunks duplicados o muy similares.
+
+    La comparación por similitud se aplica SOLO a contenido textual (ver
+    skip_similarity_check en deduplicate); para media basta el hash exacto.
     """
-    
+
     def __init__(self, similarity_threshold: float = 0.85):
         """
         Args:
             similarity_threshold: Umbral de similitud (0-1) para considerar duplicado
         """
         self.similarity_threshold = similarity_threshold
-    
+
     @staticmethod
     def _compute_hash(text: str) -> str:
         """Computa hash MD5 del texto."""
         return hashlib.md5(text.encode()).hexdigest()
-    
+
     @staticmethod
     def _text_similarity(text1: str, text2: str) -> float:
-        """Calcula similitud entre dos textos usando SequenceMatcher."""
-        # Normalizar
+        """
+        Similitud entre dos textos (0-1).
+
+        SequenceMatcher NO es simétrico (su heurística de "junk" depende de cuál
+        secuencia va segunda): para un mismo par se medían 0.85 y 0.77 según el
+        orden, así que el resultado del dedup dependía del orden de la lista. Se
+        canonicaliza el orden de los argumentos para que sea determinista.
+        """
         t1 = text1.lower().strip()
         t2 = text2.lower().strip()
-        
+
         if t1 == t2:
             return 1.0
-        
-        ratio = SequenceMatcher(None, t1, t2).ratio()
-        return ratio
+
+        a, b = (t1, t2) if t1 <= t2 else (t2, t1)
+        return SequenceMatcher(None, a, b).ratio()
     
     def deduplicate(self, chunks: List[Dict]) -> Tuple[List[Dict], Dict[str, Any]]:
         """
@@ -169,14 +189,34 @@ class ChunkDeduplicator:
             # borraba imágenes reales y distintas por "duplicadas". Una imagen
             # sólo es duplicado exacto si coincide el hash completo (ya
             # verificado arriba); nunca por similitud de su descripción.
+            # Las facetas de diagrama sufren el mismo problema por otra vía: su
+            # texto arranca con una plantilla fija ("Diagrama eléctrico - Página N
+            # ... Texto extraído: ...") y el OCR de un plano es casi ruido, así
+            # que el molde domina la comparación. Medido sobre un manual real: 87
+            # pares de diagram_text DISTINTOS superaban 0.85 y se borraban las
+            # facetas OCR de diagramas legítimamente diferentes.
             content_type = str(chunk.get("content_type", "")).lower()
-            skip_similarity_check = content_type in ("image", "table", "diagram_visual")
+            skip_similarity_check = content_type in (
+                "image", "table", "diagram_visual", "diagram_text", "diagram_description",
+            )
 
             # Verificar similitud con chunks anteriores
             is_duplicate = False
             if not skip_similarity_check:
+                text_len = len(text)
                 for unique_chunk in unique:
                     unique_text = str(unique_chunk.get("original_chunk", "")).strip()
+
+                    # Prefiltro por longitud: SequenceMatcher.ratio() está acotado
+                    # por 2*min_len/(len1+len2), así que si las longitudes difieren
+                    # demasiado es imposible alcanzar el umbral. Evita la
+                    # comparación cuadrática costosa en la mayoría de los pares.
+                    other_len = len(unique_text)
+                    if text_len and other_len:
+                        max_possible = 2 * min(text_len, other_len) / (text_len + other_len)
+                        if max_possible < self.similarity_threshold:
+                            continue
+
                     sim = self._text_similarity(text, unique_text)
 
                     if sim >= self.similarity_threshold:

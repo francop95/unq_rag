@@ -12,7 +12,7 @@ Ventajas:
 - Retrieval híbrido que combina ambos índices
 """
 
-import os, json, re
+import os, json, math, re
 from typing import List, Dict, Any, Tuple, Optional
 from PIL import Image
 
@@ -147,6 +147,8 @@ class DualIndexer(AutomaticIndexer):
         print(f"   • Textos: {text_stats['text']}")
         print(f"   • Tablas: {text_stats['table']}")
         print(f"   • Descripciones de imágenes: {text_stats['image_desc']}")
+        print(f"   • Super-chunks: {text_stats['superchunk']}")
+        print(f"   • Preguntas sintéticas: {text_stats['synthetic_question']}")
         print(f"\n🖼️  Índice Visual ({visual_collection.name}):")
         print(f"   • Total documentos: {visual_collection.count()}")
         print(f"   • Imágenes indexadas: {visual_stats['images']}")
@@ -175,7 +177,8 @@ class DualIndexer(AutomaticIndexer):
             (text_stats, visual_stats)
         """
         # Contadores
-        text_stats = {"text": 0, "table": 0, "image_desc": 0}
+        text_stats = {"text": 0, "table": 0, "image_desc": 0,
+                      "synthetic_question": 0, "superchunk": 0}
         visual_stats = {"images": 0}
         table_idx = 0
         image_idx = 0
@@ -218,20 +221,32 @@ class DualIndexer(AutomaticIndexer):
                     if document_id is None:
                         document_id = str(data.get("file_name", "")).split(".")[0] or "document"
 
+                    chunk_id_value = self._meta_str(data.get("chunk_id"))
                     meta = {
-                        "file_name": str(data.get("file_name", "")),
-                        "page_num": str(data.get("page_num", "")),
-                        "chunk_id": str(data.get("chunk_id", "")),
-                        "page_metadata": str(data.get("page_metadata", "")),
+                        "file_name": self._meta_str(data.get("file_name")),
+                        "page_num": self._meta_str(data.get("page_num")),
+                        "chunk_id": chunk_id_value,
+                        "page_metadata": self._meta_str(data.get("page_metadata")),
                         "content_type": content_type,
                         # Metadata jerárquica ⭐ (ChromaDB solo acepta str, int, float, bool)
-                        "document_section": str(data.get("document_section", "")),
-                        "chapter": str(data.get("document_chapter", "")),  # FIX: era "chapter"
-                        "hierarchy_path": str(data.get("hierarchy_path", "")),
-                        "section_number": str(data.get("section_number", "")),
+                        "document_section": self._meta_str(data.get("document_section")),
+                        "chapter": self._meta_str(data.get("document_chapter")),
+                        "hierarchy_path": self._meta_str(data.get("hierarchy_path")),
+                        "section_number": self._meta_str(data.get("section_number")),
                         # Metadata para contexto expandido ⭐
-                        "prev_chunk_id": str(data.get("prev_chunk_id", "")),
-                        "next_chunk_id": str(data.get("next_chunk_id", ""))
+                        "prev_chunk_id": self._meta_str(data.get("prev_chunk_id")),
+                        "next_chunk_id": self._meta_str(data.get("next_chunk_id")),
+                        # Multi-vector: los chunks-pregunta sintéticos apuntan al
+                        # chunk padre; un chunk de contenido es su propio padre. El
+                        # lado de consulta usa parent_chunk_id para colapsar varios
+                        # vectores del mismo contenido en un único resultado.
+                        "parent_chunk_id": self._meta_str(
+                            data.get("parent_chunk_id"), default=chunk_id_value
+                        ),
+                        # Contexto generado por LLM (Contextual Retrieval)
+                        "context_summary": self._meta_str(data.get("context_summary"))[:1000],
+                        # La pregunta que originó este vector (vacío si no aplica)
+                        "question": self._meta_str(data.get("question"))[:500],
                     }
 
                     # ═══════════════════════════════════════════════════
@@ -240,7 +255,8 @@ class DualIndexer(AutomaticIndexer):
                     # ElectricalDiagramProcessor, ya son texto plano) → ÍNDICE TEXTUAL
                     # ═══════════════════════════════════════════════════
 
-                    if content_type in ["text", "table", "superchunk", "diagram_text", "diagram_description", ""]:
+                    if content_type in ["text", "table", "superchunk", "diagram_text",
+                                        "diagram_description", "synthetic_question", ""]:
                         vec = self._extract_vector(data)
                         if vec is None:
                             continue
@@ -263,8 +279,15 @@ class DualIndexer(AutomaticIndexer):
                         text_documents.append(text)
                         text_metadatas.append(meta)
 
+                        # Contadores separados: mezclar las preguntas sintéticas con
+                        # el texto real hacía que el reporte dijera "Textos: 2366"
+                        # cuando solo 207 eran texto del documento.
                         if content_type == "table":
                             text_stats["table"] += 1
+                        elif content_type == "synthetic_question":
+                            text_stats["synthetic_question"] += 1
+                        elif content_type == "superchunk":
+                            text_stats["superchunk"] += 1
                         else:
                             text_stats["text"] += 1
 
@@ -388,6 +411,25 @@ class DualIndexer(AutomaticIndexer):
             )
 
         return text_stats, visual_stats
+
+    @staticmethod
+    def _meta_str(value: Any, default: str = "") -> str:
+        """
+        Normaliza un valor a string apto para metadata de Chroma.
+
+        Trata como ausentes None, NaN y la cadena "nan": los chunks vienen de un
+        DataFrame de pandas, que rellena con NaN los campos que ese chunk no
+        tiene, y `NaN` es truthy (así que un `valor or default` se quedaba con el
+        NaN y guardaba la cadena "nan" en el índice).
+        """
+        if value is None:
+            return default
+        if isinstance(value, float) and math.isnan(value):
+            return default
+        text = str(value).strip()
+        if text.lower() == "nan" or not text:
+            return default
+        return text
 
     def _page_num_for_storage(self, data: Dict[str, Any]) -> int:
         """Convierte page_num (puede ser '1' o rango '1-3' de super-chunks) a int para MultimodalStorage."""

@@ -81,6 +81,30 @@ class HybridChunkingConfig:
 
 
 @dataclass
+class EnrichmentConfig:
+    """
+    Enriquecimiento por LLM durante la ingesta (más costo de ingesta, mejor retrieval).
+
+    - Contextual Retrieval: prepende contexto generado por LLM a cada chunk antes
+      de embeberlo, para que el vector no dependa de que el chunk se explique solo.
+    - Preguntas sintéticas: indexa vectores extra con preguntas que el chunk
+      responde, cerrando la brecha entre el lenguaje del usuario (síntomas) y el
+      del manual (especificaciones).
+    - Pasada dedicada de figuras/tablas: vuelve a llamar al modelo de visión con
+      cada recorte aislado, en vez de confiar en la llamada de página que además
+      está segmentando.
+    """
+    use_contextual_retrieval: bool = True
+    use_synthetic_questions: bool = True
+    max_synthetic_questions: int = 8
+    enrichment_model: str = "gpt-4o-mini"
+    enrichment_concurrency: int = 4
+
+    use_dedicated_figure_pass: bool = True
+    figure_pass_concurrency: int = 3
+
+
+@dataclass
 class DualIndexConfig:
     """Configuración para sistema dual de indexado y retrieval avanzado."""
     # Índices
@@ -117,6 +141,7 @@ class Config:
     openai: OpenAIConfig = None
     hybrid: HybridChunkingConfig = None
     dual: DualIndexConfig = None
+    enrichment: EnrichmentConfig = None
 
     def __post_init__(self):
         """Inicializar subconfiguraciones si no se proporcionan."""
@@ -134,6 +159,8 @@ class Config:
             self.hybrid = HybridChunkingConfig()
         if self.dual is None:
             self.dual = DualIndexConfig()
+        if self.enrichment is None:
+            self.enrichment = EnrichmentConfig()
 
     def to_task_settings_dict(self) -> dict:
         """
@@ -184,6 +211,11 @@ class Config:
             "clip_model": self.dual.clip_model,
             "visual_index_name": self.dual.visual_index_name,
             "media_path": self.dual.media_path,
+
+            # Enriquecimiento por LLM (la pasada de figuras corre dentro del
+            # ChunkingTask, así que necesita viajar en task_settings)
+            "use_dedicated_figure_pass": self.enrichment.use_dedicated_figure_pass,
+            "figure_pass_concurrency": self.enrichment.figure_pass_concurrency,
         }
 
 

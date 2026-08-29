@@ -6,6 +6,7 @@ import pandas as pd
 
 from task import (Task, TaskReturnData)
 from logger import Logger
+from task_utils.chunk_text import readable_chunk_text
 from task_utils.validators.task_validators import TaskSettingPresenceValidator
 
 # OpenAI SDK >=1.x
@@ -146,76 +147,33 @@ class ChunksEmbeddings(Task):
         sub_heading = str(row.get("sub_heading", "") or "").strip()
         page_meta = str(row.get("page_metadata", "") or "").strip()
 
+        # Contexto generado por LLM (Contextual Retrieval): se prepende al texto
+        # embebido para que el vector no dependa de que el chunk se explique solo.
+        context_summary = row.get("context_summary", "")
+        if not isinstance(context_summary, str):
+            context_summary = ""
+        context_summary = context_summary.strip()
+
         def add_context(txt: str) -> str:
-            parts = [p for p in [page_meta, heading, sub_heading, txt] if p]
+            parts = [p for p in [context_summary, page_meta, heading, sub_heading, txt] if p]
             return "\n".join(parts)
 
-        if ctype in ("", "text"):
-            return add_context(str(original))
+        # `embed_text` gana sobre todo: lo usan los chunks-pregunta sintéticos,
+        # cuyo vector debe representar la PREGUNTA mientras el documento
+        # almacenado sigue siendo el contenido real del chunk padre.
+        embed_override = row.get("embed_text", "")
+        if isinstance(embed_override, str) and embed_override.strip():
+            return embed_override.strip()
 
-        # Si es table / image, intentamos parsear el JSON de original_chunk
-        try:
-            j = json.loads(original) if isinstance(original, str) else original
-        except Exception:
-            j = None
+        # Texto legible del chunk según su tipo (fuente única: task_utils.chunk_text)
+        readable = readable_chunk_text(dict(row)).strip()
 
-        if ctype == "table":
-            if isinstance(j, dict):
-                md = j.get("table_markdown")
-                if md:
-                    return add_context(str(md))
-                # aplanar filas si existen
-                rows = ((j.get("table_json") or {}).get("rows")) if isinstance(j.get("table_json"), dict) else None
-                if rows and isinstance(rows, list):
-                    lines = ["\t".join([("" if c is None else str(c)) for c in r]) for r in rows]
-                    return add_context("\n".join(lines[:200]))  # seguridad
-            # fallback: usar original como texto
-            return add_context(str(original))
-
-        if ctype in ("image", "diagram_visual"):
-            if isinstance(j, dict):
-                notes = j.get("notes") or j.get("alt") or ""
-                
-                # notes puede ser un dict con campos estructurados (diagram_type, description, etc.)
-                if isinstance(notes, dict):
-                    # Prioridad: description > diagram_type > repr(dict)
-                    description = notes.get("description", "")
-                    if description:
-                        return add_context(description)
-                    
-                    # Si no hay description, construir texto desde el dict
-                    text_parts = []
-                    if "diagram_type" in notes:
-                        text_parts.append(f"Tipo: {notes['diagram_type']}")
-                    if "components" in notes and isinstance(notes["components"], list):
-                        text_parts.append(f"Componentes: {', '.join(notes['components'][:10])}")  # Primeros 10
-                    if "connections" in notes and isinstance(notes["connections"], list):
-                        text_parts.append(f"Conexiones: {'; '.join(notes['connections'][:10])}")  # Primeras 10
-                    
-                    combined = ". ".join(text_parts)
-                    if combined:
-                        return add_context(combined)
-                    
-                    # Último recurso: JSON stringificado
-                    return add_context(json.dumps(notes, ensure_ascii=False))
-                
-                # notes es string (caso original)
-                elif isinstance(notes, str) and notes.strip():
-                    return add_context(notes)
-            
+        # Una imagen sin ninguna descripción no aporta nada al índice textual: se
+        # omite del embedding (igual queda indexada por CLIP en el índice visual).
+        if not readable:
             return None
 
-        if ctype == "diagram_description":
-            # original_chunk viene como dict directo (no serializado a string)
-            if isinstance(j, dict):
-                description = j.get("description", "")
-                if description:
-                    return add_context(description)
-                return add_context(json.dumps(j, ensure_ascii=False))
-            return add_context(str(original))
-
-        # Desconocido: usa original como texto
-        return add_context(str(original))
+        return add_context(readable)
 
     # ---------------- OpenAI Embeddings (batching + retries) ----------------
     def _get_openai_client(self) -> OpenAI:
@@ -301,4 +259,25 @@ class ChunksEmbeddings(Task):
             output_path = os.path.join(folder_name_embedding, file_name)
 
             with open(output_path, "w", encoding="utf-8") as out_f:
-                out_f.write(json.dumps(dict(df_record), ensure_ascii=False, indent=4))
+                out_f.write(json.dumps(
+                    self._clean_record(df_record), ensure_ascii=False, indent=4
+                ))
+
+    @staticmethod
+    def _clean_record(df_record: pd.Series) -> Dict[str, Any]:
+        """
+        Convierte una fila del DataFrame a dict apto para JSON, quitando los NaN.
+
+        Al concatenar chunks heterogéneos, pandas rellena con NaN los campos que
+        un chunk no tiene (ej. `parent_chunk_id` en un chunk de contenido, o
+        `question` en cualquier chunk que no sea una pregunta sintética). Ese NaN
+        se serializaba como el literal `NaN` y aguas abajo era *truthy*, por lo
+        que terminaba en la metadata de Chroma como la cadena "nan" y rompía las
+        comprobaciones tipo `data.get(campo) or <default>`.
+        """
+        record = {}
+        for key, value in dict(df_record).items():
+            if isinstance(value, float) and pd.isna(value):
+                continue  # se omite: el consumidor aplica su propio default
+            record[key] = value
+        return record

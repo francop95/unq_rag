@@ -292,20 +292,28 @@ class ElectricalDiagramProcessor:
     def create_enhanced_diagram_chunks(
         self,
         diagram_chunk: Dict[str, Any],
-        llm_description: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Crea múltiples chunks para un diagrama (multi-faceta).
-        
+
         Args:
-            diagram_chunk: Chunk original del diagrama
-            llm_description: Descripción estructurada del LLM (opcional)
-            
+            diagram_chunk: Chunk original del diagrama (su `original_chunk` ya trae la
+                descripción del LLM en `notes`, generada en la pasada de visión)
+
         Returns:
             Lista de chunks:
-            1. Visual chunk (para indexado CLIP)
-            2. OCR chunk (componentes + valores)
-            3. Structured chunk (descripción del LLM)
+            1. Visual chunk — descripción del LLM + la imagen (indexado textual Y CLIP)
+            2. OCR chunk — solo si el OCR produjo texto legible (ver _ocr_is_legible)
+
+        Antes había una tercera faceta `_structured` con la descripción del LLM, pensada
+        para el índice textual mientras `_visual` iba solo a CLIP (de ahí la marca
+        `index_type`). Ese ruteo nunca se implementó: DualIndexer rutea por
+        `content_type` y no lee `index_type`, así que `_visual` terminaba también en el
+        índice textual con EL MISMO texto que `_structured`. Medido sobre el índice:
+        102 de 102 grupos de texto idéntico eran exactamente ese par, 568 vectores
+        (13% del índice) sin aportar nada. Se eliminó `_structured` en vez de arreglar
+        el ruteo porque `_visual` la domina: mismo texto y además lleva `media_path`,
+        que es lo que permite mostrarle la imagen al usuario.
         """
         chunks = []
         
@@ -324,21 +332,22 @@ class ElectricalDiagramProcessor:
             "is_diagram": True
         }
         
-        # 1. CHUNK VISUAL (para CLIP)
+        # 1. CHUNK VISUAL: descripción del LLM + imagen. Va al índice textual (por su
+        #    descripción) y al visual (embedding CLIP de la imagen).
         visual_chunk = {
             **diagram_chunk,
             "chunk_id": f"{diagram_chunk.get('chunk_id')}_visual",
             "content_type": "diagram_visual",
-            "index_type": "visual",  # Marca para indexado CLIP
             **base_metadata
         }
         chunks.append(visual_chunk)
-        
-        # 2. CHUNK OCR (componentes + valores)
+
+        # 2. CHUNK OCR: texto impreso sobre el plano (etiquetas de bornes, valores),
+        #    para que BM25 lo encuentre por keyword exacto. Solo si el OCR sirvió.
         if image_path and self.use_ocr:
             ocr_data = self.extract_ocr_text(image_path)
-            
-            if ocr_data["raw_text"]:
+
+            if ocr_data["raw_text"] and self._ocr_is_legible(ocr_data["raw_text"]):
                 # Construir texto searchable
                 searchable_parts = [
                     f"Diagrama eléctrico - Página {base_metadata['page_num']}",
@@ -358,27 +367,79 @@ class ElectricalDiagramProcessor:
                     "chunk_id": f"{diagram_chunk.get('chunk_id')}_ocr",
                     "original_chunk": searchable_text,
                     "content_type": "diagram_text",
-                    "index_type": "text",  # Para indexado textual
+                    # No se le generan preguntas sintéticas: es una bolsa de etiquetas,
+                    # no prosa. Ver skip_synthetic_questions en ContextualEnricher.
+                    "skip_synthetic_questions": True,
                     "ocr_data": ocr_data,
                     "image_path": image_path,
                     **base_metadata
                 }
                 chunks.append(ocr_chunk)
-        
-        # 3. CHUNK ESTRUCTURADO (descripción GPT-4o)
-        if llm_description:
-            structured_chunk = {
-                "chunk_id": f"{diagram_chunk.get('chunk_id')}_structured",
-                "original_chunk": llm_description,
-                "content_type": "diagram_description",
-                "index_type": "text",
-                "image_path": image_path,
-                **base_metadata
-            }
-            chunks.append(structured_chunk)
-        
+            elif ocr_data["raw_text"]:
+                logger.info(
+                    f"OCR descartado por ilegible (p{base_metadata['page_num']}): "
+                    f"{ocr_data['raw_text'][:60]!r}"
+                )
+
         logger.info(f"Diagrama procesado → {len(chunks)} chunks multi-faceta")
         return chunks
+
+    # Criterio de legibilidad del OCR. Palabra = token puramente alfabético; se cuentan
+    # las de 4+ letras dentro de una racha de tokens alfabéticos consecutivos.
+    #
+    # Se llegó acá midiendo sobre los 98 chunks OCR reales del corpus, después de
+    # descartar dos reglas más simples:
+    #
+    #   - "racha de N palabras de 3+ letras": demasiado estricta (3 de 98). Las palabras
+    #     funcionales del español ("de", "la", "y", "en") tienen 1-2 letras y cortaban la
+    #     racha todo el tiempo: "Figura 1.1: A la izquierda, secadero de pastas" daba 2.
+    #   - "racha de N palabras de cualquier largo": demasiado laxa (43 de 98). El ruido
+    #     de una sola letra es el patrón dominante en este OCR, y "3 q 2 a o a 0 it if"
+    #     pasaba como si fuera texto.
+    #
+    # Con la regla actual pasan 7 de 98, y los 7 son útiles: etiquetas reales del tablero
+    # ("DRIVER RESISTENCIAS ... EXRTACTOR"), epígrafes de figura ("Figura 1.1: A la
+    # izquierda, secadero de pastas eléctrico") e interruptores térmicos con su amperaje
+    # ("Inter. Ter. In: 254 In: 15A"). Es estable: con 2 o con 3 palabras largas da el
+    # mismo resultado.
+    #
+    # No se usan los campos `values`/`components` como criterio alternativo porque en
+    # este corpus son falsos positivos del ruido: "Power: w" (solo la letra), "Voltage:"
+    # vacío, "Current: 3 a". El patrón numérico matchea basura.
+    _MIN_LONG_WORDS_IN_RUN = 2
+    _MIN_WORD_LENGTH = 4
+    _WORD_RE = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+")
+    _STRIP_CHARS = ".,;:()[]\"'“”|—-"
+
+    @classmethod
+    def _ocr_is_legible(cls, raw_text: str) -> bool:
+        """
+        True si el OCR contiene una frase legible, no tokens sueltos.
+
+        El OCR de estos recortes falla casi siempre (son planos de línea escaneados, no
+        texto), y el problema no era solo que el chunk fuera inútil: el enriquecedor le
+        generaba ~5 preguntas sintéticas a partir del rótulo "Diagrama eléctrico -
+        Página N", y salían plantillas genéricas idénticas entre páginas distintas que
+        matcheaban cualquier consulta eléctrica. Eso hacía que la PORTADA del manual
+        apareciera como respuesta a "mostrame el diagrama de bornes de control".
+
+        Se mide por rachas y no por proporción global para no descartar un epígrafe
+        legible rodeado de ruido, que es justamente el caso útil.
+        """
+        best, run = 0, []
+
+        def cerrar(actual):
+            return max(best, sum(1 for w in actual if len(w) >= cls._MIN_WORD_LENGTH))
+
+        for token in (raw_text or "").split():
+            limpio = token.strip(cls._STRIP_CHARS)
+            if limpio and cls._WORD_RE.fullmatch(limpio):
+                run.append(limpio)
+            else:
+                best = cerrar(run)
+                run = []
+        best = cerrar(run)
+        return best >= cls._MIN_LONG_WORDS_IN_RUN
     
     def enhance_diagram_prompt(self, base_prompt: str) -> str:
         """

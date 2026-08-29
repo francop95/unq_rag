@@ -5,8 +5,9 @@ import os
 from typing import Optional
 from dotenv import dotenv_values
 from .config import (
-    Config, PathConfig, IndexConfig, ChunkingConfig, 
-    EmbeddingConfig, OpenAIConfig, HybridChunkingConfig, DualIndexConfig
+    Config, PathConfig, IndexConfig, ChunkingConfig,
+    EmbeddingConfig, OpenAIConfig, HybridChunkingConfig, DualIndexConfig,
+    EnrichmentConfig
 )
 
 
@@ -112,7 +113,9 @@ class ConfigReader:
         
         # OpenAI
         openai = OpenAIConfig(
-            openai_key=self.get("openai_key", ""),
+            # Nombre canónico: OPENAI_API_KEY. `openai_key` sigue funcionando
+            # como alias para no romper los .env anteriores.
+            openai_key=self.get("OPENAI_API_KEY") or self.get("openai_key", ""),
             openai_url=self.get("openai_url") or None,  # None si está vacío
         )
         
@@ -150,6 +153,17 @@ class ConfigReader:
             context_window_size=self.get_int("context_window_size", 1),
         )
         
+        # Enriquecimiento por LLM (más costo de ingesta, mejor retrieval)
+        enrichment = EnrichmentConfig(
+            use_contextual_retrieval=self.get_bool("use_contextual_retrieval", True),
+            use_synthetic_questions=self.get_bool("use_synthetic_questions", True),
+            max_synthetic_questions=self.get_int("max_synthetic_questions", 8),
+            enrichment_model=self.get("enrichment_model", "gpt-4o-mini"),
+            enrichment_concurrency=self.get_int("enrichment_concurrency", 4),
+            use_dedicated_figure_pass=self.get_bool("use_dedicated_figure_pass", True),
+            figure_pass_concurrency=self.get_int("figure_pass_concurrency", 3),
+        )
+
         return Config(
             paths=paths,
             index=index,
@@ -158,6 +172,7 @@ class ConfigReader:
             openai=openai,
             hybrid=hybrid,
             dual=dual,
+            enrichment=enrichment,
         )
 
 

@@ -17,10 +17,12 @@ import os
 import sys
 from pathlib import Path
 
-# Añadir src al path
-current_dir = Path(__file__).parent
-src_dir = current_dir / "src"
+# Añadir src al path (el script vive en scripts/, así que src está un nivel arriba)
+project_root = Path(__file__).parent.parent
+src_dir = project_root / "src"
 sys.path.insert(0, str(src_dir))
+# Las rutas de la config son relativas a la raíz del proyecto
+os.chdir(project_root)
 
 from tasks.indexing_task_dual import DualIndexer
 from config.config_reader import load_config
