@@ -47,7 +47,9 @@ class LanguageModel:
             self.OPENAI_MODEL = data.get("openai_model", "gpt-5")
             self.OPENAI_EMB_MODEL = data.get("openai_emb_model", "text-embedding-3-large")
             # API key: prioridad data → env
-            api_key = data.get("openai_keys") or os.getenv("openai_key")
+            api_key = (data.get("openai_keys")
+                       or os.getenv("OPENAI_API_KEY")
+                       or os.getenv("openai_key"))  # alias legado
             if not api_key:
                 raise RuntimeError("OPENAI_API_KEY no configurado (env o data['openai_api_key'])")
             self._openai = _OpenAI(api_key=api_key,
@@ -55,9 +57,9 @@ class LanguageModel:
                                     max_retries=0)          # <- dejamos reintentos a tenacity (más controlados))
             self.model = self._openai  # para mantener una referencia pública
 
-        # -------- AZURE (tu código original; ojo: API antigua para chat) --------
+        # -------- AZURE (rama legada: usa la API antigua para chat) --------
         elif self.model_type == "azure":
-            import openai  # tu rama legada usa el paquete con API vieja
+            import openai  # esta rama depende del paquete con la API <1.0
             self.AZURE_MODEL = data["azure_oai_model1"]
             self.AZURE_OAI_KEY = data["azure_oai_api_key"]
             self.AZURE_OAI_BASE = data["azure_oai_base"]
@@ -70,8 +72,8 @@ class LanguageModel:
             openai.api_base = self.AZURE_OAI_BASE
             openai.api_version = self.AZURE_OAI_API_VERSION
 
-            # ⚠️ Esto es API legacy para Chat; si te migas a openai>=1.x en Azure,
-            # deberías usar AzureOpenAI del SDK nuevo.
+            # ⚠️ API legacy para Chat. Al migrar a openai>=1.x en Azure hay que
+            # pasar a AzureOpenAI del SDK nuevo.
             self.model = openai.ChatCompletion(
                 engine=self.AZURE_MODEL,
                 api_token=self.AZURE_OAI_KEY,

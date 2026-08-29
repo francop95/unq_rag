@@ -10,7 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Cliente OpenAI
-openai_client = OpenAI(api_key=os.getenv("OPEN_AI_KEY"))
+openai_client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_KEY")  # alias legado
+)
 
 def get_embedding(text):
     """Generar embedding con text-embedding-3-large"""
