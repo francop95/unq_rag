@@ -1,0 +1,51 @@
+# Dependencias de runtime de la API, para la imagen Docker.
+#
+# No es un `pip freeze`: son solo los paquetes que app.py carga de verdad
+# (verificado importando la app y mirando sys.modules), con las versiones que
+# tiene instaladas el venv que funciona.
+#
+# requirements.txt (el freeze del entorno local) NO sirve para una imagen: trae
+# PyQt5, los SDK de Azure/Google/Office365, Jupyter, moviepy, tabula-py (que
+# necesita una JVM), camelot/ghostscript, y dos paquetes que ni instalan en
+# Linux — `infi.systray` (Windows) y `appnope` (macOS).
+#
+# Lo que queda afuera a propósito:
+#   - torch + sentence-transformers (~2,5 GB): solo los usan el reranking
+#     cross-encoder y el retrieval visual CLIP, y los dos están en False por
+#     medición (ver Configuration.USE_RERANKING / USE_VISUAL_RETRIEVAL). Sin el
+#     paquete, el código degrada solo: los imports están en try/except y las
+#     guardas chequean disponibilidad. Para activarlos hay que construir con
+#     --build-arg WITH_ML=1.
+#   - google-genai: la rama Gemini de LanguageModels, también opcional.
+
+# Servidor
+Flask==3.1.3
+Werkzeug==3.1.8
+gunicorn==23.0.0
+
+# Índice vectorial y LLM
+chromadb==1.0.21
+openai==1.109.1
+tiktoken==0.13.0
+
+# Datos
+#
+# scikit-learn y scipy NO van (171 MB entre los dos): ningún módulo de la API
+# los importa. Aparecían en el entorno local porque los arrastra
+# sentence-transformers, que acá está excluido. Verificado desinstalándolos en
+# la imagen: app.py importa, ChromaConnection también y las consultas a Chroma
+# siguen funcionando.
+numpy==2.2.6
+pandas==2.3.2
+
+# Retrieval sparse y fuzzy
+rank-bm25==0.2.2
+Levenshtein==0.23.0
+
+# HTTP y utilidades
+httpx==0.28.1
+requests==2.32.5
+aiohttp==3.9.1
+aiohttp-retry==2.9.1
+tenacity==8.2.3
+python-dotenv==1.0.1

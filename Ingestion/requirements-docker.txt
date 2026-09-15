@@ -1,0 +1,39 @@
+# Dependencias de runtime del pipeline de ingesta, para la imagen Docker.
+#
+# Igual que en API/: no es el freeze del entorno local (ese trae PyQt5, los SDK
+# de Azure/Office365, Jupyter, moviepy, tabula-py con su JVM, camelot con
+# ghostscript, y `infi.systray`, que no instala en Linux). Son los paquetes que
+# el pipeline importa de verdad, con las versiones del venv que funciona.
+#
+# torch SÍ va acá, a diferencia de la API: el indexado dual necesita CLIP para
+# los embeddings visuales. La rueda de CPU se instala desde el índice de PyTorch
+# en el Dockerfile, porque la de PyPI arrastra CUDA y suma varios GB inútiles.
+
+# PDF, visión por computadora y OCR
+PyMuPDF==1.23.5
+pytesseract==0.3.13
+pillow==11.3.0
+# headless: la variante normal pide libGL y compañía, y acá no hay pantalla.
+opencv-python-headless==4.12.0.88
+
+# Índice vectorial y LLM
+chromadb==1.0.21
+openai==1.109.1
+
+# Chunking
+langchain==0.3.27
+langchain-text-splitters==0.3.11
+
+# Datos y embeddings
+numpy==2.2.6
+pandas==2.3.2
+scikit-learn==1.7.2
+sentence-transformers==2.5.1
+
+# Retrieval sparse y fuzzy (los usa el buscador CLI de scripts/)
+rank-bm25==0.2.2
+thefuzz==0.20.0
+
+# Utilidades
+httpx==0.28.1
+python-dotenv==1.0.1

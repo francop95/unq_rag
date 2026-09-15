@@ -1,0 +1,186 @@
+# Orquestación de los cuatro servicios del sistema RAG.
+#
+#   web            nginx: sirve el frontend y hace de proxy a las dos APIs
+#   api            API multimodal        (índice multimodal_documents)
+#   api-baseline   API solo texto + OCR  (índice baseline_documents)
+#   ingestion      pipeline de ingesta, batch (profile "ingest")
+#
+# Arrancar el sistema:      docker compose up -d
+# Ver la app:               http://localhost:8080
+# Construir los índices:    docker compose --profile ingest run --rm ingestion
+#                           docker compose --profile ingest run --rm ingestion-baseline
+#
+# Requiere un `.env` en la raíz con OPENAI_API_KEY (ver .env.docker.example).
+
+name: unq-rag
+
+# El bloque de configuración que comparten las dos APIs. Son la misma imagen
+# con distinto comando y distinto índice.
+x-api-base: &api-base
+  build:
+    context: .
+    dockerfile: API/Dockerfile
+    args:
+      # 1 para incluir torch + sentence-transformers (reranking cross-encoder y
+      # retrieval visual CLIP). Suma ~2,5 GB y hoy esas features están en False
+      # por medición, así que el default es dejarlas afuera.
+      WITH_ML: ${WITH_ML:-0}
+  image: unq-rag/api:latest
+  restart: unless-stopped
+  environment:
+    OPENAI_API_KEY: ${OPENAI_API_KEY:?falta OPENAI_API_KEY en el .env de la raíz}
+    # El navegador ya no habla directo con la API: entra por nginx, mismo
+    # origen. Se deja acotado igual, por si se expone el puerto a la red.
+    CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:8080}
+    # Si se define, /get_response exige `Authorization: Bearer <token>`.
+    # Vacío = abierta, que es lo razonable en local.
+    API_TOKEN: ${API_TOKEN:-}
+  volumes:
+    # Lectura y escritura, y no es negociable aunque "consultar" suene a solo
+    # lectura. Con `:ro` la API arranca pero no sirve: Chroma 1.x falla con
+    # "Could not connect to tenant default_tenant" porque necesita escribir el
+    # SQLite (WAL) para abrirlo. Y además la caché de respuestas es una
+    # colección DENTRO del mismo Chroma (AppSettings__ChromaCacheIndex), así que
+    # la API escribe ahí por diseño.
+    - ./Ingestion/data:/app/Ingestion/data
+  networks: [ragnet]
+
+services:
+  # ------------------------------------------------------------------ frontend
+  web:
+    build:
+      context: .
+      dockerfile: Frontend/Dockerfile
+    image: unq-rag/web:latest
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+      api-baseline:
+        # La línea base puede no estar lista (o no tener índice todavía) y eso
+        # no debería impedir usar el asistente: la pestaña "Comparar" muestra
+        # el error en su columna y el resto de la app funciona igual.
+        condition: service_started
+    networks: [ragnet]
+
+  # ------------------------------------------------------- API multimodal
+  api:
+    <<: *api-base
+    container_name: unq-rag-api
+    command:
+      - gunicorn
+      - --bind=0.0.0.0:5000
+      - --workers=1
+      - --threads=8
+      - --timeout=300
+      - --access-logfile=-
+      - --error-logfile=-
+      - app:app
+    # Se publica para poder pegarle con curl o con el eval; el frontend no lo
+    # necesita (va por nginx).
+    #
+    # Atado a loopback por defecto: `curl localhost:5000` sigue funcionando,
+    # pero no queda accesible desde otras máquinas. En un servidor expuesto eso
+    # importa: el único puerto que debe salir a internet es el de nginx, que es
+    # el que tiene la autenticación. Para abrirlo en la LAN: API_BIND=0.0.0.0
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-5000}:5000"
+    healthcheck:
+      # La API no tiene endpoint de salud y /get_response cuesta una llamada a
+      # OpenAI, así que se comprueba que el puerto acepte conexiones. Devolver
+      # 404 en / es correcto: solo expone /get_response y /media.
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',5000),timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      # Arranca leyendo el índice y armando BM25 en memoria: tarda un rato.
+      start_period: 180s
+      retries: 5
+
+  # -------------------------------------------- API línea base (texto + OCR)
+  api-baseline:
+    <<: *api-base
+    container_name: unq-rag-api-baseline
+    # A diferencia de `api`, no se reinicia sola. app_baseline.py sale con un
+    # mensaje explícito si todavía no existe data/chroma_index_baseline, y
+    # reintentar no lo arregla: hay que correr la ingesta de la línea base.
+    # Con `unless-stopped` eso sería un bucle de reinicios que tapa el log.
+    #   docker compose logs api-baseline   ← dice qué falta
+    restart: "no"
+    command:
+      - gunicorn
+      - --bind=0.0.0.0:5001
+      - --workers=1
+      - --threads=8
+      - --timeout=300
+      - --access-logfile=-
+      - --error-logfile=-
+      - app_baseline:app
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?falta OPENAI_API_KEY en el .env de la raíz}
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:8080}
+      API_TOKEN: ${API_TOKEN:-}
+      # app_baseline.py lee estas para saber a qué colección apuntar.
+      BASELINE_INDEX_NAME: ${BASELINE_INDEX_NAME:-baseline_documents}
+      BASELINE_INDEX_PATH: /app/Ingestion/data/chroma_index_baseline
+      BASELINE_PORT: "5001"
+      # Modelo que redacta la respuesta de la línea base. El default de
+      # app_baseline.py es gpt-4-0613, que no tiene visión. Poner gpt-4.1 acá
+      # iguala el modelo de las dos versiones y deja la ingesta como única
+      # variable.
+      BASELINE_OPENAI_MODEL: ${BASELINE_OPENAI_MODEL:-gpt-4-0613}
+      BASELINE_MAX_TOKENS: ${BASELINE_MAX_TOKENS:-2000}
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_BASELINE_PORT:-5001}:5001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',5001),timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      start_period: 180s
+      retries: 5
+
+  # ------------------------------------------------------ ingesta multimodal
+  # Batch, no servicio: no arranca con `up`. Se corre a demanda.
+  ingestion:
+    build:
+      context: .
+      dockerfile: Ingestion/Dockerfile
+    image: unq-rag/ingestion:latest
+    profiles: ["ingest"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?falta OPENAI_API_KEY en el .env de la raíz}
+    volumes:
+      # Lectura y escritura: es quien produce el índice y los recortes.
+      - ./Ingestion/data:/app/Ingestion/data
+      # ConfigReader usa dotenv_values(), que lee SOLO el archivo y nunca el
+      # entorno del proceso. Sin montar este .env, el pipeline no vería ninguna
+      # de las claves de tuning (chunk_size, modelos, flags de enriquecimiento).
+      - ./Ingestion/.env:/app/Ingestion/.env:ro
+      # Los pesos de CLIP, para no rebajarlos en cada corrida.
+      - hf-cache:/models
+    command: ["python", "src/main_multimodal.py"]
+    networks: [ragnet]
+
+  # --------------------------------------- ingesta línea base (texto + OCR)
+  ingestion-baseline:
+    build:
+      context: .
+      dockerfile: Ingestion/Dockerfile
+    image: unq-rag/ingestion:latest
+    profiles: ["ingest"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?falta OPENAI_API_KEY en el .env de la raíz}
+    volumes:
+      - ./Ingestion/data:/app/Ingestion/data
+      - ./Ingestion/.env:/app/Ingestion/.env:ro
+      - hf-cache:/models
+    command: ["python", "src/main_text_baseline.py"]
+    networks: [ragnet]
+
+networks:
+  ragnet:
+    driver: bridge
+
+volumes:
+  hf-cache:

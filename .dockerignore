@@ -1,0 +1,50 @@
+# Contexto de build: sin esto se mandan ~4,5 GB al daemon (venvs, node_modules,
+# el índice y los PDF) y cada build tarda minutos en el "sending build context".
+
+# Entornos virtuales y dependencias
+**/.venv
+**/.venv_embed
+**/.venv_reader
+**/venv
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+
+# Datos de runtime: van por volumen, no dentro de la imagen
+Ingestion/data
+API/data
+Ingestion/old
+Ingestion/test
+
+# Build del frontend (se genera dentro de la imagen)
+Frontend/dist
+Frontend/dist-ssr
+
+# Secretos: nunca dentro de una imagen
+**/.env
+**/.env.local
+**/.env.*.local
+!**/.env.example
+
+# Caches y artefactos
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/htmlcov
+**/.coverage
+**/*.log
+
+# Git y editores
+.git
+.gitignore
+**/.vscode
+**/.idea
+**/.DS_Store
+
+# Docs e imágenes del repo (no hacen falta en runtime)
+*.md
+!Frontend/README.md
+*.gif
+*.webp
+*.png
+Ingestion/docs

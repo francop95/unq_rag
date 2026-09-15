@@ -5,7 +5,10 @@
 # Entornos y secretos (red de seguridad global; cada subproyecto tiene el suyo)
 .env
 .env.*
+# Las plantillas sí se versionan. `!.env.example` no alcanza: `.env.*` también
+# matchea `.env.docker.example`, así que hay que negar el patrón completo.
 !.env.example
+!.env*.example
 .venv/
 venv/
 

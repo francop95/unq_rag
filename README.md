@@ -139,6 +139,30 @@ Dos decisiones que no son las de manual y están documentadas en el código:
 
 ## Puesta en marcha
 
+Hay dos caminos: **Docker**, que levanta todo con un comando, o la instalación
+nativa, que es la que conviene para desarrollar.
+
+### Con Docker (recomendado para usarlo)
+
+```bash
+cp .env.docker.example .env        # y poner OPENAI_API_KEY
+docker compose build
+docker compose up -d
+```
+
+La app queda en <http://localhost:8080>. La primera vez hay que construir los
+índices:
+
+```bash
+docker compose --profile ingest run --rm ingestion            # multimodal
+docker compose --profile ingest run --rm ingestion-baseline   # solo texto + OCR
+```
+
+nginx sirve el frontend y hace de proxy a las dos APIs, así que no hay CORS que
+configurar ni puertos que recordar. El detalle está en [DOCKER.md](DOCKER.md).
+
+### Nativo (recomendado para desarrollar)
+
 **Requisitos:** Python 3.12, Node 20+, una API key de OpenAI y `tesseract` instalado si
 vas a procesar planos escaneados (`brew install tesseract` en macOS).
 

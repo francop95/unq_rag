@@ -1,0 +1,11 @@
+# Extra para la variante con reranking cross-encoder y retrieval visual CLIP.
+#
+# Se instala solo con `--build-arg WITH_ML=1`. Suma ~2,5 GB a la imagen, así que
+# vale la pena únicamente si vas a poner en True USE_RERANKING o
+# USE_VISUAL_RETRIEVAL en Configuration.py — que hoy están en False porque se
+# midieron y no mejoran el recall en este corpus.
+#
+# La versión de torch para CPU se instala desde el índice de PyTorch en el
+# Dockerfile: la rueda por defecto arrastra las de CUDA (varios GB más) y acá no
+# hay GPU.
+sentence-transformers==5.1.0
