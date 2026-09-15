@@ -66,6 +66,99 @@ class Configuration:
     # Reproducir con: python eval/run_eval.py --variant min_context_similarity_score=0.35
     MIN_CONTEXT_SIMILARITY_SCORE = 0.50
 
+    # Gate RELATIVO: descarta lo que quede más de este margen por debajo del
+    # mejor resultado. Complementa al umbral fijo de arriba —el fijo decide SI
+    # hay contexto, este decidiría cuánto de ese contexto aporta.
+    #
+    # DESACTIVADO por medición. Se implementó para resolver una queja concreta y
+    # real: en "Mostrame el termostato utilizado" los 6 primeros resultados eran
+    # termostatos (72.9 a 61.4) y los puestos 7-8 los ocupaban tablas de
+    # parámetros del variador al 54% —entran por preguntas sintéticas generadas
+    # de filas como "Temp. variador d022"— por encima de chunks de termostato al
+    # 52%. Con margen 0.15 el piso queda en 57.9 y el ruido desaparece.
+    #
+    # Pero el eval dice que el remedio es peor (54 consultas en tema):
+    #
+    #   métrica                    OFF      ON
+    #   recall@1/@3/@5          64.8/79.6/85.2   idénticos
+    #   recall@10                88.9%    87.0%   <- pierde 1 consulta
+    #   respuesta presente       95.3%    93.0%   <- pierde 1 respuesta
+    #   no llega nunca            6/54     7/54
+    #   chunks con media (med)       6        4   <- la mitad de la evidencia visual
+    #
+    # El top-5 no cambia: el gate solo recorta los puestos 6-10, y ahí a veces
+    # está la respuesta. Por eso el costo cae justo en recall@10 y en la media.
+    #
+    # Y no hay margen que sirva: en el caso del termostato el ruido puntúa 54.4 y
+    # la cola legítima 52.8, a 1.6 puntos. Cualquier corte por score que elimine
+    # uno elimina al otro. El rasgo que los distingue no es el score, es el
+    # DOCUMENTO: un tope por archivo (o exigir más score a documentos distintos
+    # del top-1) es la vía que puede funcionar donde esta no.
+    #
+    # Se deja como flag medible, igual que USE_BM25 y USE_RERANKING:
+    #   python eval/run_eval.py --variant relative_gate_enabled=true
+    RELATIVE_GATE_ENABLED = False
+    RELATIVE_GATE_MARGIN = 0.15
+
+    # Gate CRUZADO ENTRE DOCUMENTOS: un candidato de un archivo distinto al del
+    # top-1 tiene que estar a menos de este margen del top-1. Los del MISMO
+    # archivo no se tocan.
+    #
+    # Es el gate relativo de arriba corregido. Ese falló porque cortaba por score
+    # a secas, y el score no separa la señal del ruido: en "Mostrame el
+    # termostato utilizado" el ruido del variador puntúa 54.4 y la cola legítima
+    # de la Tesis 52.8, a 1.6 puntos. Lo que sí los distingue es el DOCUMENTO,
+    # combinado con la distancia al top-1:
+    #
+    #   consulta                     top-1               otro doc        delta
+    #   "termostato utilizado"       Tesis      72.9     variador 54.4   -18.5  ruido
+    #   "conector Ethernet DI/DO"    conexTben  71.6     TBEN cat 69.8    -1.8  legítimo
+    #
+    # Con margen 0.10 el primero se corta y el segundo sobrevive, sin tocar
+    # ninguno de los resultados del mismo documento —que es donde el gate
+    # relativo perdía recall@10 y la mitad de la evidencia visual.
+    #
+    # Medido sobre el eval set (54 consultas en tema):
+    #
+    #   métrica              OFF     relativo   CRUZADO
+    #   recall@1/@3/@5   64.8/79.6/85.2   iguales   iguales
+    #   recall@10            88.9%     87.0%     88.9%
+    #   MRR                  0.734     0.732     0.735
+    #   no llega nunca        6/54      7/54      6/54
+    #   respuesta presente   95.3%     93.0%     93.0%
+    #   chunks con media (med)   6         4         5
+    #   gate fuera de tema     5/5       5/5       5/5
+    #
+    # Recupera todo lo que el relativo perdía salvo "respuesta presente", y esos
+    # 2.3 puntos son un ARTEFACTO del métrico, verificado. La única consulta que
+    # cambia es "¿Cuántos canales de IO-Link trae el TBEN-L4-8IOL?", y con el
+    # gate activado el resultado es estrictamente MEJOR: las 9 filas son del
+    # catálogo TBEN (el documento correcto) y desaparecen 3 chunks de la Tesis
+    # que no hablan de IO-Link.
+    #
+    # Por qué el métrico dice lo contrario: esa answer_key ("8 canales maestros
+    # IO-Link") no tiene ancla —ni código ni valor con unidad—, así que
+    # answer_check cae a solape de palabras sobre la CONCATENACIÓN de los
+    # chunks. Con 10 chunks el solape llega al 67% y da positivo; con 9 baja al
+    # 33%. Comprobado chunk por chunk: en ninguna de las dos configuraciones hay
+    # un solo chunk que contenga la respuesta. El positivo con el gate apagado
+    # lo producía el ruido, aportando vocabulario al pool.
+    #
+    # El costo real es la mediana de chunks con media (6 -> 5): recortar
+    # resultados de otros documentos a veces se lleva uno que traía imagen.
+    #
+    # Reproducir: python eval/run_eval.py --variant cross_doc_gate_enabled=false
+
+    # Cuántos candidatos se conservan SIEMPRE, aunque el margen los recorte.
+    #
+    # Un margen fijo solo tiene un modo de falla, y es cuando el top-1 es
+    # excepcionalmente bueno. Medido con "¿Cómo reseteo el variador a valores de
+    # fábrica?": top-1 al 95% y el resto en 75 o menos, así que el piso quedaba
+    # en 80 y sobrevivía UN solo chunk. Un procedimiento rara vez cabe en un
+    # chunk —para eso existe la expansión de contexto—, así que recortar a 1 es
+    # peor que dejar pasar algo flojo.
+    RELATIVE_GATE_MIN_RESULTS = 3
+
     #########################################################################################
 
     ### RETRIEVAL AVANZADO (paridad con Ingestion/scripts/hybrid_multimodal_search.py)

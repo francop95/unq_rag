@@ -67,6 +67,14 @@ class ChromaConnection:
         # umbral de relevancia (gate para "usar solo los planos" en RetrieverQna)
         self.min_context_similarity_score: float = float(data.get("min_context_similarity_score", 0.0))
 
+        # Gate relativo al mejor resultado, complemento del umbral fijo de arriba
+        # (ver search_vectors y Configuration.RELATIVE_GATE_*).
+        self.relative_gate_enabled: bool = bool(data.get("relative_gate_enabled", True))
+        self.relative_gate_margin: float = float(data.get("relative_gate_margin", 0.15))
+        self.relative_gate_min_results: int = int(data.get("relative_gate_min_results", 3))
+        self.cross_doc_gate_enabled: bool = bool(data.get("cross_doc_gate_enabled", True))
+        self.cross_doc_gate_margin: float = float(data.get("cross_doc_gate_margin", 0.10))
+
         # retrieval avanzado (todos opcionales vía config, degradan a solo-dense si fallan)
         # Ver el comentario del gate de relevancia y FUSION_* en Configuration: sin
         # estas dos, BM25 y el retrieval visual son inertes por construcción.
@@ -592,6 +600,94 @@ class ChromaConnection:
                 # setear, así ModelCompletion usa su default (True) -> los planos
                 # quedan como único fallback, que es justamente el caso pedido.
                 return pd.DataFrame()
+
+            # 2.b) GATE RELATIVO al mejor resultado.
+            #
+            # El umbral fijo decide si hay contexto; este decide cuánto de ese
+            # contexto vale la pena. Descarta lo que quede más de
+            # `relative_gate_margin` por debajo del top-1.
+            #
+            # Por qué hace falta, medido con "Mostrame el termostato utilizado":
+            # el top-6 era todo de la Tesis y todo sobre termostatos (72.9 a
+            # 61.4), pero para llenar top_k=10 el pipeline descendía hasta el 54%
+            # y ahí entraban dos páginas del manual del variador —tablas de
+            # parámetros con "Temp. variador d022", cuyas preguntas sintéticas se
+            # parecen a la consulta— por encima de chunks de termostato al 52%.
+            #
+            # La causa de fondo es la composición del índice: el 87% son
+            # preguntas sintéticas y solo las del variador son el 57% del total,
+            # así que cualquier descenso en el ranking cae en su territorio.
+            # Muchas de ellas apuntan al MISMO contenido padre, así que al
+            # colapsar duplicados quedan pocos resultados únicos arriba y el
+            # relleno viene de abajo.
+            #
+            # Se hace relativo y no subiendo el umbral fijo a propósito: ese está
+            # calibrado con mediciones (en tema 0.640-0.947, fuera de tema
+            # 0.232-0.440) y subirlo rechazaría preguntas legítimas, que es el
+            # error más caro. Un gate relativo se adapta: con un top-1 fuerte
+            # recorta agresivo, y con uno flojo no recorta nada.
+            if self.relative_gate_enabled and self.relative_gate_margin > 0:
+                mejor = max(c.get("dense_similarity", 0.0) for c in relevant)
+                piso = mejor - self.relative_gate_margin
+                # Se conservan los que llegaron por BM25/CLIP sin señal densa, por
+                # el mismo motivo que en el gate absoluto: filtrarlos por
+                # dense_similarity los volvería inertes.
+                filtrados = [
+                    c for c in relevant
+                    if c.get("dense_similarity", 0.0) >= piso
+                    or "bm25_rank" in c or "visual_rank" in c
+                ]
+                # Piso de resultados: si el margen recortó por debajo del mínimo,
+                # se rellena con los mejores descartados en orden de similitud.
+                if len(filtrados) < min(self.relative_gate_min_results, len(relevant)):
+                    filtrados = sorted(
+                        relevant,
+                        key=lambda c: c.get("dense_similarity", 0.0),
+                        reverse=True,
+                    )[:self.relative_gate_min_results]
+
+                if len(filtrados) < len(relevant):
+                    logger.info(
+                        f"[{qid}][Chroma] Gate relativo: top={mejor:.3f}, "
+                        f"piso={piso:.3f} -> {len(filtrados)}/{len(relevant)} candidatos"
+                    )
+                # El top-1 sobrevive por construcción, así que nunca queda vacío.
+                relevant = filtrados
+
+            # 2.c) GATE CRUZADO ENTRE DOCUMENTOS.
+            #
+            # Un candidato de un archivo distinto al del top-1 tiene que estar a
+            # menos de `cross_doc_gate_margin` del top-1. Los del mismo archivo
+            # pasan sin condición.
+            #
+            # Ver Configuration.CROSS_DOC_GATE_*: el corte por score a secas
+            # (gate relativo, 2.b) no sirve porque el ruido puntúa MÁS que la
+            # cola legítima del documento correcto. El documento sí discrimina.
+            if self.cross_doc_gate_enabled and self.cross_doc_gate_margin > 0:
+                mejor_c = max(relevant, key=lambda c: c.get("dense_similarity", 0.0))
+                doc_top = (mejor_c.get("metadata") or {}).get("file_name")
+                piso_cruz = mejor_c.get("dense_similarity", 0.0) - self.cross_doc_gate_margin
+
+                filtrados = [
+                    c for c in relevant
+                    if (c.get("metadata") or {}).get("file_name") == doc_top
+                    or c.get("dense_similarity", 0.0) >= piso_cruz
+                    # Igual que en los otros gates: lo que llegó solo por
+                    # BM25/CLIP no tiene señal densa y filtrarlo lo volvería
+                    # inerte.
+                    or "bm25_rank" in c or "visual_rank" in c
+                ]
+                if len(filtrados) < len(relevant):
+                    descartados = {
+                        (c.get("metadata") or {}).get("file_name")
+                        for c in relevant if c not in filtrados
+                    }
+                    logger.info(
+                        f"[{qid}][Chroma] Gate cruzado: doc del top-1={doc_top}, "
+                        f"piso={piso_cruz:.3f} -> {len(filtrados)}/{len(relevant)} "
+                        f"candidatos (descartados de: {sorted(filter(None, descartados))})"
+                    )
+                relevant = filtrados
 
             # Planos dinámicos: se adjuntan si el contexto relevante viene de
             # documentos eléctricos/de cableado, o si no se pudo determinar la

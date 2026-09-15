@@ -152,6 +152,11 @@ class ReadConfig:
             chroma_top_n_contexts = int(config.get("CHROMA_TOP_N"))
             chroma_local_path = config.get("chroma_local_path")
             min_context_similarity_score = float(config.get("MIN_CONTEXT_SIMILARITY_SCORE"))
+            relative_gate_enabled = bool(config.get("RELATIVE_GATE_ENABLED", True))
+            relative_gate_margin = float(config.get("RELATIVE_GATE_MARGIN", 0.15))
+            relative_gate_min_results = int(config.get("RELATIVE_GATE_MIN_RESULTS", 3))
+            cross_doc_gate_enabled = bool(config.get("CROSS_DOC_GATE_ENABLED", True))
+            cross_doc_gate_margin = float(config.get("CROSS_DOC_GATE_MARGIN", 0.10))
 
             # Retrieval avanzado
             use_visual_retrieval = bool(config.get("USE_VISUAL_RETRIEVAL"))
@@ -246,6 +251,11 @@ class ReadConfig:
                 "chroma_top_n_contexts" : chroma_top_n_contexts,
                 "chroma_path" : chroma_local_path,
                 "min_context_similarity_score": min_context_similarity_score,
+                "relative_gate_enabled": relative_gate_enabled,
+                "relative_gate_margin": relative_gate_margin,
+                "relative_gate_min_results": relative_gate_min_results,
+                "cross_doc_gate_enabled": cross_doc_gate_enabled,
+                "cross_doc_gate_margin": cross_doc_gate_margin,
                 "use_visual_retrieval": use_visual_retrieval,
                 "visual_index_name": visual_index_name,
                 "clip_model": clip_model,
