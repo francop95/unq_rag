@@ -1,0 +1,56 @@
+# Overlay de producción. Se usa SIEMPRE junto al compose base:
+#
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+#
+# Qué cambia respecto de local:
+#
+#   - nginx pide usuario y contraseña (basic auth) para todo el sitio.
+#   - Los puertos de las APIs no salen a internet: el compose base los ata a
+#     loopback por defecto (API_BIND), y acá no se toca.
+#   - La ingesta no se levanta ni se construye. El índice se sube ya hecho con
+#     deploy/upload-data.sh, así que el servidor no necesita la imagen de
+#     ingesta (2,8 GB), ni torch, ni Tesseract, ni gastar en OpenAI.
+#   - Logs rotados: sin esto el json-file crece sin techo y llena el disco.
+
+services:
+  web:
+    restart: unless-stopped
+    volumes:
+      # Activa la autenticación (el archivo de la imagen está vacío).
+      - ./deploy/auth.conf:/etc/nginx/auth-included.conf:ro
+      - ./deploy/.htpasswd:/etc/nginx/.htpasswd:ro
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Las dos APIs corren como el dueño de los datos en el host.
+  #
+  # Por qué: Chroma necesita ESCRIBIR el SQLite del índice (WAL) para poder
+  # leerlo. La imagen trae un usuario sin privilegios (apiuser, uid 10001), pero
+  # los archivos del bind mount son de ec2-user (uid 1000), así que el
+  # contenedor no podía escribirlos y toda consulta devolvía cero chunks con un
+  # "attempt to write a readonly database" en el log — la app parecía funcionar
+  # y contestaba solo con los planos adjuntos.
+  #
+  # Se alinea el uid en vez de hacer chown de los datos a 10001, porque los
+  # datos los sube rsync como ec2-user y un chown rompería los deploys
+  # siguientes.
+  #
+  # En macOS no se reproduce: Docker Desktop monta por virtiofs y no respeta el
+  # uid del host. Por eso este overlay es solo para producción.
+  # gid 0 (no el del host): la imagen deja /app en manos del grupo 0 con permiso
+  # de escritura, para que la app pueda escribir perf_timings.csv y su carpeta
+  # data/ corriendo con cualquier uid. El uid sí es el del host, que es lo que
+  # habilita escribir el bind mount.
+  api: &api-prod
+    restart: unless-stopped
+    user: "${APP_UID:-1000}:0"
+    logging: *logging
+
+  api-baseline:
+    <<: *api-prod
+    # En producción sí conviene que se reintente: acá el índice de la línea base
+    # ya está subido, así que si el contenedor se cae es por otra razón.
+    restart: unless-stopped

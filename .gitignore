@@ -25,3 +25,8 @@ dist/
 # Editores
 .vscode/
 .idea/
+
+# Deploy: claves, credenciales y estado de la instancia
+deploy/*.pem
+deploy/.htpasswd
+deploy/.deploy-target
