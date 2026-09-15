@@ -1,7 +1,16 @@
 import type { ApiResponse, ApiResult, TableMedia } from "../types/api";
+import { newId } from "../lib/ids";
 
 export const API_BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:5000";
+
+/**
+ * API que sirve el índice de la línea base (solo texto + OCR, sin modelo de visión).
+ * La levanta `API/app_baseline.py`. Solo la usa la pestaña de comparación; el chat
+ * normal sigue hablando únicamente con API_BASE_URL.
+ */
+export const BASELINE_API_BASE_URL: string =
+  (import.meta.env.VITE_BASELINE_API_BASE_URL as string) || "http://localhost:5001";
 
 /** Un turno anterior de la conversación, en el formato que espera parse_conv_history. */
 export interface HistoryTurn {
@@ -34,14 +43,16 @@ export async function askQuestion(
   query: string,
   conversationId: string,
   history: HistoryTurn[] = [],
+  /** Contra qué API preguntar. Por defecto la principal; la comparación pasa la otra. */
+  baseUrl: string = API_BASE_URL,
 ): Promise<ApiResult[]> {
-  const res = await fetch(`${API_BASE_URL}/get_response`, {
+  const res = await fetch(`${baseUrl}/get_response`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       query,
       conversation_id: conversationId,
-      message_id: crypto.randomUUID(),
+      message_id: newId(),
       // Solo los turnos más recientes: PREV_CONV_THRESHOLD del backend mira 1, y mandar
       // toda la conversación solo agrega tokens al clasificador de intención.
       ...(history.length ? { conv_history: buildConvHistory(history.slice(-3)) } : {}),

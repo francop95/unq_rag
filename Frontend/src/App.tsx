@@ -1,21 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import Header, { type ApiStatus } from "./components/Header";
+import Header, { type ApiStatus, type Tab } from "./components/Header";
 import ChatMessage from "./components/ChatMessage";
 import TypingIndicator from "./components/TypingIndicator";
 import QueryInput from "./components/QueryInput";
 import WelcomeScreen from "./components/WelcomeScreen";
+import CompareView from "./components/CompareView";
+import { newId } from "./lib/ids";
 import { askQuestion, type HistoryTurn } from "./api/client";
 import type { ChatMessage as ChatMessageT } from "./types/chat";
-
-function newId(): string {
-  return crypto.randomUUID();
-}
 
 export default function App() {
   const [messages, setMessages] = useState<ChatMessageT[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("idle");
+  const [tab, setTab] = useState<Tab>("chat");
   const conversationId = useRef(newId());
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -87,7 +86,9 @@ export default function App() {
     <div className="blueprint-bg flex h-full flex-col bg-bg">
       <Header
         status={apiStatus}
-        canReset={messages.length > 0 && !loading}
+        tab={tab}
+        onTabChange={setTab}
+        canReset={tab === "chat" && messages.length > 0 && !loading}
         onReset={() => {
           setMessages([]);
           setInput("");
@@ -99,7 +100,9 @@ export default function App() {
       />
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
+        {tab === "compare" ? (
+          <CompareView />
+        ) : messages.length === 0 ? (
           <WelcomeScreen onExample={sendQuery} />
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
@@ -111,7 +114,9 @@ export default function App() {
         )}
       </div>
 
-      <QueryInput value={input} onChange={setInput} onSubmit={() => sendQuery(input)} disabled={loading} />
+      {tab === "chat" && (
+        <QueryInput value={input} onChange={setInput} onSubmit={() => sendQuery(input)} disabled={loading} />
+      )}
     </div>
   );
 }

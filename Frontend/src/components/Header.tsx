@@ -1,5 +1,8 @@
 export type ApiStatus = "idle" | "busy" | "ok" | "error";
 
+/** Pestañas: el asistente normal y la comparación entre índices. */
+export type Tab = "chat" | "compare";
+
 const STATUS = {
   idle: { label: "Listo", dot: "bg-muted-2", pulse: false },
   busy: { label: "Consultando", dot: "bg-accent-2", pulse: true },
@@ -19,9 +22,16 @@ interface Props {
    *  que ya se cerró. */
   onReset?: () => void;
   canReset?: boolean;
+  tab?: Tab;
+  onTabChange?: (tab: Tab) => void;
 }
 
-export default function Header({ status = "idle", onReset, canReset }: Props) {
+const TABS: { key: Tab; label: string; title: string }[] = [
+  { key: "chat", label: "Asistente", title: "Chat contra el índice multimodal" },
+  { key: "compare", label: "Comparar", title: "La misma pregunta contra los dos índices" },
+];
+
+export default function Header({ status = "idle", onReset, canReset, tab, onTabChange }: Props) {
   const state = STATUS[status];
 
   return (
@@ -37,6 +47,26 @@ export default function Header({ status = "idle", onReset, canReset }: Props) {
       </div>
 
       <div className="flex items-center gap-2">
+        {tab && onTabChange && (
+          <div className="mr-1 flex items-center gap-0.5 rounded-full border border-border bg-surface-2 p-0.5">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => onTabChange(t.key)}
+                title={t.title}
+                className={`rounded-full px-3 py-1 font-mono text-[0.7rem] transition ${
+                  tab === t.key
+                    ? "bg-accent text-bg"
+                    : "text-muted hover:text-accent-2"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {canReset && onReset && (
           <button
             type="button"
