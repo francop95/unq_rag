@@ -344,6 +344,43 @@ faltan = [p for p in media if not os.path.exists(os.path.join('data', p))]
 print(f'media referenciada: {len(media)} | falta en disco: {len(faltan)}')"
 ```
 
+### Cuánto sale una corrida
+
+Cada respuesta de la API trae un campo `usage` con los tokens que consumió. El pipeline lo
+descartaba, así que la única forma de saber cuánto había salido una ingesta era mirar la
+factura al día siguiente. Ahora `task_utils/usage_meter.py` acumula los cinco puntos donde
+se llama a OpenAI y los convierte a dólares.
+
+Se imprime el acumulado después de cada documento, y al final el desglose completo, una
+fila por etapa y modelo con sus llamadas, tokens de entrada, de salida y el costo:
+
+```
+etapa                  modelo                      llamadas     entrada      salida        USD
+----------------------------------------------------------------------------------------------
+chunking de página     gpt-4o                           ...         ...         ...        ...
+pasada de figuras      gpt-4o                           ...         ...         ...        ...
+enriquecimiento        gpt-4o-mini                      ...         ...         ...        ...
+embeddings             text-embedding-3-large           ...         ...         ...        ...
+```
+
+Todavía no hay una corrida completa medida con esto, así que acá va el formato y no
+números: los reales salen de la primera ingesta que se haga.
+
+El desglose por etapa es lo que permite decidir qué apagar: la pasada de figuras y el
+enriquecimiento cuestan muy distinto y se activan por separado
+(`use_dedicated_figure_pass`, `use_contextual_retrieval`, `use_synthetic_questions`).
+
+También se imprime cuando la corrida **aborta** por falta de crédito, que es justo cuando
+más importa saber en qué se fue lo que había.
+
+Los tokens son medidos y exactos. Los precios de la tabla son de referencia y cambian sin
+aviso: verificar en <https://openai.com/api/pricing/>, o pisarlos sin tocar el código con
+`OPENAI_PRECIOS="gpt-4o:2.5:10,gpt-4o-mini:0.15:0.6"`. Un modelo sin precio conocido igual
+cuenta sus tokens y aparece marcado como sin tarifar, en vez de sumar cero y mentir el
+total.
+
+---
+
 ### Si se corta por falta de crédito
 
 El SDK de OpenAI lanza `RateLimitError` para **todo** HTTP 429, así que un "te quedaste sin

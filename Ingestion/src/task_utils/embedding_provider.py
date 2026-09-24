@@ -100,6 +100,13 @@ class EmbeddingProvider:
                 api_key=os.getenv("OPENAI_API_KEY") or os.getenv("openai_key")
             )
         resp = self._openai.embeddings.create(model=self.model, input=texts)
+        try:
+            from task_utils.usage_meter import registrar as registrar_consumo
+            registrar_consumo("embeddings", self.model, getattr(resp, "usage", None))
+        except ImportError:
+            # El módulo está duplicado en la API, donde no hay medidor: medir la
+            # ingesta no puede ser condición para que la API arranque.
+            pass
         return [d.embedding for d in resp.data]
 
     # ------------------------------------------------------------- Bedrock

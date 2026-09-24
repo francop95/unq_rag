@@ -12,6 +12,7 @@ from task_utils.validators.task_validators import TaskSettingPresenceValidator
 # OpenAI SDK >=1.x
 from openai import OpenAI
 from httpx import ReadTimeout, ConnectTimeout, HTTPStatusError
+from task_utils.usage_meter import registrar as registrar_consumo
 
 logger = Logger.get_logger(__name__)
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -241,6 +242,7 @@ class ChunksEmbeddings(Task):
             while True:
                 try:
                     resp = client.embeddings.create(model=model, input=texts)
+                    registrar_consumo("embeddings", model, getattr(resp, "usage", None))
                     emb_list = resp.data  # orden corresponde al input
                     if len(emb_list) != len(texts):
                         raise RuntimeError("El número de embeddings no coincide con el tamaño del batch.")

@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 
 from logger import Logger
 
+from task_utils.usage_meter import registrar as registrar_consumo
+
 logger = Logger.get_logger(__name__)
 
 try:
@@ -167,9 +169,15 @@ class LLMJsonClient:
         max_retries: int = 8,
         temperature: float = 0.0,
         max_output_tokens: int = 1500,
+        etapa: str = "llm",
     ):
         self.client = client
         self.model = model
+        # Nombre con el que este cliente aparece en el reporte de consumo. Sin
+        # esto, la pasada de figuras y el enriquecimiento —que cuestan muy
+        # distinto— se mezclan en una sola fila y no se puede saber cuál es la
+        # que conviene apagar.
+        self.etapa = etapa
         self.max_retries = max_retries
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
@@ -205,6 +213,7 @@ class LLMJsonClient:
                     temperature=self.temperature,
                     response_format={"type": "json_object"},
                 )
+                registrar_consumo(self.etapa, self.model, getattr(response, "usage", None))
                 content = response.choices[0].message.content
                 parsed = parse_json_response(content)
                 if parsed is None:
@@ -236,6 +245,7 @@ class LLMJsonClient:
                             messages=messages,
                             temperature=self.temperature,
                         )
+                        registrar_consumo(self.etapa, self.model, getattr(response, "usage", None))
                         return parse_json_response(response.choices[0].message.content)
                     except Exception as inner:
                         logger.error(f"[{label}] Falló el reintento sin response_format: {inner}")

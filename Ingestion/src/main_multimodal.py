@@ -17,6 +17,7 @@ from task_utils.contextual_enricher import (
     ContextualEnricher, build_question_chunks, build_document_outline,
 )
 from task_utils.llm_json import QuotaExhaustedError
+from task_utils.usage_meter import MEDIDOR
 import json
 import traceback
 
@@ -216,6 +217,7 @@ if __name__ == "__main__":
             skipped_docs.append(file_stem)
             continue
 
+        acumulado_previo, _ = MEDIDOR.total_usd()
         print(f"\n{'='*60}")
         print(f"🔧 Procesando: {file_stem}")
         print(f"{'='*60}")
@@ -591,6 +593,11 @@ if __name__ == "__main__":
             import traceback
             traceback.print_exc()
 
+        finally:
+            acumulado, _ = MEDIDOR.total_usd()
+            print(f"   💸 {file_stem}: USD {acumulado - acumulado_previo:.4f} "
+                  f"(acumulado de la corrida: USD {acumulado:.4f})")
+
     # ========== RESUMEN FINAL ==========
     print(f"\n\n{'='*70}")
     print(f"📊 RESUMEN DE EJECUCIÓN")
@@ -604,4 +611,11 @@ if __name__ == "__main__":
         print(f"❌ Documentos con error: {len(failed_docs)}")
         for doc_name, error_msg in failed_docs:
             print(f"   • {doc_name}: {error_msg}")
+
+    # Lo que salió la corrida. Se imprime también cuando se aborta por falta de
+    # crédito: ahí es cuando más importa saber en qué se fue lo que había.
+    print(f"\n{'='*70}")
+    print("💸 CONSUMO DE LA API")
+    print(f"{'='*70}")
+    print(MEDIDOR.reporte())
     print(f"{'='*70}")

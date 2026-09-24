@@ -32,6 +32,7 @@ from task_utils.table_processor import TableProcessor
 from task_utils.hierarchy_extractor import DocumentHierarchyExtractor
 from task_utils.technical_validators import TechnicalDocumentValidator
 from task_utils.llm_json import QuotaExhaustedError, raise_if_quota_exhausted
+from task_utils.usage_meter import registrar as registrar_consumo
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 logger = Logger.get_logger(__name__)
@@ -541,7 +542,8 @@ class ChunkingTask(Task):
             f"con concurrencia={concurrency}"
         )
 
-        llm = LLMJsonClient(client=client, model=model, temperature=0.0)
+        llm = LLMJsonClient(client=client, model=model, temperature=0.0,
+                            etapa="pasada de figuras")
 
         def worker(target: Dict[str, Any]):
             image_part = image_content_part(target["image_path"])
@@ -923,6 +925,7 @@ class ChunkingTask(Task):
                         # Si tu SDK lo soporta, descomenta:
                         # max_tokens=max_output_tokens,
                     )
+                    registrar_consumo("chunking de página", model, getattr(resp, "usage", None))
                     text = resp.choices[0].message.content
                     return _ensure_chunks_json(text)
 

@@ -66,6 +66,7 @@ from tasks.indexing_task_multimodal import AutomaticIndexer
 from task import TaskReturnData
 from config.config_reader import ConfigReader
 from task_utils.llm_json import QuotaExhaustedError
+from task_utils.usage_meter import MEDIDOR
 
 # --- Raíz del proyecto (igual que el pipeline multimodal) ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -430,6 +431,12 @@ def main():
         print("       npm run dev -- --port 5174              # :5174 -> :5001")
         print("\nPara comparar por métricas:")
         print("  python eval/compare_baseline.py")
+
+    print(f"\n{'='*70}")
+    print("💸 CONSUMO DE LA API")
+    print(f"{'='*70}")
+    print(MEDIDOR.reporte())
+    print(f"{'='*70}")
 
     return 1 if failed_docs and not processed_docs else 0
 

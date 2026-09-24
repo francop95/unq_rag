@@ -67,7 +67,8 @@ class ContextualEnricher:
         neighbor_chars: int = 600,
         chunk_chars: int = 4000,
     ):
-        self.llm = LLMJsonClient(client=client, model=model, temperature=0.0)
+        self.llm = LLMJsonClient(client=client, model=model, temperature=0.0,
+                                 etapa="enriquecimiento")
         self.concurrency = max(1, int(concurrency))
         self.max_questions = max(1, int(max_questions))
         # El prompt tenía "3 a 5 preguntas" fijo, así que max_questions solo TRUNCABA la
