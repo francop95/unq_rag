@@ -97,6 +97,46 @@ class Configuration:
     #
     # Se deja como flag medible, igual que USE_BM25 y USE_RERANKING:
     #   python eval/run_eval.py --variant relative_gate_enabled=true
+    # Excluir del retrieval los vectores de pregunta sintética, dejando solo
+    # los de contenido. Flag de experimento: las preguntas siguen en el índice,
+    # simplemente no se consultan, así que se mide sin reindexar.
+    #
+    # Vale la pena medirlo porque son el 87% del índice (4696 de 5379 vectores,
+    # y 3078 solo del variador) y aparecen en los tres problemas encontrados: el
+    # ruido entre documentos, el colapso del reranker y el desbalance del corpus.
+    #
+    # MEDIDO: no son el problema, son la mitad del motor. Sacarlas empeora todo:
+    #
+    #   métrica              CON      SIN
+    #   recall@1            64.8%    59.3%
+    #   recall@5            85.2%    79.6%
+    #   recall@10           88.9%    83.3%
+    #   MRR                 0.735    0.690
+    #   no llega nunca       6/54     9/54
+    #   respuesta presente  93.0%    83.7%   <- 4 respuestas menos
+    #   chunks con media        5        4
+    #
+    # Vale la pena entender el matiz, porque aparecen como culpables en los tres
+    # problemas que encontramos y aun así conviene quedárselas:
+    #
+    #  - Son la vía por la que entra el ruido entre documentos (las preguntas
+    #    generadas de "Temp. variador d022" matchean una consulta sobre
+    #    termostatos). Eso se ataca con el gate cruzado, no sacándolas.
+    #  - Rompen el reranking, porque el cross-encoder juzga el contenido padre y
+    #    no la pregunta que matcheó. Eso se arregla rerankeando contra el texto
+    #    correcto, no sacándolas.
+    #  - Desbalancean el índice: 3078 de los 5379 vectores son preguntas del
+    #    manual del variador. ESO sí es atacable en la ingesta, bajando
+    #    `max_synthetic_questions` (hoy 8 por chunk) o poniéndole un tope por
+    #    documento. Es lo único de los tres que no se puede medir sin reindexar,
+    #    así que conviene probarlo en la próxima corrida de ingesta.
+    #
+    # O sea: el costo es real, pero el beneficio lo supera. Lo que hay que
+    # corregir es su VOLUMEN y su DISTRIBUCIÓN, no su existencia.
+    #
+    #   python eval/run_eval.py --variant exclude_synthetic_questions=true
+    EXCLUDE_SYNTHETIC_QUESTIONS = False
+
     RELATIVE_GATE_ENABLED = False
     RELATIVE_GATE_MARGIN = 0.15
 
@@ -247,6 +287,37 @@ class Configuration:
     #
     # La categoría "proceso" pasa de 3/3 a 0/3. Reproducir con:
     #   python eval/run_eval.py --variant use_reranking=true
+    # RE-MEDIDO (2026-09) con bge-reranker-v2-m3, el mejor reranker multilingüe
+    # abierto, para descartar que el problema fuera un modelo viejo y en inglés.
+    # Es MUCHO peor, no mejor:
+    #
+    #   métrica          sin reranker   bge-reranker-v2-m3
+    #   recall@1            64.8%            20.4%
+    #   recall@5            85.2%            66.7%
+    #   recall@10           88.9%            75.9%
+    #   MRR                 0.735            0.377
+    #   no llega nunca       6/54            13/54
+    #
+    # O sea que no es el modelo: es el índice. Con dos rerankers de calidad muy
+    # distinta el resultado va en la misma dirección, y el mejor empeora más.
+    #
+    # La causa, observada sobre "¿En qué bit veo si los parámetros están
+    # bloqueados?": 8 de los 10 candidatos llegan por un vector de PREGUNTA
+    # SINTÉTICA, pero el reranker puntúa el CONTENIDO PADRE —tablas de
+    # parámetros, fragmentos— porque se lo invoca después de
+    # _restore_parent_metadata y con text_key="text". Resultado: le da score
+    # casi nulo a todo (máx 0.4671, la mayoría por debajo de 0.02). Ordenar 40
+    # candidatos por scores tan comprimidos es prácticamente ruido, y encima
+    # recorta: desplaza aciertos densos que estaban bien rankeados.
+    #
+    # Para que el reranking sirva acá habría que puntuar contra el texto que
+    # REALMENTE matcheó (la pregunta sintética), no contra el contenido padre.
+    # Eso es un cambio de pipeline, no un cambio de modelo, y hay que medirlo
+    # antes de asumir que gana.
+    #
+    # Reproducir:
+    #   python eval/run_eval.py --variant \
+    #     use_reranking=true,reranker_model=BAAI/bge-reranker-v2-m3
     USE_RERANKING = False
     RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     RERANK_CANDIDATES_TOP_K = 20
@@ -275,7 +346,14 @@ class Configuration:
     #########################################################################################
 
     ### OPENAI PARAMETERS
-    OPENAI_MODEL = "gpt-4.1"
+    # Modelo que redacta la respuesta. Sobrescribible por entorno para poder
+    # compararlo sin editar código ni reconstruir la imagen:
+    #   OPENAI_MODEL=gpt-5 docker compose up -d --force-recreate api
+    #
+    # Se lee con os.getenv y no con Configuration.get() porque este último
+    # devuelve el atributo de clase cuando no es None, así que una variable de
+    # entorno nunca llegaría a pisarlo.
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
     OPENAI_EMB_MODEL = "text-embedding-3-large"
     # Nombre canónico: OPENAI_API_KEY. Se acepta `openai_key` como alias para no
     # romper los .env anteriores.

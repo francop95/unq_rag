@@ -72,6 +72,12 @@ class ChromaConnection:
         self.relative_gate_enabled: bool = bool(data.get("relative_gate_enabled", True))
         self.relative_gate_margin: float = float(data.get("relative_gate_margin", 0.15))
         self.relative_gate_min_results: int = int(data.get("relative_gate_min_results", 3))
+
+        # Excluir del retrieval los vectores de pregunta sintética (ver
+        # Configuration.EXCLUDE_SYNTHETIC_QUESTIONS).
+        self.exclude_synthetic_questions: bool = bool(
+            data.get("exclude_synthetic_questions", False)
+        )
         self.cross_doc_gate_enabled: bool = bool(data.get("cross_doc_gate_enabled", True))
         self.cross_doc_gate_margin: float = float(data.get("cross_doc_gate_margin", 0.10))
 
@@ -421,10 +427,17 @@ class ChromaConnection:
             # variedad real del contexto que llega al LLM queda a la mitad.
             dense_fetch = top_k * self.DENSE_OVERFETCH_FACTOR
             logger.info(f"[{qid}][Chroma] query dense top_k={top_k} (fetch={dense_fetch})")
+            # Filtro opcional: sacar del retrieval los vectores de pregunta
+            # sintética y dejar solo los de contenido. Es el experimento que
+            # responde "¿las preguntas sintéticas ayudan o estorban?" sin tener
+            # que reindexar: están en el índice igual, solo no se consultan.
+            where = ({"content_type": {"$ne": "synthetic_question"}}
+                     if self.exclude_synthetic_questions else None)
             dense_res = self.collection.query(
                 query_embeddings=[query_vector],
                 n_results=dense_fetch,
                 include=["documents", "metadatas", "distances"],
+                **({"where": where} if where else {}),
             )
             candidates = self._chroma_res_to_candidates(dense_res)
             for rank, c in enumerate(candidates, start=1):

@@ -157,6 +157,7 @@ class ReadConfig:
             relative_gate_min_results = int(config.get("RELATIVE_GATE_MIN_RESULTS", 3))
             cross_doc_gate_enabled = bool(config.get("CROSS_DOC_GATE_ENABLED", True))
             cross_doc_gate_margin = float(config.get("CROSS_DOC_GATE_MARGIN", 0.10))
+            exclude_synthetic_questions = bool(config.get("EXCLUDE_SYNTHETIC_QUESTIONS", False))
 
             # Retrieval avanzado
             use_visual_retrieval = bool(config.get("USE_VISUAL_RETRIEVAL"))
@@ -256,6 +257,7 @@ class ReadConfig:
                 "relative_gate_min_results": relative_gate_min_results,
                 "cross_doc_gate_enabled": cross_doc_gate_enabled,
                 "cross_doc_gate_margin": cross_doc_gate_margin,
+                "exclude_synthetic_questions": exclude_synthetic_questions,
                 "use_visual_retrieval": use_visual_retrieval,
                 "visual_index_name": visual_index_name,
                 "clip_model": clip_model,
