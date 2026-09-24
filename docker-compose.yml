@@ -35,6 +35,8 @@ x-api-base: &api-base
     # Si se define, /get_response exige `Authorization: Bearer <token>`.
     # Vacío = abierta, que es lo razonable en local.
     API_TOKEN: ${API_TOKEN:-}
+    # Modelo que redacta la respuesta. Vacío = el default de Configuration.
+    OPENAI_MODEL: ${OPENAI_MODEL:-}
   volumes:
     # Lectura y escritura, y no es negociable aunque "consultar" suene a solo
     # lectura. Con `:ro` la API arranca pero no sirve: Chroma 1.x falla con
