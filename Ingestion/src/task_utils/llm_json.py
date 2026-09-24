@@ -20,6 +20,9 @@ from typing import Any, Dict, List, Optional
 from logger import Logger
 
 from task_utils.usage_meter import registrar as registrar_consumo
+from task_utils.model_params import (
+    chat_kwargs, es_error_de_temperature, recordar_rechazo,
+)
 
 logger = Logger.get_logger(__name__)
 
@@ -210,8 +213,8 @@ class LLMJsonClient:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    temperature=self.temperature,
                     response_format={"type": "json_object"},
+                    **chat_kwargs(self.model, self.temperature),
                 )
                 registrar_consumo(self.etapa, self.model, getattr(response, "usage", None))
                 content = response.choices[0].message.content
@@ -235,6 +238,14 @@ class LLMJsonClient:
                 time.sleep(delay)
 
             except Exception as e:
+                # Modelo de razonamiento que rechaza `temperature`: se anota y se
+                # reintenta sin el parámetro. La lista de model_params cubre los
+                # conocidos; esto cubre los que salgan después.
+                if es_error_de_temperature(e):
+                    recordar_rechazo(self.model)
+                    logger.warning(f"[{label}] {self.model} no acepta temperature; se reintenta sin ella")
+                    continue
+
                 # response_format json_object no está soportado por algunos
                 # modelos/versiones: se reintenta una vez sin ese parámetro.
                 if "response_format" in str(e) and attempt == 0:
@@ -243,7 +254,7 @@ class LLMJsonClient:
                         response = self.client.chat.completions.create(
                             model=self.model,
                             messages=messages,
-                            temperature=self.temperature,
+                            **chat_kwargs(self.model, self.temperature),
                         )
                         registrar_consumo(self.etapa, self.model, getattr(response, "usage", None))
                         return parse_json_response(response.choices[0].message.content)

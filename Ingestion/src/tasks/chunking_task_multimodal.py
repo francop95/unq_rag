@@ -33,6 +33,9 @@ from task_utils.hierarchy_extractor import DocumentHierarchyExtractor
 from task_utils.technical_validators import TechnicalDocumentValidator
 from task_utils.llm_json import QuotaExhaustedError, raise_if_quota_exhausted
 from task_utils.usage_meter import registrar as registrar_consumo
+from task_utils.model_params import (
+    chat_kwargs, es_error_de_temperature, recordar_rechazo,
+)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 logger = Logger.get_logger(__name__)
@@ -920,7 +923,7 @@ class ChunkingTask(Task):
                     resp = client.chat.completions.create(
                         model=model,
                         messages=chat_messages,
-                        temperature=temperature,
+                        **chat_kwargs(model, temperature),
                         # Nota: en algunas versiones se puede pasar max_tokens; en otras, no aplica igual a multimodal.
                         # Si tu SDK lo soporta, descomenta:
                         # max_tokens=max_output_tokens,
@@ -944,9 +947,9 @@ class ChunkingTask(Task):
         if hasattr(client, "responses"):
             resp = client.responses.create(
                 model=model,
-                temperature=temperature,
                 # Algunas versiones soportan max_output_tokens; si da error, comenta esta línea:
                 max_output_tokens=max_output_tokens,
+                **chat_kwargs(model, temperature),
                 input=[
                     {"role": "system", "content": [{"type": "text", "text": system_prompt + "\n\nResponde SOLO en JSON válido."}]},
                     {"role": "user",   "content": user_payload},
