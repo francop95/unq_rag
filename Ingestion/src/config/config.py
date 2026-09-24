@@ -42,6 +42,11 @@ class ChunkingConfig:
 class EmbeddingConfig:
     """Configuración del task de embeddings (generación de vectores)."""
     embedding_model: str = "text-embedding-3-large"  # Modelo de embeddings OpenAI
+    # Proveedor: "openai" o "bedrock". Cambiarlo OBLIGA A REINDEXAR y a apuntar
+    # la API al mismo proveedor: el índice queda ligado al modelo que lo generó.
+    embedding_provider: str = "openai"
+    embedding_region: str = "eu-west-1"
+    embedding_output_dimension: int = 0  # 0 = default del modelo
     embedding_batch_size: int = 64  # Cuántos textos procesar en paralelo
     max_retries: int = 5  # Reintentos en caso de rate limit o error
 
@@ -181,6 +186,9 @@ class Config:
             
             # Embeddings
             "embedding_model": self.embedding.embedding_model,
+            "embedding_provider": self.embedding.embedding_provider,
+            "embedding_region": self.embedding.embedding_region,
+            "embedding_output_dimension": self.embedding.embedding_output_dimension,
             "embedding_batch_size": self.embedding.embedding_batch_size,
             "max_retries": self.embedding.max_retries,
             

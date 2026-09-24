@@ -57,6 +57,14 @@ class LanguageModel:
                                     max_retries=0)          # <- dejamos reintentos a tenacity (más controlados))
             self.model = self._openai  # para mantener una referencia pública
 
+            # Proveedor de embeddings. Si es "openai" se deja en None y se usa
+            # el camino de siempre, para no cambiar el comportamiento por
+            # defecto ni agregar una capa donde no hace falta.
+            self._emb_provider = None
+            if str(data.get("embedding_provider", "openai")).lower() != "openai":
+                from contexts.embedding_provider import from_config
+                self._emb_provider = from_config(data, openai_client=self._openai)
+
         # -------- AZURE (rama legada: usa la API antigua para chat) --------
         elif self.model_type == "azure":
             import openai  # esta rama depende del paquete con la API <1.0
@@ -121,6 +129,15 @@ class LanguageModel:
 
         # Log de diagnóstico
         logger.debug(f"[embed] model={self.OPENAI_EMB_MODEL} len={len(payload)}")
+
+        # Pasa por el proveedor configurado (OpenAI o Bedrock). Tiene que ser el
+        # MISMO que usó la ingesta: si no coinciden, los vectores viven en
+        # espacios distintos y el retrieval devuelve cualquier cosa sin fallar.
+        # Ver contexts/embedding_provider.py.
+        if self._emb_provider is not None:
+            # input_type="search_query": Cohere distingue consulta de documento
+            # y usarlo mal cuesta recall. OpenAI lo ignora.
+            return self._emb_provider.embed([payload], input_type="search_query")[0]
 
         resp = self._openai.embeddings.create(
             model=self.OPENAI_EMB_MODEL,       # "text-embedding-3-large"

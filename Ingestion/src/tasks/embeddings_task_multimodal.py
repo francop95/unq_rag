@@ -85,7 +85,12 @@ class ChunksEmbeddings(Task):
             return timestamp, output_path
 
         # 3) Generar embeddings con OpenAI (batching + backoff)
-        vectors = self._generate_embeddings_openai(items_to_embed)
+        # Proveedor configurable (OpenAI o Bedrock). Tiene que ser el MISMO que
+        # use la API al embeber la consulta; ver task_utils/embedding_provider.py.
+        if str(self._task_settings.get("embedding_provider", "openai")).lower() != "openai":
+            vectors = self._generate_embeddings_provider(items_to_embed)
+        else:
+            vectors = self._generate_embeddings_openai(items_to_embed)
 
         # 4) Escribir resultados
         self._save_embeddings_to_local_folder(processed_df, vectors, output_path)
@@ -188,6 +193,31 @@ class ChunksEmbeddings(Task):
         if base_url:
             return OpenAI(api_key=api_key, base_url=base_url)
         return OpenAI(api_key=api_key)
+
+    def _generate_embeddings_provider(self, items_to_embed):
+        """
+        Embeddings por el proveedor configurado, en lotes.
+
+        input_type="search_document" porque acá se embeben los CHUNKS; la API
+        usa "search_query" para la consulta. Cohere distingue los dos casos y
+        confundirlos cuesta recall. OpenAI ignora el parámetro.
+        """
+        from task_utils.embedding_provider import EmbeddingProvider
+
+        p = EmbeddingProvider(
+            provider=self._task_settings.get("embedding_provider", "openai"),
+            model=self._task_settings.get("embedding_model", "text-embedding-3-large"),
+            region=self._task_settings.get("embedding_region"),
+            output_dimension=self._task_settings.get("embedding_output_dimension") or None,
+        )
+        lote = int(self._task_settings.get("embedding_batch_size", 64))
+        salida = []
+        for i in range(0, len(items_to_embed), lote):
+            trozo = items_to_embed[i:i + lote]
+            vectores = p.embed([t for _, t in trozo], input_type="search_document")
+            salida.extend(zip((idx for idx, _ in trozo), vectores))
+            logger.info(f"Embeddings {min(i + lote, len(items_to_embed))}/{len(items_to_embed)}")
+        return salida
 
     def _generate_embeddings_openai(self, items_to_embed: List[Tuple[int, str]]) -> List[Tuple[int, List[float]]]:
         """

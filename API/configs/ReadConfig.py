@@ -144,6 +144,10 @@ class ReadConfig:
             #OpenAI Models
             openai_model = config.get("OPENAI_MODEL")
             openai_emb_model = config.get("OPENAI_EMB_MODEL")
+            embedding_provider = config.get("EMBEDDING_PROVIDER", "openai")
+            embedding_model_name = config.get("EMBEDDING_MODEL_NAME", "") or openai_emb_model
+            embedding_region = config.get("EMBEDDING_REGION", "eu-west-1")
+            embedding_output_dimension = int(config.get("EMBEDDING_OUTPUT_DIMENSION", 0) or 0)
             openai_keys = config.get("OPENAI_KEY")
 
             # Chroma params
@@ -246,6 +250,10 @@ class ReadConfig:
                 "query_intent_max_tokens": query_intent_max_tokens,
                 "openai_model" : openai_model,
                 "openai_emb_model" : openai_emb_model,
+                "embedding_provider": embedding_provider,
+                "embedding_model_name": embedding_model_name,
+                "embedding_region": embedding_region,
+                "embedding_output_dimension": embedding_output_dimension,
                 "openai_keys" : openai_keys,
                 "is_chroma_enabled": is_chroma_enabled,
                 "chroma_index_name": chroma_index_name,

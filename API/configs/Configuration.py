@@ -355,6 +355,26 @@ class Configuration:
     # entorno nunca llegaría a pisarlo.
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
     OPENAI_EMB_MODEL = "text-embedding-3-large"
+
+    # Proveedor de embeddings: "openai" (default) o "bedrock".
+    #
+    # CAMBIARLO OBLIGA A REINDEXAR. El índice queda ligado al modelo que lo
+    # generó: si la ingesta embebe con uno y la API consulta con otro, los
+    # vectores viven en espacios distintos y el retrieval no degrada, deja de
+    # funcionar —devuelve resultados arbitrarios y sin ningún error visible.
+    #
+    # El orden correcto es: construir un índice nuevo con el proveedor nuevo
+    # (Ingestion/.env: embedding_provider + embedding_model), medirlo contra el
+    # actual con eval/run_eval.py, y recién entonces apuntar la API.
+    #
+    # Disponibles en Bedrock, verificado en eu-west-1:
+    #   cohere.embed-v4:0             multimodal (texto + imagen)
+    #   cohere.embed-multilingual-v3  1024 dims, buen español
+    #   amazon.titan-embed-text-v2:0  1024 dims
+    EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
+    EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "") or OPENAI_EMB_MODEL
+    EMBEDDING_REGION = os.getenv("EMBEDDING_REGION", "eu-west-1")
+    EMBEDDING_OUTPUT_DIMENSION = int(os.getenv("EMBEDDING_OUTPUT_DIMENSION", "0"))
     # Nombre canónico: OPENAI_API_KEY. Se acepta `openai_key` como alias para no
     # romper los .env anteriores.
     #

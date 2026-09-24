@@ -109,6 +109,9 @@ class ConfigReader:
             embedding_model=self.get("embedding_model", "text-embedding-3-large"),
             embedding_batch_size=self.get_int("embedding_batch_size", 64),
             max_retries=self.get_int("embedding_max_retries", 5),
+            embedding_provider=self.get("embedding_provider", "openai"),
+            embedding_region=self.get("embedding_region", "eu-west-1"),
+            embedding_output_dimension=self.get_int("embedding_output_dimension", 0),
         )
         
         # OpenAI
