@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import hashlib
 from datetime import datetime, timezone
 from tasks.chunking_task_multimodal import ChunkingTask
@@ -193,8 +194,30 @@ def _save_manifest(manifest: dict) -> None:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 
+def _parse_args():
+    """
+    Filtros de la corrida.
+
+    Una ingesta completa son cientos de páginas por un modelo de visión y no
+    se puede "probar un poquito": o se corre entera o no se corre. `--solo`
+    permite validar la cadena completa con el documento más barato antes de
+    pagar el resto, y re-procesar uno suelto cuando cambia.
+    """
+    import argparse
+
+    p = argparse.ArgumentParser(description="Ingesta multimodal del corpus.")
+    p.add_argument("--solo", action="append", default=[], metavar="TEXTO",
+                   help="procesa solo los documentos cuyo nombre contenga TEXTO "
+                        "(se puede repetir)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="lista los documentos que se procesarían y termina, sin gastar nada")
+    return p.parse_args()
+
+
 # --- Ejecutar tarea ---
 if __name__ == "__main__":
+    args = _parse_args()
+
     PDF_FOLDER = os.path.abspath(config.paths.raw_data_path)
     processed_docs = 0
     skipped_docs = []
@@ -202,10 +225,22 @@ if __name__ == "__main__":
     manifest = _load_manifest()
 
     documentos = list(iter_documentos(PDF_FOLDER))
+    if args.solo:
+        filtros = [f.lower() for f in args.solo]
+        documentos = [d for d in documentos
+                      if any(f in os.path.basename(d).lower() for f in filtros)]
+        if not documentos:
+            print(f"\n❌ Ningún documento coincide con {args.solo}")
+            sys.exit(1)
+
     print(f"\n📚 {len(documentos)} documentos encontrados bajo {PDF_FOLDER}")
     for p in documentos:
         print(f"   • {os.path.relpath(p, PDF_FOLDER)}")
     print()
+
+    if args.dry_run:
+        print("--dry-run: no se procesa nada.")
+        sys.exit(0)
 
     for PDF_PATH in documentos:
         file_stem = os.path.splitext(os.path.basename(PDF_PATH))[0]
