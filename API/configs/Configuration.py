@@ -34,12 +34,35 @@ class Configuration:
     ### Chroma PARAMETERS
 
     AppSettings__ChromaEnabled = True
-    AppSettings__ChromaIndex = "multimodal_documents"
-    AppSettings__ChromaCacheIndex = "cache-index"
+
+    # Índice y carpeta se pueden apuntar por entorno, porque un reindexado
+    # construye una colección NUEVA al lado de la que está sirviendo. Sin esto,
+    # evaluar el índice nuevo obliga a editar el código o a pisar el que está
+    # en producción, que son las dos formas de no poder volver atrás.
+    #
+    #   CHROMA_INDEX=multimodal_documents_v2 \
+    #   CHROMA_PATH=../Ingestion/data/chroma_index_v2 \
+    #   EMBEDDING_PROVIDER=bedrock EMBEDDING_MODEL_NAME=cohere.embed-v4:0 \
+    #   python app.py
+    #
+    # El default sigue siendo el índice en producción: se cambia recién cuando
+    # el nuevo está medido, no cuando termina de construirse.
+    AppSettings__ChromaIndex = os.getenv("CHROMA_INDEX", "multimodal_documents")
+    AppSettings__ChromaCacheIndex = os.getenv("CHROMA_CACHE_INDEX", "cache-index")
 
     DATA_EXPORT_ENABLED = False
 
-    chroma_local_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Ingestion/data/chroma_index/"))
+    chroma_local_path = os.path.abspath(
+        os.getenv("CHROMA_PATH")
+        or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                        "Ingestion/data/chroma_index/")
+    )
+
+    # El modelo de embeddings del índice y el de la API TIENEN que ser el mismo.
+    # Si no coinciden, los vectores viven en espacios distintos y el retrieval no
+    # se degrada: devuelve resultados arbitrarios, sin error, sin log, sin nada
+    # que delate el problema. Por eso se valida al arrancar (ver _validar_dimension).
+    EXPECTED_EMBEDDING_DIMENSION = int(os.getenv("EXPECTED_EMBEDDING_DIMENSION", "0"))
 
     # Umbral mínimo de similitud (1 - distancia coseno) para considerar que un
     # chunk recuperado es realmente relevante.

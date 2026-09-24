@@ -148,6 +148,7 @@ class ReadConfig:
             embedding_model_name = config.get("EMBEDDING_MODEL_NAME", "") or openai_emb_model
             embedding_region = config.get("EMBEDDING_REGION", "eu-west-1")
             embedding_output_dimension = int(config.get("EMBEDDING_OUTPUT_DIMENSION", 0) or 0)
+            expected_embedding_dimension = Configuration.EXPECTED_EMBEDDING_DIMENSION
             openai_keys = config.get("OPENAI_KEY")
 
             # Chroma params
@@ -254,6 +255,7 @@ class ReadConfig:
                 "embedding_model_name": embedding_model_name,
                 "embedding_region": embedding_region,
                 "embedding_output_dimension": embedding_output_dimension,
+                "expected_embedding_dimension": expected_embedding_dimension,
                 "openai_keys" : openai_keys,
                 "is_chroma_enabled": is_chroma_enabled,
                 "chroma_index_name": chroma_index_name,

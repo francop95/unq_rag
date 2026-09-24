@@ -105,6 +105,9 @@ class ChromaConnection:
         # Documentos cuyo contenido justifica adjuntar los planos eléctricos al LLM
         self.electric_diagram_related_files: List[str] = data.get("electric_diagram_related_files") or []
 
+        self.expected_embedding_dimension: int = int(
+            data.get("expected_embedding_dimension") or 0
+        )
         self.client: Optional[chromadb.PersistentClient] = None
         self.collection = None
         self.visual_collection = None
@@ -133,6 +136,8 @@ class ChromaConnection:
                 metadata={"hnsw:space": "cosine"},
             )
 
+            self._validar_dimension()
+
             self._connect_visual()
             self._build_content_metadata_index()
             self._build_bm25_index()
@@ -145,6 +150,48 @@ class ChromaConnection:
         except Exception as e:
             logger.exception(f"[Chroma] connect error: {e}")
             return False
+
+    def _validar_dimension(self):
+        """
+        Avisa si el modelo de embeddings de la API no es el del índice.
+
+        Este es el único error del sistema que no produce ningún síntoma: los
+        vectores de dos modelos distintos tienen dimensiones distintas —o peor,
+        la misma dimensión y otro espacio— y la consulta devuelve los vecinos
+        más cercanos igual, sin excepción, sin log y sin nada raro en la
+        respuesta. Simplemente son los documentos equivocados, y el sistema
+        parece funcionar.
+
+        Comparar la dimensión no detecta todos los casos (dos modelos pueden
+        coincidir en dimensión), pero sí el que importa en la práctica: cambiar
+        de proveedor y olvidarse de un lado. Solo registra un error; no aborta,
+        porque dejar la API caída tampoco ayuda a nadie a las 3 de la mañana.
+        """
+        try:
+            muestra = self.collection.get(limit=1, include=["embeddings"])
+            vectores = muestra.get("embeddings")
+            if vectores is None or len(vectores) == 0:
+                return  # colección vacía: nada que validar todavía
+            dim_indice = len(vectores[0])
+        except Exception as e:
+            logger.warning(f"[Chroma] no se pudo leer la dimensión del índice: {e}")
+            return
+
+        dim_esperada = self.expected_embedding_dimension
+        if not dim_esperada:
+            logger.info(f"[Chroma] índice con vectores de {dim_indice} dimensiones")
+            return
+
+        if dim_indice != dim_esperada:
+            logger.error(
+                f"[Chroma] DESAJUSTE DE EMBEDDINGS: el índice '{self.collection_name}' "
+                f"tiene vectores de {dim_indice} dimensiones y la API está configurada "
+                f"para {dim_esperada}. El retrieval va a devolver resultados "
+                f"arbitrarios SIN fallar. Revisar EMBEDDING_PROVIDER / "
+                f"EMBEDDING_MODEL_NAME contra el .env de la ingesta."
+            )
+        else:
+            logger.info(f"[Chroma] embeddings verificados: {dim_indice} dimensiones")
 
     def _connect_visual(self):
         if not self.use_visual_retrieval:
