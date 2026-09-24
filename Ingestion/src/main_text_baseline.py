@@ -59,6 +59,8 @@ import traceback
 from datetime import datetime, timezone
 
 from tasks.chunking_task_text import TextChunkingTask
+from tasks.chunking_task_xlsx import XlsxChunkingTask
+from tasks.chunking_task_python import PythonChunkingTask
 from tasks.embeddings_task_multimodal import ChunksEmbeddings
 from tasks.indexing_task_multimodal import AutomaticIndexer
 from task import TaskReturnData
@@ -90,6 +92,10 @@ USE_ENRICHMENT = reader.get_bool("baseline_use_enrichment", False)
 # de embeddings, batch sizes) y se pisan las rutas y el índice, que es lo que
 # mantiene las dos ingestas separadas.
 task_settings = config.to_task_settings_dict()
+# Ningún modelo de visión en esta corrida: es lo que define la línea base. Sin
+# esto, las imágenes del Excel recibirían descripciones de gpt-4o y el índice
+# "solo texto" dejaría de serlo.
+task_settings["use_dedicated_figure_pass"] = False
 task_settings.update(BASELINE)
 
 MANIFEST_PATH = os.path.join(project_root, "data", "baseline_manifest.json")
@@ -129,6 +135,40 @@ def build_openai_client(cfg):
     if cfg.openai.openai_url:
         return OpenAI(api_key=cfg.openai.openai_key, base_url=cfg.openai.openai_url)
     return OpenAI(api_key=cfg.openai.openai_key)
+
+
+# Mismas carpetas excluidas que el pipeline multimodal: `old/` guarda los
+# documentos reemplazados.
+CARPETAS_IGNORADAS = {"old", "descartados", "__pycache__"}
+
+# Lectores de la línea base. El .xlsx y los .py usan los MISMOS lectores que el
+# pipeline multimodal, y eso es correcto: openpyxl y el AST de Python no son
+# modelos de visión, así que no hay ninguna capacidad multimodal que quitar.
+# La diferencia real aparece en las imágenes embebidas del Excel (los planos),
+# que acá se quedan sin descripción porque la pasada dedicada de figuras está
+# apagada para toda la corrida.
+CHUNKERS_BASELINE = {
+    ".pdf": (TextChunkingTask, "pdf_path"),
+    ".xlsx": (XlsxChunkingTask, "xlsx_path"),
+    ".py": (PythonChunkingTask, "py_path"),
+}
+
+
+def iter_documentos(root: str):
+    """
+    Documentos ingestables bajo raw_data, incluidas las subcarpetas.
+
+    Era un `os.listdir` plano y solo de PDF, así que los tres manuales de
+    `hardware/` nunca entraron a este índice. Eso rompía justamente lo que este
+    pipeline existe para medir: en la comparación del frontend, la línea base
+    fallaba una pregunta sobre el PowerFlex por no tener el documento, no por
+    carecer de visión, y esa diferencia se leía como mérito del multimodal.
+    """
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d.lower() not in CARPETAS_IGNORADAS)
+        for filename in sorted(filenames):
+            if os.path.splitext(filename)[1].lower() in CHUNKERS_BASELINE:
+                yield os.path.join(dirpath, filename)
 
 
 def _load_manifest() -> dict:
@@ -199,11 +239,14 @@ def main():
               "images_ocr": 0, "chunks": 0}
     manifest = _load_manifest()
 
-    for filename in sorted(os.listdir(pdf_folder)):
-        pdf_path = os.path.join(pdf_folder, filename)
-        if not (os.path.isfile(pdf_path) and filename.lower().endswith(".pdf")):
-            continue
+    documentos = list(iter_documentos(pdf_folder))
+    print(f"\n📚 {len(documentos)} documentos encontrados bajo {pdf_folder}")
+    for d in documentos:
+        print(f"   • {os.path.relpath(d, pdf_folder)}")
+    print()
 
+    for pdf_path in documentos:
+        filename = os.path.basename(pdf_path)
         file_stem = os.path.splitext(filename)[0]
         pdf_hash = _compute_file_hash(pdf_path)
         prev = manifest.get(file_stem)
@@ -218,9 +261,12 @@ def main():
 
         try:
             # ---------- 1) CHUNKING SOLO TEXTO ----------
-            chunk_task = TextChunkingTask()
+            extension = os.path.splitext(pdf_path)[1].lower()
+            clase_chunker, campo_entrada = CHUNKERS_BASELINE[extension]
+
+            chunk_task = clase_chunker()
             chunk_task._task_settings = task_settings
-            chunk_task._input_data = {"pdf_path": pdf_path}
+            chunk_task._input_data = {campo_entrada: pdf_path}
 
             chunk_result: TaskReturnData = chunk_task.execute()
             if chunk_result.error:
@@ -230,20 +276,24 @@ def main():
 
             chunks_dir = chunk_result.payload["chunks"]
             stats = chunk_result.payload["stats"]
-            totals["pages"] += stats["total_pages"]
-            totals["pages_ocr"] += stats["pages_ocr"]
-            totals["pages_empty"] += stats["pages_empty"]
-            totals["images_ocr"] += stats["images_ocr_legible"]
-            totals["chunks"] += stats["total_chunks"]
+            # Cada lector reporta lo suyo: el de Excel cuenta hojas, no páginas.
+            # Con acceso directo por clave, un .xlsx abortaba el documento con
+            # un KeyError después de haber hecho el trabajo.
+            for clave, origen in (("pages", "total_pages"), ("pages_ocr", "pages_ocr"),
+                                  ("pages_empty", "pages_empty"),
+                                  ("images_ocr", "images_ocr_legible"),
+                                  ("chunks", "total_chunks")):
+                totals[clave] += stats.get(origen, 0)
 
-            print(f"✅ Chunking OK: {stats['total_chunks']} chunks")
-            print(f"   • capa de texto:      {stats['pages_text_layer']}/{stats['total_pages']} páginas")
-            if stats["pages_ocr"]:
+            print(f"✅ Chunking OK: {stats.get('total_chunks', 0)} chunks")
+            if stats.get("total_pages"):
+                print(f"   • capa de texto:      {stats.get('pages_text_layer', 0)}/{stats['total_pages']} páginas")
+            if stats.get("pages_ocr"):
                 print(f"   • recuperadas por OCR: {stats['pages_ocr']} páginas")
-            if stats["images_ocr_legible"]:
+            if stats.get("images_ocr_legible"):
                 print(f"   • imágenes con OCR legible: {stats['images_ocr_legible']}")
-            if stats["pages_empty"]:
-                paginas = ", ".join(str(p) for p in stats["pages_empty_list"][:12])
+            if stats.get("pages_empty"):
+                paginas = ", ".join(str(p) for p in stats.get("pages_empty_list", [])[:12])
                 extra = "..." if stats["pages_empty"] > 12 else ""
                 print(f"   ⚠️  {stats['pages_empty']} páginas sin contenido utilizable "
                       f"(ni texto ni OCR legible): {paginas}{extra}")

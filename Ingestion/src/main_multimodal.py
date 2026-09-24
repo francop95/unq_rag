@@ -3,6 +3,8 @@ import re
 import hashlib
 from datetime import datetime, timezone
 from tasks.chunking_task_multimodal import ChunkingTask
+from tasks.chunking_task_xlsx import XlsxChunkingTask
+from tasks.chunking_task_python import PythonChunkingTask
 from tasks.embeddings_task_multimodal import ChunksEmbeddings
 from tasks.indexing_task_dual import DualIndexer
 from task import TaskReturnData
@@ -140,24 +142,37 @@ def chunk_sort_key(chunk: dict):
 CARPETAS_IGNORADAS = {"old", "descartados", "__pycache__"}
 
 
-def iter_pdfs(root: str):
-    """
-    PDF bajo raw_data, incluidas las subcarpetas.
+# Qué tarea de chunking le corresponde a cada extensión, y bajo qué nombre
+# espera la ruta del archivo. El resto del pipeline —validación,
+# enriquecimiento, embeddings, indexado— es idéntico para los tres, porque
+# todas las tareas emiten el mismo esquema de chunk.
+CHUNKERS = {
+    ".pdf": (ChunkingTask, "pdf_path"),
+    ".xlsx": (XlsxChunkingTask, "xlsx_path"),
+    ".py": (PythonChunkingTask, "py_path"),
+}
 
-    Antes esto era un `os.listdir` plano, así que cualquier PDF dentro de una
-    subcarpeta quedaba fuera en silencio —y sin error, que es lo peor: la
-    ingesta terminaba "bien" con documentos faltando. Al organizar el corpus en
-    `hardware/` quedaron tres manuales sin indexar, incluido uno de 127 páginas.
+
+def iter_documentos(root: str):
+    """
+    Documentos ingestables bajo raw_data, incluidas las subcarpetas.
+
+    Antes esto era un `os.listdir` plano y solo de PDF, así que cualquier
+    archivo dentro de una subcarpeta quedaba fuera en silencio —y sin error,
+    que es lo peor: la ingesta terminaba "bien" con documentos faltando. Al
+    organizar el corpus en `hardware/` quedaron tres manuales sin indexar,
+    incluido uno de 127 páginas.
 
     El nombre del documento sigue siendo el basename sin extensión, igual que
     antes, para no romper el manifiesto ni la metadata `file_name` del índice.
-    Eso implica que dos PDF con el mismo nombre en carpetas distintas colisionan;
-    hoy no pasa, y si pasara conviene renombrarlos antes que cambiar la clave.
+    Eso implica que dos archivos con el mismo nombre en carpetas distintas
+    colisionan; hoy no pasa, y si pasara conviene renombrarlos antes que
+    cambiar la clave.
     """
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d.lower() not in CARPETAS_IGNORADAS)
         for filename in sorted(filenames):
-            if filename.lower().endswith(".pdf"):
+            if os.path.splitext(filename)[1].lower() in CHUNKERS:
                 yield os.path.join(dirpath, filename)
 
 
@@ -185,13 +200,13 @@ if __name__ == "__main__":
     failed_docs = []
     manifest = _load_manifest()
 
-    pdfs = list(iter_pdfs(PDF_FOLDER))
-    print(f"\n📚 {len(pdfs)} PDF encontrados bajo {PDF_FOLDER}")
-    for p in pdfs:
+    documentos = list(iter_documentos(PDF_FOLDER))
+    print(f"\n📚 {len(documentos)} documentos encontrados bajo {PDF_FOLDER}")
+    for p in documentos:
         print(f"   • {os.path.relpath(p, PDF_FOLDER)}")
     print()
 
-    for PDF_PATH in pdfs:
+    for PDF_PATH in documentos:
         file_stem = os.path.splitext(os.path.basename(PDF_PATH))[0]
 
         pdf_hash = _compute_file_hash(PDF_PATH)
@@ -206,15 +221,15 @@ if __name__ == "__main__":
         print(f"{'='*60}")
 
         try:
-            input_data = {
-                        "pdf_path": PDF_PATH
-                    }
             # --------------------
-            # 1) CHUNKING (PDF → chunks)
+            # 1) CHUNKING (documento → chunks)
             # --------------------
-            chunk_task = ChunkingTask()
+            extension = os.path.splitext(PDF_PATH)[1].lower()
+            clase_chunker, campo_entrada = CHUNKERS[extension]
+
+            chunk_task = clase_chunker()
             chunk_task._task_settings = task_settings
-            chunk_task._input_data = {"pdf_path": PDF_PATH}
+            chunk_task._input_data = {campo_entrada: PDF_PATH}
 
             chunk_result: TaskReturnData = chunk_task.execute()
             if chunk_result.error:

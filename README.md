@@ -204,7 +204,7 @@ cd Ingestion
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-cp tus_manuales/*.pdf data/raw_data/     # los PDF a indexar
+cp tus_manuales/* data/raw_data/         # .pdf, .xlsx y .py; subcarpetas incluidas
 python src/main_multimodal.py
 ```
 

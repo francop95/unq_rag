@@ -107,11 +107,14 @@ python scripts/validate_improvements.py
 
 ## 🚀 Uso en 3 Pasos
 
-### 1. Colocar PDFs
+### 1. Colocar los documentos
 
 ```bash
-cp tus_manuales_tecnicos/*.pdf data/raw_data/
+cp tus_manuales_tecnicos/* data/raw_data/
 ```
+
+Se ingestan `.pdf`, `.xlsx` y `.py`, en `data/raw_data/` y sus subcarpetas. La carpeta
+`old/` se ignora: es donde van los documentos reemplazados.
 
 ### 2. Ejecutar Pipeline
 
@@ -181,26 +184,51 @@ python scripts/hybrid_multimodal_search.py "diagrama de conexiones del motor"
 
 ## 📥 Qué se ingesta
 
-Los PDF viven en `data/raw_data/`. El corpus actual son 5 documentos de naturaleza muy
-distinta, y eso importa porque cada tipo estresa una parte diferente del pipeline:
+El corpus vive en `data/raw_data/`, subcarpetas incluidas (`old/` queda afuera a
+propósito: ahí van los documentos reemplazados). Son 13 documentos de tres formatos
+distintos, y eso importa porque cada uno estresa una parte diferente del pipeline:
 
-| Documento | Qué es | Chunks | Preguntas |
-|---|---|---|---|
-| `variadorPowerFlex4M.pdf` | manual del variador (119 pág.): tablas de parámetros, códigos de falla, diagramas de cableado | 430 | 1878 |
-| `Tesis 06-2025.docx.pdf` | tesis del secadero: proceso, mediciones, código Python, fotos de la máquina | 195 | 853 |
-| `TBEN-L4-8IOL_catalog.pdf` | catálogo del módulo de E/S (en inglés): especificaciones y pinouts | 41 | 174 |
-| `conexionadoTben.pdf` | plano de conexionado del TBEN (1 hoja, escaneada) | 2 | 5 |
-| `Plano distribucion electrica.pdf` | plano eléctrico principal (escaneado) | 2 | 5 |
-| **Total** | | **670** | **2915** |
+| Documento | Qué es | Pág. |
+|---|---|---|
+| `0_Construcción y automatización de un secadero...pdf` | tesis del secadero: proceso, mediciones, fotos de la máquina | 88 |
+| `1_Plano distribucion electrica_v1.pdf` | plano eléctrico principal (escaneado) | 1 |
+| `2_Planos_secadero_codificados_propuesta.pdf` | planos con la nomenclatura acordada | 2 |
+| `Poster_didactico_secadero_componentes_y_planos.pdf` | póster de componentes y planos | 1 |
+| `Propuesta de Trabajo Final...pdf` | propuesta del trabajo | 10 |
+| `conexionadoTben.pdf` | plano de conexionado del TBEN (escaneado) | 1 |
+| `hardware/ARGEE_Reference_Manual.pdf` | manual del entorno de programación del TBEN (inglés) | 127 |
+| `hardware/manual powerflex 4m.pdf` | manual del variador: tablas de parámetros, códigos de falla, diagramas | 126 |
+| `hardware/tben-L4-8ioL.pdf` | catálogo del módulo de E/S (inglés): especificaciones y pinouts | 6 |
+| `Inventario_secadero_revision_Pablo_v2.xlsx` | inventario de componentes, discrepancias, nomenclatura y planos rotulados | 8 hojas |
+| `programas python/control_secadero_251124.py` | programa de control: Modbus, servos, control ON-OFF | 527 líneas |
+| `programas python/osciloscopio_secadero_251023_1.py` | adquisición y graficado en tiempo real | 219 líneas |
+| `programas python/servosyrele300924.py` | comandos serie a los servos y relés | 48 líneas |
 
-Eso da **3585 vectores** en el índice textual (`multimodal_documents`) y **110** en el
-visual (`visual_docs`), más **271 archivos de media** (imágenes y JSON de tablas) en
-`data/media/`.
+Los planos escaneados rinden pocos chunks porque casi todo su contenido es gráfico.
+**No se recuperan por similitud** — se adjuntan SIEMPRE al LLM como PDF (ver
+`ELECTRIC_DIAGRAM_RELATED_FILES` en `API/configs/Configuration.py`), que es la única
+forma de que un modelo de visión los interprete de verdad.
 
-Los dos planos rinden solo 2 chunks cada uno porque son hojas escaneadas: casi todo su
-contenido es gráfico. **No se recuperan por similitud** — se adjuntan SIEMPRE al LLM como
-PDF (ver `ELECTRIC_DIAGRAM_RELATED_FILES` en `API/configs/Configuration.py`), que es la
-única forma de que un modelo de visión los interprete de verdad.
+### Un lector por formato
+
+La extensión decide qué tarea de chunking corre (`CHUNKERS` en `main_multimodal.py`).
+Las tres emiten el mismo esquema de chunk, así que enriquecimiento, embeddings e
+indexado son idénticos para los tres y no hay ramas por formato aguas abajo.
+
+| Formato | Tarea | Cómo corta |
+|---|---|---|
+| `.pdf` | `ChunkingTask` | modelo multimodal por página: segmenta texto, tablas y figuras, y describe cada recorte |
+| `.xlsx` | `XlsxChunkingTask` | openpyxl: las hojas tabulares por filas (con su encabezado en cada chunk), y las imágenes embebidas —los planos rotulados— extraídas y descritas como figuras |
+| `.py` | `PythonChunkingTask` | celdas `#%%` de Spyder, y dentro de una celda larga por límites de función según el AST |
+
+Las dos decisiones que no son obvias:
+
+- **El Excel no pasa por el modelo de visión para leer sus tablas.** La planilla ya es
+  estructurada: openpyxl da la tabla exacta. Pedirle a un modelo que "lea" lo que ya
+  tenemos perfecto solo agrega costo y errores. Sus imágenes embebidas sí pasan, porque
+  ahí no hay estructura que leer.
+- **Nunca se parte una función por la mitad.** Un cuerpo cortado produce dos chunks que
+  no responden nada; uno grande al menos responde su pregunta.
 
 ### Qué le pasa a cada tipo de contenido
 
