@@ -38,6 +38,7 @@ import openpyxl
 from task import Task, TaskReturnData
 from logger import Logger
 from task_utils.diagram_processor import ElectricalDiagramProcessor
+from task_utils.llm_json import QuotaExhaustedError
 from task_utils.validators.task_validators import DocumentExtensionValidator
 
 logger = Logger.get_logger(__name__)
@@ -107,6 +108,12 @@ class XlsxChunkingTask(Task):
         try:
             chunks_dir = self.execute_local()
             return TaskReturnData(payload={"chunks": chunks_dir, "stats": self.stats})
+        except QuotaExhaustedError:
+            # Se propaga: un error de crédito es de la corrida, no de este
+            # documento. Envuelto en TaskReturnData, el lote sigue al siguiente
+            # y falla ahí también, uno por uno. Ver chunking_task_multimodal.
+            logger.error("Sin crédito en la cuenta de OpenAI: se aborta el lote")
+            raise
         except Exception as ex:
             logger.exception("XlsxChunkingTask falló")
             return TaskReturnData(error=str(ex))

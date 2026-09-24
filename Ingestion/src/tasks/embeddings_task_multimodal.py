@@ -13,6 +13,7 @@ from task_utils.validators.task_validators import TaskSettingPresenceValidator
 from openai import OpenAI
 from httpx import ReadTimeout, ConnectTimeout, HTTPStatusError
 from task_utils.usage_meter import registrar as registrar_consumo
+from task_utils.llm_json import QuotaExhaustedError
 
 logger = Logger.get_logger(__name__)
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -50,6 +51,12 @@ class ChunksEmbeddings(Task):
                 "chunks": self._input_data.get("chunks"),
                 "output_path": output_path
             })
+        except QuotaExhaustedError:
+            # Se propaga: un error de crédito es de la corrida, no de este
+            # documento. Envuelto en TaskReturnData, el lote sigue al siguiente
+            # y falla ahí también, uno por uno. Ver chunking_task_multimodal.
+            logger.error("Sin crédito en la cuenta de OpenAI: se aborta el lote")
+            raise
         except Exception as e:
             logger.exception("ChunksEmbeddings failed")
             return TaskReturnData(error=str(e))

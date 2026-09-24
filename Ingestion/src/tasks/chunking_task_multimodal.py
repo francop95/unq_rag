@@ -78,6 +78,16 @@ class ChunkingTask(Task):
         try:
             output_dir = self.execute_local()
             return TaskReturnData(payload={"chunks": output_dir})
+        except QuotaExhaustedError:
+            # Se propaga en vez de envolverse. Un error de crédito no es un fallo
+            # de ESTE documento sino de la corrida entera, y devolverlo como
+            # TaskReturnData lo convertía en "error de chunking": el lote seguía
+            # al documento siguiente y fallaba ahí también, uno por uno, hasta
+            # agotar el corpus. Visto en la corrida con gpt-5: 3 documentos
+            # iniciados, 7 fallos, y el mensaje de "se aborta el lote" que nunca
+            # se imprimió porque ese camino jamás se alcanzaba.
+            logger.error("Sin crédito en la cuenta de OpenAI: se aborta el lote")
+            raise
         except Exception as e:
             logger.exception("ChunkingTask failed")
             return TaskReturnData(error=str(e))
