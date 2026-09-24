@@ -153,6 +153,12 @@ XlsxWriter==3.1.9
 yarl==1.9.4
 opencensus-ext-azure
 camelot-py[cv]
+
+# Lectura de libros de Excel (XlsxChunkingTask). Ya venía instalado como
+# dependencia de camelot-py, pero la ingesta lo importa directamente: si
+# camelot cambia su árbol de dependencias, el lector de Excel se cae con un
+# ImportError a mitad de una corrida que cuesta dinero.
+openpyxl==3.1.5
 tabula-py
 sentence-transformers==2.5.1
 torch==2.2.0
