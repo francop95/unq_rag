@@ -253,6 +253,7 @@ if __name__ == "__main__":
             continue
 
         acumulado_previo, _ = MEDIDOR.total_usd()
+        sin_tarifa_previo = MEDIDOR.tokens_sin_tarifa()
         print(f"\n{'='*60}")
         print(f"🔧 Procesando: {file_stem}")
         print(f"{'='*60}")
@@ -629,9 +630,21 @@ if __name__ == "__main__":
             traceback.print_exc()
 
         finally:
-            acumulado, _ = MEDIDOR.total_usd()
-            print(f"   💸 {file_stem}: USD {acumulado - acumulado_previo:.4f} "
-                  f"(acumulado de la corrida: USD {acumulado:.4f})")
+            acumulado, faltan_precios = MEDIDOR.total_usd()
+            st_in, st_out = MEDIDOR.tokens_sin_tarifa()
+            linea = (f"   💸 {file_stem}: USD {acumulado - acumulado_previo:.4f} "
+                     f"(acumulado: USD {acumulado:.4f})")
+            if faltan_precios:
+                # Sin esto la línea miente por omisión: con gpt-5 fuera de la
+                # tabla mostraba USD 0.07 para un documento que con gpt-4o había
+                # costado USD 1.35, y parecía que el modelo caro salía más
+                # barato. Un costo parcial presentado como total es peor que no
+                # mostrar ninguno.
+                d_in = st_in - sin_tarifa_previo[0]
+                d_out = st_out - sin_tarifa_previo[1]
+                linea += (f"  + {d_in:,} entrada / {d_out:,} salida SIN TARIFAR "
+                          f"(acumulado sin tarifar: {st_in:,}/{st_out:,})")
+            print(linea)
 
     # ========== RESUMEN FINAL ==========
     print(f"\n\n{'='*70}")

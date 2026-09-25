@@ -119,6 +119,17 @@ class MedidorDeConsumo:
             total += d["entrada"] * tarifa[0] / 1e6 + d["salida"] * tarifa[1] / 1e6
         return total, faltantes
 
+    def tokens_sin_tarifa(self) -> Tuple[int, int]:
+        """(entrada, salida) de los modelos que no tienen precio en la tabla."""
+        entrada = salida = 0
+        with self._lock:
+            items = list(self._datos.items())
+        for (_, modelo), d in items:
+            if _tarifa(modelo) is None:
+                entrada += d["entrada"]
+                salida += d["salida"]
+        return entrada, salida
+
     def reporte(self) -> str:
         with self._lock:
             items = sorted(self._datos.items(), key=lambda kv: -(kv[1]["entrada"] + kv[1]["salida"]))
