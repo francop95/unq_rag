@@ -11,6 +11,22 @@ que no está medido se dice que no está medido.
 
 ---
 
+## Contenido
+
+| | |
+|---|---|
+| [1. Cómo se mide](#1-cómo-se-mide) | la métrica, el set y su sesgo conocido |
+| [2. Embeddings de texto](#2-embeddings-de-texto) | OpenAI vs Cohere: −7 puntos |
+| [3. Embeddings de imagen](#3-embeddings-de-imagen) | CLIP vs Cohere: gana el nuevo |
+| [4. Modelo de chunking](#4-modelo-de-chunking-multimodal) | gpt-4o vs gpt-5: −2,3 puntos y 7× el costo |
+| [5. Comparación de extremo a extremo](#5-comparación-de-extremo-a-extremo) | las cuatro configuraciones en una tabla |
+| [6. ¿El multimodal se justifica?](#6-el-pipeline-multimodal-se-justifica) | contra la línea base: 340× el costo |
+| [7. Técnicas de retrieval](#7-técnicas-de-retrieval-6-evaluadas-3-desactivadas) | reranking, BM25, gates, visual |
+| [8. Qué falta medir](#8-qué-falta-medir) | lo que no se sabe |
+| [9. Resumen de decisiones](#9-resumen-de-decisiones) | la tabla final |
+
+---
+
 ## 1. Cómo se mide
 
 ### La métrica
@@ -250,7 +266,7 @@ constante en vez del comportamiento real.
 
 ---
 
-## 5.b ¿El pipeline multimodal se justifica?
+## 6. ¿El pipeline multimodal se justifica?
 
 La otra pregunta que este proyecto tiene que poder responder: si describir cada
 figura con un modelo de visión paga, comparado con extraer solo texto y pasarle
@@ -281,7 +297,61 @@ Esa es la decisión: el costo se paga por las figuras y los planos, no por el
 texto. En un corpus sin contenido gráfico la línea base sería la opción
 correcta.
 
-## 6. Qué falta medir
+## 7. Técnicas de retrieval: 6 evaluadas, 3 desactivadas
+
+Las mismas mediciones, aplicadas a las técnicas del pipeline de consulta. Están
+acá porque la pregunta que responden es idéntica —¿esto aporta o no?— y tenerlas
+en otro archivo obliga a buscar en dos lugares para defender una decisión.
+
+| Técnica | Estado | Medición |
+|---|---|---|
+| Contextual Retrieval | **activa** | prepende 1-2 frases de contexto antes de embeber |
+| Preguntas sintéticas (multi-vector) | **activa** | excluirlas cuesta 93,0% → 83,7% de respuesta presente |
+| Expansión de contexto (prev/next) | **activa** | recupera el chunk vecino cuando el recuperado queda corto |
+| Gate de relevancia (0.50) + gate cruzado | **activos** | el cruzado evita que documentos ajenos llenen el top-k |
+| **Cross-encoder reranking** | **desactivado** | ver abajo |
+| **BM25 híbrido** | **desactivado** | no aporta en este corpus |
+| **Retrieval visual (CLIP)** | **desactivado** | sin medir si aporta o mete ruido |
+| Query expansion | no implementada | el índice multi-vector ya cubre la paráfrasis |
+
+### Por qué el reranking está apagado
+
+El pipeline arma un pool y después corta en 10 chunks. Con reranking, ese corte
+lo decide el cross-encoder: no solo reordena, **elige cuáles 10 sobreviven**. Ahí
+es donde pierde.
+
+| Orden | recall@5 | recall@10 | MRR | expulsa / rescata |
+|---|---|---|---|---|
+| **Sin reranker (RRF)** | **81,1%** | **94,3%** | 0,530 | — |
+| `bge-reranker-base` | 73,6% | 84,9% | 0,511 | 7 / 2 |
+| `mmarco-mMiniLMv2-L12` | 71,7% | 84,9% | 0,576 | 7 / 2 |
+| `ms-marco-MiniLM-L-6-v2` | 64,2% | 83,0% | 0,471 | 9 / 3 |
+
+Un caso concreto: para *"el variador no arranca desde el teclado integrado"*, la
+tabla con las acciones correctivas quedaba **última al 2,5%** con reranker; sin
+él aparece **primera al 91,2%**.
+
+Se probó después `bge-reranker-v2-m3`, el cross-encoder multilingüe abierto más
+fuerte, para descartar que el problema fuera un modelo débil. Salió **peor**:
+recall@1 64,8% → 20,4%, MRR 0,735 → 0,377.
+
+**El diagnóstico, que es lo que importa:** dos rerankers de calidad muy distinta
+empeoran, y el mejor empeora más, así que la causa es el índice y no el modelo.
+Sobre una consulta, 8 de 10 candidatos llegan por un vector de pregunta
+sintética, pero el cross-encoder puntúa el contenido PADRE. Hacer que el
+reranking funcione acá es un cambio de pipeline, no un cambio de modelo.
+
+### Cómo se sigue una consulta
+
+La telemetría registra el embudo completo de cada consulta (ver
+`API/README.md`): cuántos candidatos trae la búsqueda densa y cuántos quedan
+después de cada etapa, más los candidatos crudos con su score y si sobrevivieron.
+Es lo que permite distinguir "el chunk correcto no se recuperó" de "se recuperó y
+lo filtró un gate", que son problemas distintos con arreglos distintos.
+
+---
+
+## 8. Qué falta medir
 
 **El sesgo del set.** Las preguntas se generaron contra el corpus viejo.
 Regenerar un set contra el corpus actual con `eval/generate_eval_set.py` daría
@@ -289,7 +359,7 @@ una vara sin ese sesgo, a costa de perder comparabilidad con lo histórico.
 
 ---
 
-## 7. Resumen de decisiones
+## 9. Resumen de decisiones
 
 | Etapa | Modelo | Estado |
 |---|---|---|

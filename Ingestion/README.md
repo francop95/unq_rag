@@ -77,6 +77,12 @@ Avanzado y siguen en pie.
 - **Fusión Híbrida (RRF):** se calcula, pero **el orden final lo decide la similitud densa** — ordenar por RRF se midió peor (87.0% vs 88.9%). El índice visual está desactivado: ver Retrieval Avanzado
 
 ### ⚡ Retrieval: 6 técnicas evaluadas, 3 desactivadas por medición
+
+> Las mediciones completas de cada técnica —con las tablas de recall y el
+> diagnóstico de por qué el reranking perjudica— están en
+> **[MODELOS.md](MODELOS.md#5c-técnicas-de-retrieval-6-evaluadas-3-desactivadas)**,
+> junto a las de los modelos. Lo de acá es el resumen.
+
 - **🎯 Cross-Encoder Reranking:** **desactivado** — medido, en esta configuración expulsa del top-10 el chunk correcto más veces de las que lo rescata (ver Retrieval Avanzado)
 - **🔍 BM25 Sparse Retrieval:** **desactivado** — medido, no aporta nada en este corpus (ver Retrieval Avanzado)
 - **📖 Context Expansion:** Chunks previos/siguientes automáticos
