@@ -43,6 +43,10 @@ COPY API/models/     ./models/
 COPY API/qnas/       ./qnas/
 COPY API/results/    ./results/
 COPY API/services/   ./services/
+# Registro de ejecuciones y feedback. Se lista explícitamente como el resto:
+# este COPY enumera paquetes uno por uno, así que un paquete nuevo que no se
+# agregue acá compila igual y revienta al arrancar con ModuleNotFoundError.
+COPY API/telemetria/ ./telemetria/
 COPY API/utils/      ./utils/
 
 # Punto de montaje de los datos que produce la ingesta. La ruta importa:
