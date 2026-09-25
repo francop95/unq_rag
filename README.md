@@ -20,7 +20,7 @@ propio entorno virtual y su propio `.env`:
 
 | Servicio | Qué hace | Stack | Puerto |
 |---|---|---|---|
-| **[Ingestion](Ingestion/)** | Convierte los PDF en un índice vectorial: extrae texto, tablas y figuras, los enriquece y los indexa | Python 3.12, PyMuPDF, ChromaDB, CLIP | — (proceso batch) |
+| **[Ingestion](Ingestion/)** | Convierte los PDF en un índice vectorial: extrae texto, tablas y figuras, los enriquece y los indexa | Python 3.12, PyMuPDF, ChromaDB, Bedrock | — (proceso batch) |
 | **[API](API/)** | Recibe la pregunta, recupera el contexto y genera la respuesta | Python 3.12, Flask, ChromaDB | 5000 |
 | **[Frontend](Frontend/)** | Interfaz de chat con panel de fuentes y galería de figuras | React 19, TypeScript, Vite, Tailwind | 5173 |
 
@@ -60,7 +60,7 @@ y a mitad de frase, sin mirar el contenido.*
 Sobre un manual esto parte la fila de una tabla de su encabezado, y el fragmento
 resultante dice `8448 | 11 | 1 = Parámetros bloqueados` sin decir de qué parámetro habla.
 
-**Lo que hace Ingestion:** el troceado lo decide un modelo multimodal (`gpt-4o`) que ve
+**Lo que hace Ingestion:** el troceado lo decide un modelo multimodal (`gpt-5`) que ve
 la página rasterizada, no el flujo de texto. Devuelve cada bloque con su tipo —texto,
 tabla o figura— y cada tipo se procesa aparte. Las tablas conservan su markdown y su
 estructura JSON; las figuras se recortan y se describen en una pasada dedicada de visión.

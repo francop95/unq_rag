@@ -67,8 +67,13 @@ Avanzado y siguen en pie.
 10) y el impacto de subir las preguntas sintéticas por encima de 5.
 
 ### 🎨 Sistema Dual + Retrieval Avanzado
-- **Índice Textual (OpenAI):** text-embedding-3-large para texto narrativo y tablas
-- **Índice Visual (CLIP):** ViT-B-32 para búsqueda semántica real de imágenes por contenido visual
+- **Índice Textual (Bedrock):** `cohere.embed-v4:0`, 1536 dimensiones, en `eu-west-1`
+- **Índice Visual:** hoy lo construye la ingesta con CLIP (`ViT-B-32`, 512 dims) en
+  `visual_docs_v2`, y está **desactivado** en la API. El reemplazo por
+  `cohere.embed-v4:0` —mismo espacio de 1536 que el texto, así una consulta escrita
+  alcanza una figura directamente— existe y está medido, pero vive en una colección
+  aparte (`visual_docs_v2_mm`, la construye `scripts/rebuild_visual_index.py`) y
+  todavía no la consulta nadie. Ver «Los modelos y por qué estos»
 - **Fusión Híbrida (RRF):** se calcula, pero **el orden final lo decide la similitud densa** — ordenar por RRF se midió peor (87.0% vs 88.9%). El índice visual está desactivado: ver Retrieval Avanzado
 
 ### ⚡ Retrieval: 6 técnicas evaluadas, 3 desactivadas por medición
@@ -179,6 +184,67 @@ python scripts/hybrid_multimodal_search.py "diagrama de conexiones del motor"
    Componentes: motor:M1, contactor:K2, relay:F1
    Valores: 480V AC, 12A, 5.5kW
 ```
+
+---
+
+## 🧬 Los modelos y por qué estos
+
+| Etapa | Modelo | Por qué |
+|---|---|---|
+| Chunking multimodal | `gpt-5` | ve cada página y decide dónde cortar, qué es tabla y qué es figura |
+| Pasada dedicada por figura | `gpt-5` | describe cada recorte aislado: componentes, conexiones, valores |
+| Enriquecimiento | `gpt-4o-mini` | una llamada por chunk; es la etapa de mayor volumen y la más sensible al costo |
+| Embeddings de texto | `cohere.embed-v4:0` (Bedrock, `eu-west-1`) | 1536 dims |
+| Embeddings de imagen | CLIP `ViT-B-32` en la ingesta; `cohere.embed-v4:0` en la colección paralela | ver más abajo |
+
+Se cambian por entorno (`multimodal_model`, `enrichment_model`,
+`embedding_provider`, `embedding_model`, `embedding_region` en el `.env`).
+
+### Lo que se midió antes de cambiar
+
+**Embeddings de texto.** Sobre tres pares reales del dominio (consulta, pasaje
+correcto, pasaje incorrecto), por el margen de separación:
+
+| Modelo | Dims | Margen |
+|---|---|---|
+| `text-embedding-3-large` | 3072 | +0.463 |
+| `cohere.embed-v4:0` | 1536 | +0.447 |
+| `cohere.embed-multilingual-v3` | 1024 | +0.267 |
+
+Los dos primeros están empatados: **el cambio de embedding de texto no se hizo
+por precisión**, porque no la mejora. Se hizo porque embed-v4 es multimodal y
+eso habilita lo de abajo.
+
+**Embeddings de imagen.** Sobre los cuatro planos del Excel, por el margen
+entre el acierto y el primer error:
+
+| Consulta | CLIP | embed-v4 |
+|---|---|---|
+| "plano de conexionado del TBEN" | +0.020 | **+0.126** |
+| "diagrama de distribución eléctrica..." | +0.025 | +0.026 |
+| "plano con los códigos QD01 QF01 rotulados" | **erró** | **+0.140** |
+
+Márgenes de ~0.02 son ruido. CLIP falla la consulta que separa una copia
+rotulada de su original; embed-v4 pone el plano rotulado primero (0.378) y el
+mismo plano sin rotular último (0.172), o sea que lee los códigos dibujados
+encima. Esas dos hojas del Excel existen exactamente para esa distinción.
+
+**Estado del reemplazo de CLIP:** medido y construido, no adoptado. La ingesta
+sigue escribiendo CLIP y la API sigue sin consultar el índice visual
+(`USE_VISUAL_RETRIEVAL = False`). Faltan dos pasos, en este orden: conectar la
+colección multimodal al lado de consulta, y recién entonces medir si prender el
+retrieval visual mejora el recall o solo agrega ruido — que es la pregunta que
+nunca se respondió con CLIP y la razón por la que está apagado.
+
+**Chunking.** `gpt-5` rechaza `temperature` y solo acepta su valor por
+defecto; el pipeline la pasaba en los tres puntos donde llama al modelo, así
+que apuntar la ingesta a gpt-5 hacía fallar todas las llamadas. Resuelto en
+`task_utils/model_params.py`.
+
+También consume mucho más: medido sobre 6 páginas, **4.645 tokens de entrada y
+14.611 de salida por página**, contra los 175 de salida que devolvía `gpt-4o`
+para describir la misma figura. Razona antes de responder. El medidor de
+consumo (ver «Cuánto sale una corrida») reporta los tokens exactos.
 
 ---
 
