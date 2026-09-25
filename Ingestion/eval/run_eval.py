@@ -94,6 +94,21 @@ def main():
 
     keys = data["openai_keys"]
     oai = OpenAI(api_key=keys if isinstance(keys, str) else keys[0])
+
+    # El benchmark tiene que embeber la consulta con EL MISMO modelo que la API,
+    # o no está midiendo el sistema sino otro. Antes llamaba a OpenAI derecho:
+    # con ambos lados en OpenAI daba igual, pero al pasar la ingesta a Bedrock
+    # el eval quedó consultando un índice de 1536 con vectores de 3072 y todas
+    # las búsquedas fallaron. Falló ruidosamente por suerte; de haber coincidido
+    # las dimensiones habría reportado métricas plausibles y falsas.
+    from contexts.embedding_provider import from_config
+
+    emb = from_config(data, openai_client=oai)
+    print(f"embeddings de consulta: {emb.provider}/{emb.model}"
+          + (f" @ {emb.region}" if emb.provider != "openai" else ""))
+
+    def vector_de(pregunta: str):
+        return emb.embed([pregunta], input_type="search_query")[0]
     conn = ChromaConnection(data)
     conn.connect()
 
@@ -110,9 +125,7 @@ def main():
     for i, entry in enumerate(on_topic, 1):
         d = dict(data)
         d["query"] = entry["question"]
-        vector = oai.embeddings.create(
-            model=data["openai_emb_model"], input=entry["question"]
-        ).data[0].embedding
+        vector = vector_de(entry["question"])
         df = conn.search_vectors(d, vector, top_k=top_k)
 
         if df.empty:
@@ -153,9 +166,7 @@ def main():
     for entry in off_topic:
         d = dict(data)
         d["query"] = entry["question"]
-        vector = oai.embeddings.create(
-            model=data["openai_emb_model"], input=entry["question"]
-        ).data[0].embedding
+        vector = vector_de(entry["question"])
         df = conn.search_vectors(d, vector, top_k=top_k)
         if df.empty:
             gate_ok += 1
