@@ -157,6 +157,12 @@ class RagWorkflow:
                 timings["total_time"] = time.perf_counter() - t0
                 self._log_timings(data, timings, stage="invalid_query")
 
+                # Se registra igual que el flujo completo. Sin esto, una consulta
+                # cortada acá no deja rastro, y es justamente el caso que hay que
+                # poder diagnosticar: el usuario recibe un texto genérico sin
+                # saber por qué, y en la telemetría no aparece nada.
+                registrar_ejecucion(data, final_response_filtered, timings)
+
                 return final_response_filtered
 
         # Generic or Greeting
@@ -174,6 +180,12 @@ class RagWorkflow:
 
                 timings["total_time"] = time.perf_counter() - t0
                 self._log_timings(data, timings, stage="generic_answer")
+
+                # Se registra igual que el flujo completo. Sin esto, una consulta
+                # cortada acá no deja rastro, y es justamente el caso que hay que
+                # poder diagnosticar: el usuario recibe un texto genérico sin
+                # saber por qué, y en la telemetría no aparece nada.
+                registrar_ejecucion(data, final_response_filtered, timings)
 
                 return final_response_filtered
 

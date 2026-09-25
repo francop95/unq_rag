@@ -300,6 +300,34 @@ class QueryIntent:
             elif (data["query_intent"]["question_type"] == self.query_intent_categories[3]):
                 logger.info("[{}] [QueryIntent] Case - Invalid".format(self.query_id))
                 logger.info("[{}] [QueryIntent] Incoming Query: {}".format(self.query_id, data["query"]))
+
+                # Con una pregunta anterior en la conversación, "invalid" no se
+                # acepta: se degrada a follow-up.
+                #
+                # "Invalid" corta el flujo antes del retrieval y devuelve un texto
+                # pidiendo una pregunta técnica concreta. Aplicado a un follow-up
+                # legítimo —"¿y qué reviso primero?"— deja la conversación muerta:
+                # el usuario pregunta y el asistente le pide que pregunte. Visto en
+                # producción, y de forma intermitente, que es lo peor: la misma
+                # pregunta anda unas veces y otras no.
+                #
+                # El prompt del clasificador ya dice que follow-up es la categoría
+                # por defecto cuando hay pregunta anterior, pero eso es una
+                # instrucción y el modelo la incumple de a ratos. Acá es una regla.
+                # El costo de equivocarse es asimétrico: tratar basura como
+                # follow-up gasta una búsqueda y responde "no encontré"; tratar un
+                # follow-up como basura rompe la conversación.
+                historia = data.get("conv_history_df")
+                hay_anterior = historia is not None and not getattr(historia, "empty", True)
+                if hay_anterior:
+                    logger.info(
+                        f"[{self.query_id}] [QueryIntent] 'invalid' con pregunta anterior: "
+                        f"se trata como follow-up"
+                    )
+                    data["query_intent"]["question_type"] = self.query_intent_categories[2]
+                    data["query_intent"]["response"] = None
+                    return data
+
                 data["invalid_question_found"] = True
                 data["invalid_qna_response"][0]["answer"] = str(data["query_intent"]["response"]).strip()
                 logger.info("[{}] Invalid Question Response: {}".format(self.query_id, data["invalid_qna_response"]))

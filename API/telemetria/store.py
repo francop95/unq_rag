@@ -261,7 +261,12 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
         _texto(data.get("query"), 4000),
         _texto(r0.get("answer"), 20000),
         _texto(data.get("conv_id"), 200),
-        1 if data.get("is_followup") else 0,
+        # Si esta consulta llegó CON historial, no la bandera de configuración
+        # `is_followup` —que solo dice si el manejo de follow-ups está activado—.
+        # Registrar la bandera hacía que toda consulta figurara como follow-up y
+        # el dato no distinguía nada.
+        1 if (data.get("conv_history_df") is not None
+              and not getattr(data.get("conv_history_df"), "empty", True)) else 0,
         _texto(data.get("updated_query"), 4000),
         1 if data.get("gpt_ans_found") else 0,
         1 if desde_cache else 0,
@@ -277,7 +282,14 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
         json.dumps(tiempos or {}, ensure_ascii=False),
         json.dumps({"similarity_score": r0.get("similarity_score"),
                     "is_valid": r0.get("is_valid"),
-                    "files": r0.get("files")}, ensure_ascii=False)[:4000],
+                    "files": r0.get("files"),
+                    # La categoría del clasificador decide si hubo retrieval o si
+                    # la consulta se cortó antes. Sin esto, una respuesta genérica
+                    # y una respuesta con 0 resultados se ven igual.
+                    "intencion": (data.get("query_intent") or {}).get("question_type"),
+                    "pregunta_invalida": bool(data.get("invalid_question_found")),
+                    "respuesta_generica": bool(data.get("generic_ans_found")),
+                    }, ensure_ascii=False)[:4000],
     )
 
     with _lock:
