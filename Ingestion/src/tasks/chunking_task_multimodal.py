@@ -699,9 +699,21 @@ class ChunkingTask(Task):
         for k in ("HTTP_PROXY","HTTPS_PROXY","ALL_PROXY","http_proxy","https_proxy","all_proxy"):
             os.environ.pop(k, None)
 
+        # Timeout explícito por petición. Sin esto queda el default del SDK y un
+        # pedido que el servidor abandone en silencio bloquea a un worker para
+        # siempre: la pasada de figuras corre con concurrencia 3, así que tres
+        # peticiones colgadas detienen el documento entero sin escribir una sola
+        # línea al log, que es indistinguible de estar trabajando.
+        #
+        # Es holgado a propósito. Los modelos de razonamiento tardan minutos por
+        # figura —medido: hasta 2890 tokens de salida para describir un plano—
+        # y un timeout corto cancelaría trabajo legítimo, que es peor que
+        # esperar. Los reintentos ya los maneja LLMJsonClient.
+        timeout = float(self._task_settings.get("llm_request_timeout", 300.0))
+
         if base_url:
-            return OpenAI(api_key=api_key, base_url=base_url)
-        return OpenAI(api_key=api_key)
+            return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        return OpenAI(api_key=api_key, timeout=timeout)
 
     @staticmethod
     def _retry_delay_from_error(e: Exception, attempt: int, base_delay: float, max_delay: float) -> float:
