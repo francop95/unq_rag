@@ -137,6 +137,50 @@ class EmbeddingProvider:
 
         raise ValueError(f"modelo de Bedrock no soportado: {self.model!r}")
 
+    # --------------------------------------------------------------- imágenes
+    # Modelos que embeben imágenes en el MISMO espacio que el texto. Es la
+    # propiedad que importa: permite que una consulta escrita recupere una
+    # figura directamente, sin el índice visual separado que hace falta con
+    # CLIP, cuyo espacio de 512 dimensiones no se puede comparar con el textual.
+    MODELOS_MULTIMODALES = ("cohere.embed-v4",)
+
+    def soporta_imagenes(self) -> bool:
+        return self.provider == "bedrock" and any(
+            self.model.startswith(p) for p in self.MODELOS_MULTIMODALES
+        )
+
+    def embed_images(self, image_paths: List[str]) -> List[List[float]]:
+        """
+        Un vector por imagen, en el mismo espacio que `embed()`.
+
+        Bedrock las recibe de a una: el campo `images` acepta una lista, pero
+        embed-v4 rechaza más de un elemento por llamada.
+        """
+        if not self.soporta_imagenes():
+            raise ValueError(
+                f"{self.model!r} no embebe imágenes; usar un modelo multimodal "
+                f"({', '.join(self.MODELOS_MULTIMODALES)}) o CLIP."
+            )
+
+        import base64
+        import json
+        import mimetypes
+
+        salida: List[List[float]] = []
+        for ruta in image_paths:
+            tipo = mimetypes.guess_type(ruta)[0] or "image/png"
+            with open(ruta, "rb") as fh:
+                uri = f"data:{tipo};base64," + base64.b64encode(fh.read()).decode()
+            cuerpo = {"images": [uri], "input_type": "image"}
+            if self.output_dimension:
+                cuerpo["output_dimension"] = self.output_dimension
+            datos = self._invoke(json.dumps(cuerpo))
+            emb = datos.get("embeddings")
+            if isinstance(emb, dict):
+                emb = emb.get("float") or next(iter(emb.values()))
+            salida.append(list(emb)[0] if emb else [])
+        return salida
+
     def _invoke(self, body: str) -> dict:
         import json
 
