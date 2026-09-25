@@ -56,6 +56,11 @@ N = 5
 # partido en dos y ninguna mitad contiene lo suficiente.
 UMBRAL_ACEPTACION = 0.60
 
+# Para la segunda estrategia (tokens de la clave). Más bajo porque su puntaje ya
+# viene escalado a la mitad, y de todos modos sus propuestas se marcan aparte
+# para que se revisen antes de aplicarlas.
+UMBRAL_CLAVE = 0.40
+
 
 def normalizar(texto: str) -> str:
     texto = (texto or "").lower()
@@ -139,8 +144,52 @@ def cargar_chunks(chunks_root: str, vigentes: Optional[set] = None) -> List[Dict
                     "chunk_id": str(c.get("chunk_id", "")),
                     "content_type": c.get("content_type", ""),
                     "ngramas": ngramas(texto),
+                    "texto": texto,
                 })
     return salida
+
+
+# Tokens de una clave de respuesta que sobreviven a una traducción o a que el
+# texto lo haya reescrito otro modelo: números con unidad ("9 A", "-40…+70 °C")
+# y códigos en mayúsculas ("VAUX2", "QD01"). Las palabras sueltas no sirven.
+TOKEN_CLAVE = re.compile(r"[0-9]+(?:[.,][0-9]+)?\s*[A-Za-zÁ-ú%°]*|[A-Z]{2,}[0-9]*")
+
+
+def tokens_de_clave(answer_key: str) -> List[str]:
+    return [t.strip() for t in TOKEN_CLAVE.findall(answer_key or "") if len(t.strip()) > 1]
+
+
+def coincidencia_por_clave(answer_key: str, chunks: List[Dict]) -> Tuple[Optional[Dict], float]:
+    """
+    Segunda estrategia, para cuando el excerpt ya no existe como texto.
+
+    Pasa en dos casos reales de este corpus. Uno: el catálogo del TBEN fue
+    reemplazado por su traducción al español, y una coincidencia por n-gramas
+    de caracteres no cruza un cambio de idioma. Dos: varios excerpts no son
+    texto del PDF sino descripciones que generó el modelo de visión, y esas se
+    reescriben distinto en cada corrida aunque la figura sea la misma.
+
+    Los números con unidad y los códigos en mayúsculas sobreviven a las dos
+    cosas. La contrapartida es que una clave como "2" u "8" no identifica nada,
+    así que se exige al menos dos tokens y se devuelve una confianza baja a
+    propósito: estas propuestas son para revisar, no para aplicar a ciegas.
+    """
+    tokens = tokens_de_clave(answer_key)
+    if len(tokens) < 2:
+        return None, 0.0
+
+    mejor, puntaje = None, 0.0
+    for c in chunks:
+        texto = c.get("texto") or ""
+        if not texto:
+            continue
+        hallados = sum(1 for t in tokens if re.search(re.escape(t), texto, re.I))
+        p = hallados / len(tokens)
+        if p > puntaje:
+            mejor, puntaje = c, p
+    # Se escala para que nunca compita con una coincidencia por excerpt, que es
+    # evidencia mucho más fuerte.
+    return (mejor, puntaje * 0.5) if mejor else (None, 0.0)
 
 
 def mejor_coincidencia(excerpt: str, chunks: List[Dict]) -> Tuple[Optional[Dict], float]:
@@ -225,11 +274,16 @@ def procesar(ruta_set: str, chunks: List[Dict], umbral: float) -> Tuple[List[Dic
             continue
 
         mejor, puntaje = mejor_coincidencia(excerpt, chunks)
+        via = "excerpt"
         if mejor is None or puntaje < umbral:
-            cuenta["sin coincidencia"] += 1
-            resultados.append({"entrada": salida, "estado": "sin coincidencia",
-                               "puntaje": puntaje, "propuesta": mejor})
-            continue
+            alt, p_alt = coincidencia_por_clave(entrada.get("answer_key", ""), chunks)
+            if alt is not None and p_alt >= UMBRAL_CLAVE:
+                mejor, puntaje, via = alt, p_alt, "clave"
+            else:
+                cuenta["sin coincidencia"] += 1
+                resultados.append({"entrada": salida, "estado": "sin coincidencia",
+                                   "puntaje": max(puntaje, p_alt), "propuesta": mejor})
+                continue
 
         propuesta = {
             "gold_doc": mejor["file_name"],
@@ -240,9 +294,12 @@ def procesar(ruta_set: str, chunks: List[Dict], umbral: float) -> Tuple[List[Dic
         estado = "sin cambio" if (propuesta["gold_doc"] == doc_viejo and
                                   set(propuesta["gold_pages"]) == set(map(str, entrada.get("gold_pages") or []))) \
             else "reapuntada"
+        if via == "clave" and estado == "reapuntada":
+            estado = "reapuntada (por clave, revisar)"
         cuenta[estado] += 1
         resultados.append({"entrada": salida, "estado": estado, "puntaje": puntaje,
-                           "propuesta": propuesta, "mejor_pagina": mejor["page_num"]})
+                           "propuesta": propuesta, "mejor_pagina": mejor["page_num"],
+                           "via": via})
 
     return resultados, cuenta
 
@@ -283,11 +340,12 @@ def main():
         if r["estado"] in ("sin cambio",) and not args.verbose:
             continue
         e, prop = r["entrada"], r["propuesta"]
-        marca = {"reapuntada": "→", "sin cambio": "=", "sin coincidencia": "!",
+        marca = {"reapuntada": "→", "reapuntada (por clave, revisar)": "≈",
+                 "sin cambio": "=", "sin coincidencia": "!",
                  "sin excerpt": "?", "fuera de tema": "·"}[r["estado"]]
         puntaje = f"{r['puntaje']:.2f}" if r["puntaje"] is not None else "   -"
         print(f"  {marca} [{puntaje}] {e['question'][:66]}")
-        if r["estado"] == "reapuntada":
+        if r["estado"].startswith("reapuntada"):
             print(f"      {e['gold_doc']} p{e.get('gold_pages')}")
             print(f"   →  {prop['gold_doc']} p{prop['gold_pages']} "
                   f"(mejor: p{r['mejor_pagina']} {prop['gold_chunk_id']})")
@@ -313,8 +371,9 @@ def main():
     with open(ruta_set, "w", encoding="utf-8") as fh:
         for r in resultados:
             e = dict(r["entrada"])
-            if r["estado"] == "reapuntada":
+            if r["estado"].startswith("reapuntada"):
                 e.update(r["propuesta"])
+                e["remap_via"] = r.get("via", "excerpt")
                 e["remapped_from"] = {"gold_doc": r["entrada"]["gold_doc"],
                                       "gold_pages": r["entrada"].get("gold_pages"),
                                       "containment": round(r["puntaje"], 3)}
