@@ -54,11 +54,19 @@ from task_utils.embedding_provider import EmbeddingProvider  # noqa: E402
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 
-def proveedor(cfg) -> EmbeddingProvider:
+def proveedor(cfg, modelo=None, region=None, prov=None) -> EmbeddingProvider:
+    """
+    El proveedor con el que embeber las imágenes.
+
+    Por defecto toma el del `.env`, pero se puede pisar, y hace falta: tras
+    medirlo, el índice de TEXTO usa `text-embedding-3-large` y el de IMAGEN usa
+    `cohere.embed-v4`, porque cada uno gana en su terreno (ver MODELOS.md). Son
+    índices distintos y no hay razón para atarlos al mismo modelo.
+    """
     p = EmbeddingProvider(
-        provider=cfg.embedding.embedding_provider,
-        model=cfg.embedding.embedding_model,
-        region=cfg.embedding.embedding_region,
+        provider=prov or cfg.embedding.embedding_provider,
+        model=modelo or cfg.embedding.embedding_model,
+        region=region or cfg.embedding.embedding_region,
         output_dimension=cfg.embedding.embedding_output_dimension or None,
     )
     if not p.soporta_imagenes():
@@ -100,6 +108,11 @@ def main():
     p.add_argument("--escribir", action="store_true", help="construye; sin esto solo informa")
     p.add_argument("--comparar", metavar="CONSULTA",
                    help="rankea las imágenes de las dos colecciones para esa consulta")
+    p.add_argument("--modelo", default="cohere.embed-v4:0",
+                   help="modelo multimodal para las imágenes (default: cohere.embed-v4:0, "
+                        "que es el que ganó la medición; el .env usa otro para el texto)")
+    p.add_argument("--proveedor", default="bedrock")
+    p.add_argument("--region", default=None, help="default: el del .env")
     p.add_argument("--lote", type=int, default=16)
     args = p.parse_args()
 
@@ -132,7 +145,7 @@ def main():
     if not utilizables:
         raise SystemExit("Ninguna imagen disponible en disco; nada que reconstruir.")
 
-    prov = proveedor(cfg)
+    prov = proveedor(cfg, modelo=args.modelo, region=args.region, prov=args.proveedor)
     print(f"  modelo:   {prov.model} @ {prov.region}")
 
     if args.comparar:

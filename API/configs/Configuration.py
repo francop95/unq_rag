@@ -47,7 +47,7 @@ class Configuration:
     #
     # El default sigue siendo el índice en producción: se cambia recién cuando
     # el nuevo está medido, no cuando termina de construirse.
-    AppSettings__ChromaIndex = os.getenv("CHROMA_INDEX", "multimodal_documents")
+    AppSettings__ChromaIndex = os.getenv("CHROMA_INDEX", "multimodal_documents_v4_4o")
     AppSettings__ChromaCacheIndex = os.getenv("CHROMA_CACHE_INDEX", "cache-index")
 
     DATA_EXPORT_ENABLED = False
@@ -55,7 +55,7 @@ class Configuration:
     chroma_local_path = os.path.abspath(
         os.getenv("CHROMA_PATH")
         or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
-                        "Ingestion/data/chroma_index/")
+                        "Ingestion/data/chroma_index_v4_4o/")
     )
 
     # El modelo de embeddings del índice y el de la API TIENEN que ser el mismo.

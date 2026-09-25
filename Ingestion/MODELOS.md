@@ -47,6 +47,27 @@ excluyen del porcentaje.
 sesgado a su favor. Parte de cualquier caída al pasar al corpus nuevo puede ser
 eso y no una degradación real. No se puede separar con el set actual.
 
+### Sobre el recall, una vez reapuntado el set
+
+`eval/remap_eval_set.py` reapunta las preguntas al corpus nuevo buscando su
+`source_excerpt` en los chunks recién generados. Resultado sobre las 54
+preguntas en tema: **35 reapuntadas** y 19 sin coincidencia, porque su excerpt
+era una descripción generada por el modelo de visión (se reescribe en cada
+corrida) o porque el documento fue reemplazado por su traducción.
+
+Con el set reapuntado, contra el índice de la fila 4:
+
+| | Antes de reapuntar | Después |
+|---|---|---|
+| recall@10 | 1,9% | **53,7%** (29/54) |
+
+El 53,7% está limitado por construcción: las 19 preguntas sin reapuntar no
+pueden acertar nunca, así que el techo es 35/54 = 64,8%. **Sobre las que sí se
+reapuntaron el recall@10 es 29/35 = 82,9%**, contra el 88,9% histórico.
+
+Esto refuerza por qué el análisis usa `respuesta presente`: esa métrica dio
+93,0% sin depender de ningún reapuntado.
+
 ### Cómo reproducir
 
 ```bash
