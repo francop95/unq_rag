@@ -94,9 +94,9 @@ main{padding:1.25rem 1.5rem 3rem;max-width:1500px;margin:0 auto}
 .editor .barra code{background:var(--sup3);padding:.08rem .34rem;border-radius:5px;
         color:var(--mut);font-size:.72rem}
 textarea{
-  width:100%;min-height:160px;background:transparent;color:var(--tex);border:0;
+  width:100%;min-height:300px;height:38vh;background:transparent;color:var(--tex);border:0;
   padding:.85rem;resize:vertical;outline:none;
-  font:13.5px/1.62 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   tab-size:2;
 }
 textarea::selection{background:#f59e0b40}
@@ -118,7 +118,7 @@ kbd{background:var(--sup3);border:1px solid var(--bor2);border-bottom-width:2px;
 .chip{background:var(--sup2);border:1px solid var(--bor);border-radius:999px;
       padding:.1rem .6rem;font-size:.745rem;font-variant-numeric:tabular-nums}
 #salida{border:1px solid var(--bor);border-radius:var(--r);overflow:auto;
-        max-height:66vh;background:var(--sup)}
+        max-height:60vh;min-height:130px;background:var(--sup)}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:.845rem}
 th,td{text-align:left;padding:.5rem .8rem;border-bottom:1px solid var(--bor);
       white-space:nowrap;max-width:430px;overflow:hidden;text-overflow:ellipsis}

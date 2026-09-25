@@ -58,7 +58,15 @@ def add_header(response):
     """
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
-    response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'none'; img-src 'self'; style-src 'self'; frame-ancestors 'none'; form-action 'self';"
+    # Solo si la vista no fijó la suya. Este hook corre DESPUÉS de la vista, así
+    # que asignar sin preguntar pisaba la política del panel de telemetría: su
+    # CSS y su JS son inline, y con `style-src 'self'` el navegador los descarta
+    # sin decir nada. La página llegaba entera y se veía como HTML sin estilos.
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'none'; script-src 'self'; connect-src 'none'; img-src 'self'; "
+        "style-src 'self'; frame-ancestors 'none'; form-action 'self';",
+    )
 
     # Se refleja el Origin solo si está en la lista, en vez de mandar "*": así el
     # navegador bloquea a cualquier otra página. Con "*" configurado explícitamente se
