@@ -250,6 +250,37 @@ constante en vez del comportamiento real.
 
 ---
 
+## 5.b ¿El pipeline multimodal se justifica?
+
+La otra pregunta que este proyecto tiene que poder responder: si describir cada
+figura con un modelo de visión paga, comparado con extraer solo texto y pasarle
+OCR a las imágenes (`main_text_baseline.py`).
+
+Ambos índices sobre **el mismo corpus de 13 documentos**:
+
+| | Multimodal | Línea base (texto + OCR) |
+|---|---|---|
+| Costo de ingesta | **USD 7,36** | **USD 0,0217** |
+| Vectores | 10.376 | 771 |
+| Preguntas de texto (54): respuesta presente | **93,0%** | 88,4% |
+| Preguntas de texto: recall@10 | 53,7% | 51,9% |
+| **Preguntas visuales (24): recall@10** | **54,2%** (13/24) | 41,7% (10/24) |
+| Preguntas visuales: respuesta presente | **20,8%** | 8,3% |
+| Chunks con imagen adjunta (mediana de 10) | **8** | **0** |
+
+El multimodal cuesta **340 veces más** y en preguntas de texto gana 4,6 puntos.
+Si el sistema fuera solo para buscar parámetros en manuales, no se justificaría.
+
+Donde sí se justifica es en lo visual. De las 24 preguntas visuales, 13 se
+pudieron reapuntar al corpus nuevo, y **el multimodal acierta las 13** —el
+techo alcanzable— contra 10 de la línea base. Y la fila que más importa para el
+uso real: el multimodal entrega 8 de cada 10 chunks **con su imagen adjunta**,
+la línea base ninguno. Un técnico que pregunta por un plano recibe el plano.
+
+Esa es la decisión: el costo se paga por las figuras y los planos, no por el
+texto. En un corpus sin contenido gráfico la línea base sería la opción
+correcta.
+
 ## 6. Qué falta medir
 
 **El sesgo del set.** Las preguntas se generaron contra el corpus viejo.

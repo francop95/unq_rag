@@ -20,8 +20,8 @@ importar `app`, que corre `initialize()` al importarse.
 
 Variables de entorno que acepta:
 
-    BASELINE_INDEX_NAME    colección Chroma     (default: baseline_documents)
-    BASELINE_INDEX_PATH    carpeta del índice   (default: Ingestion/data/chroma_index_baseline)
+    BASELINE_INDEX_NAME    colección Chroma     (default: baseline_documents_v2)
+    BASELINE_INDEX_PATH    carpeta del índice   (default: Ingestion/data/chroma_index_baseline_v2)
     BASELINE_PORT          puerto               (default: 5001)
     CORS_ALLOWED_ORIGIN    orígenes permitidos  (default: los Vite 5173 y 5174)
     API_TOKEN              igual que en app.py  (opcional)
@@ -33,10 +33,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-INDEX_NAME = os.getenv("BASELINE_INDEX_NAME", "baseline_documents")
+INDEX_NAME = os.getenv("BASELINE_INDEX_NAME", "baseline_documents_v2")
 INDEX_PATH = os.path.abspath(os.getenv(
     "BASELINE_INDEX_PATH",
-    os.path.join(HERE, "..", "Ingestion", "data", "chroma_index_baseline"),
+    os.path.join(HERE, "..", "Ingestion", "data", "chroma_index_baseline_v2"),
 ))
 PORT = int(os.getenv("BASELINE_PORT", "5001"))
 
