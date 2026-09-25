@@ -209,6 +209,9 @@ python src/main_multimodal.py
 ```
 
 Deja el índice en `data/chroma_index/` y los recortes de figuras y tablas en `data/media/`.
+Qué modelo usa cada etapa y por qué, con las mediciones que lo respaldan:
+[Ingestion/MODELOS.md](Ingestion/MODELOS.md).
+
 Es un proceso batch y cuesta dinero: cada página pasa por un modelo de visión y el
 enriquecimiento añade llamadas por chunk. Corre una vez, y se repite solo cuando cambian
 los documentos.

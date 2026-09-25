@@ -202,6 +202,11 @@ Se cambian por entorno (`multimodal_model`, `enrichment_model`,
 
 ### Lo que se midió antes de cambiar
 
+> Las mediciones completas —costos por modelo, comparaciones de extremo a
+> extremo y el porqué de cada elección— están en **[MODELOS.md](MODELOS.md)**.
+> Lo de acá es el resumen.
+
+
 **Embeddings de texto.** Sobre tres pares reales del dominio (consulta, pasaje
 correcto, pasaje incorrecto), por el margen de separación:
 
