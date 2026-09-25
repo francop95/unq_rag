@@ -11,6 +11,7 @@ exactamente las mismas, sin dos versiones que se desincronizan.
 CONSULTAS = [
     {
         "id": "ultimas",
+        "grupo": "Actividad",
         "titulo": "Últimas consultas",
         "ayuda": "Qué se preguntó, cuánto recuperó y con qué score",
         "sql": """
@@ -26,7 +27,8 @@ LIMIT 50""",
     },
     {
         "id": "sin_contexto",
-        "titulo": "Consultas que no recuperaron nada",
+        "grupo": "Problemas",
+        "titulo": "Sin contexto recuperado",
         "ayuda": "Cero contextos: o la pregunta no tiene ancla técnica, o falta el documento",
         "sql": """
 SELECT substr(creada_en, 1, 19) AS cuando,
@@ -41,7 +43,8 @@ LIMIT 50""",
     },
     {
         "id": "negativos",
-        "titulo": "Respuestas marcadas como no útiles",
+        "grupo": "Problemas",
+        "titulo": "Respuestas no útiles",
         "ayuda": "Con sus motivos y comentarios",
         "sql": """
 SELECT substr(f.creado_en, 1, 19) AS cuando,
@@ -58,6 +61,7 @@ LIMIT 50""",
     },
     {
         "id": "motivos",
+        "grupo": "Problemas",
         "titulo": "Motivos más frecuentes",
         "ayuda": "Por qué falla más seguido",
         "sql": """
@@ -70,7 +74,8 @@ ORDER BY veces DESC""",
     },
     {
         "id": "documentos",
-        "titulo": "Qué documentos se recuperan más",
+        "grupo": "Retrieval",
+        "titulo": "Documentos más recuperados",
         "ayuda": "Y cuántas veces llegan a mostrarse al usuario",
         "sql": """
 SELECT file_name AS documento,
@@ -84,6 +89,7 @@ ORDER BY veces_recuperado DESC""",
     },
     {
         "id": "recuperado_no_mostrado",
+        "grupo": "Retrieval",
         "titulo": "Recuperado pero no mostrado",
         "ayuda": "Chunks buenos que el usuario nunca vio: candidatos a revisar el top-k",
         "sql": """
@@ -101,6 +107,7 @@ LIMIT 50""",
     },
     {
         "id": "satisfaccion",
+        "grupo": "Actividad",
         "titulo": "Resumen de satisfacción",
         "ayuda": "Cuántas consultas hubo, cuántas se valoraron y cómo",
         "sql": """
@@ -113,7 +120,8 @@ SELECT (SELECT COUNT(*) FROM ejecuciones) AS consultas,
     },
     {
         "id": "lentas",
-        "titulo": "Las consultas más lentas",
+        "grupo": "Rendimiento",
+        "titulo": "Consultas más lentas",
         "ayuda": "Para ver dónde se va el tiempo",
         "sql": """
 SELECT substr(pregunta, 1, 50) AS pregunta,
@@ -129,3 +137,7 @@ LIMIT 30""",
 ]
 
 POR_ID = {c["id"]: c for c in CONSULTAS}
+
+# Orden en que se muestran los grupos en el panel: primero lo que uno mira para
+# saber si algo anda mal, después el detalle.
+GRUPOS = ["Problemas", "Actividad", "Retrieval", "Rendimiento"]
