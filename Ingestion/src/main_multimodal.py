@@ -196,8 +196,32 @@ def chunks_ya_generados(file_stem: str) -> Optional[str]:
     base = os.path.join(project_root, config.paths.chunks_data_path.lstrip("./"), file_stem)
     if not os.path.isdir(base):
         return None
+
+    def tiene_chunks(corrida: str) -> bool:
+        """
+        Una corrida sirve solo si escribió chunks por página.
+
+        No alcanza con que la carpeta exista. Una corrida interrumpida durante
+        la pasada de figuras deja los recortes y los informes de validación
+        pero ningún chunk, porque esos se escriben después. Tomar la carpeta
+        más reciente sin mirar adentro elegía justamente esa: pasó con ARGEE,
+        cuya corrida buena tenía 650 chunks y la interrumpida ninguno, y el
+        documento falló con "No se encontraron chunks en la carpeta indicada".
+        """
+        for entrada in os.listdir(corrida):
+            sub = os.path.join(corrida, entrada)
+            if entrada == "crops" or not os.path.isdir(sub):
+                continue
+            if any(f.endswith(".json") for f in os.listdir(sub)):
+                return True
+        return False
+
     corridas = sorted(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
-    return os.path.join(base, corridas[-1]) if corridas else None
+    for nombre in reversed(corridas):
+        ruta = os.path.join(base, nombre)
+        if tiene_chunks(ruta):
+            return ruta
+    return None
 
 
 def _load_manifest() -> dict:
