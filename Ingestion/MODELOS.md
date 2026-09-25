@@ -178,38 +178,58 @@ que además aprende del 400 para modelos futuros.
 
 ### Decisión
 
-**Pendiente de medición.** Ver sección 6.
+**`gpt-4o`.** Medido con el corpus como constante, `gpt-5` pierde 2,3 puntos y
+cuesta unas 7 veces más. Ver la sección 5.
+
+El mismo documento (PowerFlex, 126 páginas) con cada modelo:
+
+| | Salida del modelo | Costo |
+|---|---|---|
+| `gpt-4o` | 191.030 + 181.723 tokens (páginas + figuras, corpus entero) | **USD 3,21** |
+| `gpt-5` | **1.165.933** tokens solo este documento | sin tarifa; USD 12,79 al precio de gpt-4o |
+
+`gpt-5` produjo además **más** chunks (12.965 vectores contra 10.376) y aun así
+recuperó peor. Más troceado no es mejor troceado.
 
 ---
 
 ## 5. Comparación de extremo a extremo
 
-| # | Chunking | Embeddings | Corpus | Respuesta presente |
-|---|---|---|---|---|
-| 1 | `gpt-4o` | `text-embedding-3-large` | viejo | **93,0%** (40/43) |
-| 2 | `gpt-5` | `cohere.embed-v4` | nuevo | **83,7%** (36/43) |
-| 3 | `gpt-5` | `text-embedding-3-large` | nuevo | **90,7%** (39/43) |
+| # | Chunking | Embeddings | Corpus | Vectores | Respuesta presente | Costo de ingesta |
+|---|---|---|---|---|---|---|
+| 1 | `gpt-4o` | `text-embedding-3-large` | viejo | 5.493 | **93,0%** (40/43) | — |
+| 2 | `gpt-5` | `cohere.embed-v4` | nuevo | 12.612 | **83,7%** (36/43) | ~7x |
+| 3 | `gpt-5` | `text-embedding-3-large` | nuevo | 12.965 | **90,7%** (39/43) | ~7x |
+| 4 | **`gpt-4o`** | **`text-embedding-3-large`** | **nuevo** | 10.376 | **93,0%** (40/43) | **USD 7,36** |
 
-Los tres índices tienen tamaño comparable (12.612 y 12.965 vectores los dos
-nuevos) y los 13 documentos.
+Las cuatro configuraciones tienen los 13 documentos y el mismo set de 54
+preguntas. Cada par aísla una variable:
 
-- **2 → 3** aísla el embedding: **+7 puntos** al volver a OpenAI.
-- **1 → 3** mezcla el cambio de corpus con el de chunking: −2,3 puntos, que el
-  set sesgado hacia el corpus viejo explica al menos en parte.
+- **2 → 3** aísla el embedding, con chunks y corpus constantes:
+  **+7 puntos** al volver a `text-embedding-3-large`.
+- **3 → 4** aísla el modelo de chunking, con embedding y corpus constantes:
+  **+2,3 puntos** al volver a `gpt-4o`, que además cuesta 7 veces menos.
+- **1 → 4** aísla el corpus, con el stack constante: **sin cambio** (93,0% en
+  los dos). El corpus nuevo no cuesta calidad, y el sesgo del set hacia el
+  corpus viejo resultó menor de lo temido.
+
+### Conclusión
+
+**Ningún modelo nuevo mejoró nada, y dos empeoraron.** La configuración que
+gana es la que ya estaba en producción, aplicada al corpus nuevo (fila 4).
+
+El ejercicio no fue inútil: costó unos USD 20 en total y dejó tres hechos que
+antes eran opiniones —que `embed-v4` pierde 7 puntos en texto pero gana en
+imagen, que `gpt-5` no compra nada a 7x, y que el corpus nuevo es neutro—
+además de las herramientas para volver a medirlo (`--reusar-chunks`,
+`--solo`, el medidor de consumo) y de los tres defectos que destapó: el corte
+por falta de crédito que nunca cortaba, el benchmark que embebía con otro
+modelo que producción, y una validación de dimensiones que verificaba una
+constante en vez del comportamiento real.
 
 ---
 
 ## 6. Qué falta medir
-
-**¿`gpt-5` justifica su costo?** No hay evidencia de que aporte nada, pero
-tampoco está aislado: entre las filas 1 y 3 cambian el corpus y el modelo a la
-vez. La medición que falta es rechunkear el corpus nuevo con `gpt-4o` y
-compararlo contra la fila 3 con el corpus como constante.
-
-Esa corrida cuesta unos USD 6 y hora y media, y es barata gracias a que el
-pipeline puede reutilizar chunks (`--reusar-chunks`): probar otro embedding no
-obliga a pagar el modelo de visión de nuevo. Sin esa opción, esta comparación
-costaba sesenta dólares en vez de uno, y probablemente no se habría hecho.
 
 **El sesgo del set.** Las preguntas se generaron contra el corpus viejo.
 Regenerar un set contra el corpus actual con `eval/generate_eval_set.py` daría
@@ -221,10 +241,10 @@ una vara sin ese sesgo, a costa de perder comparabilidad con lo histórico.
 
 | Etapa | Modelo | Estado |
 |---|---|---|
-| Chunking multimodal | `gpt-5` vs `gpt-4o` | **en medición** |
+| Chunking multimodal | `gpt-4o` | `gpt-5` medido: −2,3 puntos y 7x el costo |
 | Pasada dedicada por figura | el mismo que el chunking | — |
 | Enriquecimiento | `gpt-4o-mini` | sin cambios; es la etapa de más volumen |
-| Embeddings de texto | `text-embedding-3-large` | **revertido** desde `embed-v4`, −7 puntos |
+| Embeddings de texto | `text-embedding-3-large` | `embed-v4` medido: −7 puntos |
 | Embeddings de imagen | `cohere.embed-v4` | adoptado, **pero el retrieval visual sigue apagado** |
 | Base vectorial | ChromaDB embebido | sin cambios; migrar a Qdrant es infraestructura, no calidad |
 
