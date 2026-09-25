@@ -15,6 +15,11 @@ sys.path.append(top_level_dir)
 
 logger = logging.getLogger('app.RetrieverQna')
 
+# Cuántos contextos mostrar como fuente cuando el modelo respondió sin citar
+# ninguno. Tres: suficientes para poder verificar la respuesta, pocos como para
+# no sugerir una precisión de atribución que no tenemos.
+UNCITED_FALLBACK_TOP_N = 3
+
 
 class RetrieverQna:
     def __init__(self, data: Dict[str, Any]):
@@ -374,6 +379,28 @@ class RetrieverQna:
                         # asegurar índices válidos: ids son [1..N] → df.index [0..N-1]
                         idxs = [int(i) - 1 for i in referred_context_ids if isinstance(i, (int, str)) and str(i).isdigit()]
                         idxs = [i for i in idxs if 0 <= i < len(self.context_df)]
+
+                    # Respaldo: el modelo respondió pero no citó ningún contexto.
+                    #
+                    # Pasa con las preguntas de diagnóstico —"el secadero no
+                    # calienta"— donde el modelo sintetiza un procedimiento a partir
+                    # de varios contextos en vez de responder desde uno solo. La
+                    # respuesta queda bien fundada (usa códigos que solo existen en
+                    # el corpus: SSR01-SSR03, R01-R03, TH01/TH02) pero se mostraba
+                    # sin ninguna fuente, con "Context could not be found" y
+                    # similitud 0. El usuario recibe una respuesta detallada y nada
+                    # con qué verificarla, que es justo cuando más falta hace.
+                    #
+                    # Se muestran los contextos MÁS RELEVANTES de los que se le
+                    # entregaron. No son los que declaró haber usado —eso no lo
+                    # sabemos— sino los que tuvo a la vista: una afirmación más
+                    # débil, pero cierta.
+                    if not idxs and self.context_df is not None and len(self.context_df) > 0:
+                        idxs = list(range(min(UNCITED_FALLBACK_TOP_N, len(self.context_df))))
+                        logger.info(
+                            f"[{self.query_id}] [RetrieverQna] el modelo no citó contextos; "
+                            f"se muestran los {len(idxs)} más relevantes de los entregados"
+                        )
 
                     if len(idxs) > 0:
                         subset = self.context_df.iloc[idxs].reset_index(drop=True)
