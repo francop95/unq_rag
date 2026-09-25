@@ -124,8 +124,8 @@ services:
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:8080}
       API_TOKEN: ${API_TOKEN:-}
       # app_baseline.py lee estas para saber a qué colección apuntar.
-      BASELINE_INDEX_NAME: ${BASELINE_INDEX_NAME:-baseline_documents}
-      BASELINE_INDEX_PATH: /app/Ingestion/data/chroma_index_baseline
+      BASELINE_INDEX_NAME: ${BASELINE_INDEX_NAME:-baseline_documents_v2}
+      BASELINE_INDEX_PATH: /app/Ingestion/data/chroma_index_baseline_v2
       BASELINE_PORT: "5001"
       # Modelo que redacta la respuesta de la línea base. El default de
       # app_baseline.py es gpt-4-0613, que no tiene visión. Poner gpt-4.1 acá

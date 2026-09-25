@@ -104,7 +104,7 @@ info "hecho (WEB_PORT=80, APP_UID=$REMOTE_UID en el servidor)"
 # -------------------------------------------------------------------- datos
 say "Subiendo el índice y la media (~230 MB)"
 # Lo que la API necesita en runtime, y nada más:
-#   chroma_index*   los índices vectoriales
+#   chroma_index_v4_4o / chroma_index_baseline_v2   los índices que sirve la demo
 #   chunks_data*    los lee el context expander (prev/next chunk)
 #   media           imágenes y tablas que cita la respuesta
 #   raw_data        los PDF, para los enlaces "abrir en la página N"
@@ -112,7 +112,12 @@ say "Subiendo el índice y la media (~230 MB)"
 # embeddings_data* NO se sube: son 563 MB de vectores intermedios que solo usa
 # el pipeline de ingesta, y la ingesta no corre en el servidor.
 $SSH "mkdir -p $REMOTE_DIR/Ingestion/data"
-for d in chroma_index chroma_index_baseline chunks_data chunks_data_baseline media raw_data; do
+# Los índices que la demo sirve hoy. Se nombran explícitamente en vez de subir
+# todo chroma_index*: las corridas de comparación dejaron cinco índices en disco
+# (600 MB entre todos) y la instancia es una t3.small. Si se cambia el índice que
+# sirve la API (Configuration.AppSettings__ChromaIndex), hay que actualizar esta
+# lista o la demo arranca contra una carpeta que no existe.
+for d in chroma_index_v4_4o chroma_index_baseline_v2 chunks_data chunks_data_baseline media raw_data; do
     if [ -d "$ROOT/Ingestion/data/$d" ]; then
         info "$d"
         rsync -az -e "ssh -i $KEY_FILE" \
