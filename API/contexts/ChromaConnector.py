@@ -181,7 +181,13 @@ class ChromaConnection:
             logger.warning(f"[Chroma] no se pudo leer la dimensión del índice: {e}")
             return
 
-        dim_esperada = self.expected_embedding_dimension
+        # La dimensión que el código PRODUCE, no la que alguien declaró. La
+        # versión anterior comparaba contra una constante de configuración, así
+        # que solo verificaba que el número estuviera bien puesto a mano: en la
+        # primera corrida real informó "verificados: 1536" mientras el eval
+        # embebía las consultas en 3072 y todas las búsquedas fallaban. Un
+        # chequeo que no mira lo que hace el sistema no es un chequeo.
+        dim_esperada = self._dimension_producida() or self.expected_embedding_dimension
         if not dim_esperada:
             logger.info(f"[Chroma] índice con vectores de {dim_indice} dimensiones")
             return
@@ -189,13 +195,32 @@ class ChromaConnection:
         if dim_indice != dim_esperada:
             logger.error(
                 f"[Chroma] DESAJUSTE DE EMBEDDINGS: el índice '{self.collection_name}' "
-                f"tiene vectores de {dim_indice} dimensiones y la API está configurada "
-                f"para {dim_esperada}. El retrieval va a devolver resultados "
+                f"tiene vectores de {dim_indice} dimensiones y la API produce "
+                f"vectores de {dim_esperada}. El retrieval va a devolver resultados "
                 f"arbitrarios SIN fallar. Revisar EMBEDDING_PROVIDER / "
                 f"EMBEDDING_MODEL_NAME contra el .env de la ingesta."
             )
         else:
             logger.info(f"[Chroma] embeddings verificados: {dim_indice} dimensiones")
+
+    def _dimension_producida(self) -> Optional[int]:
+        """
+        Dimensión de un vector embebido de verdad por el proveedor configurado.
+
+        Cuesta una llamada al arrancar y evita la clase de error más cara del
+        sistema: dos modelos distintos a cada lado del índice. Si falla —sin
+        red, sin credenciales— devuelve None y se cae al valor declarado, que
+        es peor chequeo pero mejor que ninguno; que la API no arranque por no
+        poder validar sería un remedio peor que la enfermedad.
+        """
+        try:
+            from contexts.embedding_provider import from_config
+
+            proveedor = from_config(self._embedding_config)
+            return len(proveedor.embed(["dimensión"], input_type="search_query")[0])
+        except Exception as e:
+            logger.debug(f"[Chroma] no se pudo medir la dimensión producida: {e}")
+            return None
 
     def _connect_visual(self):
         if not self.use_visual_retrieval:
