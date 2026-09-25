@@ -137,6 +137,32 @@ CREATE TABLE IF NOT EXISTS contextos (
 );
 CREATE INDEX IF NOT EXISTS idx_contextos_query ON contextos(query_id);
 
+CREATE TABLE IF NOT EXISTS etapas (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_id        TEXT NOT NULL,
+    orden           INTEGER NOT NULL,
+    etapa           TEXT NOT NULL,
+    entrada         INTEGER,
+    salida          INTEGER,
+    nota            TEXT,
+    FOREIGN KEY (query_id) REFERENCES ejecuciones(query_id)
+);
+CREATE INDEX IF NOT EXISTS idx_etapas_query ON etapas(query_id);
+
+CREATE TABLE IF NOT EXISTS candidatos (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_id        TEXT NOT NULL,
+    posicion        INTEGER NOT NULL,   -- orden en la búsqueda densa, antes de filtrar
+    file_name       TEXT,
+    page_num        TEXT,
+    chunk_id        TEXT,
+    content_type    TEXT,
+    score           REAL,
+    sobrevivio      INTEGER,            -- llegó al contexto final
+    FOREIGN KEY (query_id) REFERENCES ejecuciones(query_id)
+);
+CREATE INDEX IF NOT EXISTS idx_candidatos_query ON candidatos(query_id);
+
 CREATE TABLE IF NOT EXISTS feedback (
     id              TEXT PRIMARY KEY,
     query_id        TEXT NOT NULL,
@@ -253,6 +279,36 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
                 _texto(col("Text", "text"), 2000),
             ))
 
+    # El embudo del retrieval, que arma ChromaConnection. Responde las dos
+    # preguntas que el resultado final no puede: si el chunk correcto llegó a
+    # estar entre los candidatos, y qué etapa lo sacó.
+    traza = data.get("traza_retrieval") or {}
+    etapas = [
+        (query_id, i, e.get("etapa"), e.get("entrada"), e.get("salida"), e.get("nota"))
+        for i, e in enumerate(traza.get("etapas") or [], start=1)
+    ]
+    # `sobrevivio` compara contra el contexto final. Es lo que convierte la lista
+    # de candidatos en un diagnóstico: un chunk con buen score que no sobrevivió
+    # señala la etapa que hay que revisar.
+    def _clave(file_name, page) -> tuple:
+        """
+        Documento + página, con la página normalizada al inicio del rango.
+
+        No se coteja por chunk_id: el dataframe de contexto no lleva esa columna,
+        así que del lado final llega vacía. Y los super-chunks expresan su página
+        como rango ("20-20") mientras el candidato trae "20", con lo cual el
+        cotejo crudo daba cero coincidencias aunque fuera el mismo contenido.
+        """
+        return (str(file_name or ""), str(page or "").split("-")[0].strip())
+
+    finales = {_clave(f[2], f[3]) for f in filas}
+    candidatos = [
+        (query_id, c.get("posicion"), c.get("file_name"), c.get("page_num"),
+         c.get("chunk_id"), c.get("content_type"), c.get("score"),
+         1 if _clave(c.get("file_name"), c.get("page_num")) in finales else 0)
+        for c in (traza.get("candidatos") or [])
+    ]
+
     r0 = {}
     if isinstance(respuesta, list) and respuesta and isinstance(respuesta[0], dict):
         r0 = respuesta[0]
@@ -300,7 +356,8 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
                 "INSERT OR REPLACE INTO ejecuciones VALUES (" + ",".join("?" * len(fila_ejec)) + ")",
                 fila_ejec,
             )
-            con.execute("DELETE FROM contextos WHERE query_id = ?", (query_id,))
+            for tabla in ("contextos", "etapas", "candidatos"):
+                con.execute(f"DELETE FROM {tabla} WHERE query_id = ?", (query_id,))
             if filas:
                 con.executemany(
                     "INSERT INTO contextos (query_id,posicion,file_name,page_num,chunk_id,"
@@ -308,10 +365,20 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     filas,
                 )
+            if etapas:
+                con.executemany(
+                    "INSERT INTO etapas (query_id,orden,etapa,entrada,salida,nota) "
+                    "VALUES (?,?,?,?,?,?)", etapas)
+            if candidatos:
+                con.executemany(
+                    "INSERT INTO candidatos (query_id,posicion,file_name,page_num,"
+                    "chunk_id,content_type,score,sobrevivio) VALUES (?,?,?,?,?,?,?,?)",
+                    candidatos)
             con.commit()
         finally:
             con.close()
-    logger.info(f"[{query_id}] [Telemetría] ejecución registrada: {len(filas)} contextos")
+    logger.info(f"[{query_id}] [Telemetría] ejecución registrada: {len(filas)} contextos, "
+                f"{len(candidatos)} candidatos, {len(etapas)} etapas")
 
 
 def guardar_feedback(query_id: str, util: bool,
@@ -375,6 +442,10 @@ def ver_ejecucion(query_id: str) -> Optional[Dict[str, Any]]:
         ejec = dict(e)
         ejec["contextos"] = [dict(r) for r in con.execute(
             "SELECT * FROM contextos WHERE query_id = ? ORDER BY posicion", (query_id,))]
+        ejec["etapas"] = [dict(r) for r in con.execute(
+            "SELECT * FROM etapas WHERE query_id = ? ORDER BY orden", (query_id,))]
+        ejec["candidatos"] = [dict(r) for r in con.execute(
+            "SELECT * FROM candidatos WHERE query_id = ? ORDER BY posicion", (query_id,))]
         ejec["feedback"] = [dict(r) for r in con.execute(
             "SELECT * FROM feedback WHERE query_id = ? ORDER BY creado_en", (query_id,))]
     finally:

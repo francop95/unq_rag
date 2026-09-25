@@ -155,6 +155,47 @@ class ChromaConnection:
             logger.exception(f"[Chroma] connect error: {e}")
             return False
 
+    # ------------------------------------------------------------------ traza
+    # El embudo del retrieval: cuántos candidatos entran y salen de cada etapa.
+    #
+    # Sin esto, la telemetría guarda el resultado final y nada del camino, y las
+    # preguntas que uno se hace de verdad no se pueden responder: "¿el chunk
+    # correcto llegó a estar entre los candidatos?" y "¿qué etapa lo sacó?" son
+    # cosas distintas y se arreglan distinto. Un chunk que nunca se recuperó es
+    # un problema de embeddings o de ingesta; uno que se recuperó y lo filtró un
+    # gate es un problema de umbral.
+
+    def _traza_iniciar(self, query_text: str) -> None:
+        self._traza = {"etapas": [], "candidatos": [], "consulta": query_text}
+
+    def _traza_etapa(self, etapa: str, antes: int, despues: int, nota: str = "") -> None:
+        t = getattr(self, "_traza", None)
+        if t is None:
+            return
+        t["etapas"].append({"etapa": etapa, "entrada": antes,
+                            "salida": despues, "nota": nota})
+
+    def _traza_candidatos(self, candidates: list, tope: int = 60) -> None:
+        """Los candidatos crudos de la búsqueda densa, antes de cualquier filtro."""
+        t = getattr(self, "_traza", None)
+        if t is None:
+            return
+        for pos, c in enumerate(candidates[:tope], start=1):
+            meta = c.get("metadata") or {}
+            t["candidatos"].append({
+                "posicion": pos,
+                "file_name": meta.get("file_name", ""),
+                "page_num": str(meta.get("page_num", "")),
+                # El id del chunk PADRE, no el del vector. Un vector de pregunta
+                # sintética tiene su propio chunk_id (chunk_4_q1) y el contexto
+                # final lleva el del contenido (chunk_4): comparándolos crudos,
+                # ningún candidato figuraba como sobreviviente.
+                "chunk_id": str(meta.get("parent_chunk_id") or meta.get("chunk_id", "")),
+                "chunk_id_vector": str(meta.get("chunk_id", "")),
+                "content_type": meta.get("content_type", ""),
+                "score": c.get("dense_similarity"),
+            })
+
     def _validar_dimension(self):
         """
         Avisa si el modelo de embeddings de la API no es el del índice.
@@ -555,6 +596,13 @@ class ChromaConnection:
                 c["dense_similarity"] = c["similarity"]
                 c["dense_rank"] = rank
 
+            # Después del bucle: antes de él `dense_similarity` todavía no existe
+            # y la traza guardaba el score en blanco.
+            self._traza_iniciar(query_text)
+            self._traza_candidatos(candidates)
+            self._traza_etapa("búsqueda densa", 0, len(candidates),
+                              f"pedidos {dense_fetch} (top_k {top_k} x{self.DENSE_OVERFETCH_FACTOR})")
+
             # 2) BM25 (sparse) — se fusiona por doc_id
             if self.use_bm25 and self.bm25_index is not None and query_text:
                 bm25_hits = self.bm25_index.search(query_text, top_k=self.bm25_top_k)
@@ -679,7 +727,10 @@ class ChromaConnection:
             #      (su propio contenido + un vector por cada pregunta sintética que
             #      responde). Sin colapsar, un solo chunk puede ocupar todo el top-k
             #      con resultados idénticos y desplazar al resto del contexto.
+            _antes = len(candidates)
             candidates = self._collapse_by_parent(candidates)
+            self._traza_etapa("colapso multi-vector", _antes, len(candidates),
+                              "varias preguntas sintéticas del mismo contenido → un resultado")
 
             # 6.6) Descartar candidatos cuyo texto ya está contenido, palabra por
             #      palabra, en el de otro candidato. El índice tiene contenido
@@ -687,7 +738,10 @@ class ChromaConnection:
             #      y un título corto de sección se indexa además por separado), así
             #      que sin esto un mismo párrafo de una página ocupa 3 de los 10
             #      lugares del contexto y se ve como 3 fuentes casi idénticas en la UI.
+            _antes = len(candidates)
             candidates = self._drop_contained_duplicates(candidates)
+            self._traza_etapa("duplicados contenidos", _antes, len(candidates),
+                              "texto ya incluido en otro candidato")
 
             # 7) Gate de relevancia real: al menos un candidato con similitud DENSA
             #    (no BM25/visual, que no tienen escala comparable) por encima del
@@ -721,6 +775,9 @@ class ChromaConnection:
                     c for c in candidates
                     if c.get("dense_similarity", 0.0) >= self.min_context_similarity_score
                 ]
+
+            self._traza_etapa("gate de relevancia", len(candidates), len(relevant),
+                              f"umbral {self.min_context_similarity_score}")
 
             if not relevant:
                 logger.info(
@@ -808,6 +865,9 @@ class ChromaConnection:
                     # inerte.
                     or "bm25_rank" in c or "visual_rank" in c
                 ]
+                self._traza_etapa("gate cruzado entre documentos",
+                                  len(relevant), len(filtrados),
+                                  f"margen {self.cross_doc_gate_margin} contra el top-1")
                 if len(filtrados) < len(relevant):
                     descartados = {
                         (c.get("metadata") or {}).get("file_name")
@@ -833,7 +893,13 @@ class ChromaConnection:
                 f"attach_electric_diagrams={data['attach_electric_diagrams']}"
             )
 
-            return self._candidates_to_df(data, top_k, relevant)
+            df_final = self._candidates_to_df(data, top_k, relevant)
+            self._traza_etapa("corte final top_k", len(relevant), len(df_final),
+                              f"top_k = {top_k}")
+            # La traza viaja en `data` para que el registro de telemetría la
+            # encuentre sin que ChromaConnection tenga que saber que existe.
+            data["traza_retrieval"] = getattr(self, "_traza", None)
+            return df_final
         except Exception as e:
             logger.exception(f"[{qid}][Chroma] search error: {e}")
             return pd.DataFrame()

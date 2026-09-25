@@ -10,6 +10,57 @@ exactamente las mismas, sin dos versiones que se desincronizan.
 
 CONSULTAS = [
     {
+        "id": "embudo",
+        "grupo": "Seguimiento",
+        "titulo": "Embudo de una consulta",
+        "ayuda": "Cuántos candidatos entran y salen de cada etapa. Cambiá el query_id",
+        "sql": """
+SELECT et.orden,
+       et.etapa,
+       et.entrada,
+       et.salida,
+       et.entrada - et.salida AS descartados,
+       et.nota
+FROM etapas et
+WHERE et.query_id = (SELECT query_id FROM ejecuciones ORDER BY creada_en DESC LIMIT 1)
+ORDER BY et.orden""",
+    },
+    {
+        "id": "candidatos",
+        "grupo": "Seguimiento",
+        "titulo": "Qué trajo la búsqueda densa",
+        "ayuda": "Los candidatos crudos del primer paso y cuáles sobrevivieron",
+        "sql": """
+SELECT c.posicion,
+       round(c.score, 1) AS score,
+       c.content_type AS tipo,
+       c.file_name AS documento,
+       c.page_num AS pagina,
+       c.sobrevivio
+FROM candidatos c
+WHERE c.query_id = (SELECT query_id FROM ejecuciones ORDER BY creada_en DESC LIMIT 1)
+ORDER BY c.posicion""",
+    },
+    {
+        "id": "descartados_buenos",
+        "grupo": "Seguimiento",
+        "titulo": "Buenos candidatos descartados",
+        "ayuda": "Score alto en la búsqueda densa que no llegó al contexto final",
+        "sql": """
+SELECT round(c.score, 1) AS score,
+       c.posicion,
+       c.content_type AS tipo,
+       c.file_name AS documento,
+       c.page_num AS pagina,
+       substr(e.pregunta, 1, 42) AS pregunta,
+       c.query_id
+FROM candidatos c
+JOIN ejecuciones e ON e.query_id = c.query_id
+WHERE c.sobrevivio = 0 AND c.score >= 62
+ORDER BY c.score DESC
+LIMIT 60""",
+    },
+    {
         "id": "ultimas",
         "grupo": "Actividad",
         "titulo": "Últimas consultas",
@@ -140,4 +191,4 @@ POR_ID = {c["id"]: c for c in CONSULTAS}
 
 # Orden en que se muestran los grupos en el panel: primero lo que uno mira para
 # saber si algo anda mal, después el detalle.
-GRUPOS = ["Problemas", "Actividad", "Retrieval", "Rendimiento"]
+GRUPOS = ["Seguimiento", "Problemas", "Actividad", "Retrieval", "Rendimiento"]
