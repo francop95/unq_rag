@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+from typing import Optional
 import hashlib
 from datetime import datetime, timezone
 from tasks.chunking_task_multimodal import ChunkingTask
@@ -178,6 +179,27 @@ def iter_documentos(root: str):
                 yield os.path.join(dirpath, filename)
 
 
+def chunks_ya_generados(file_stem: str) -> Optional[str]:
+    """
+    La carpeta de chunks más reciente de un documento, si existe.
+
+    El chunking es la etapa cara —con un modelo de razonamiento, medido en
+    1.17 millones de tokens de salida para un manual de 126 páginas— y su
+    resultado queda en disco. Todo lo que viene después (validación,
+    enriquecimiento, embeddings, indexado) es barato en comparación.
+
+    Cambiar de modelo de embeddings obliga a reconstruir el índice entero pero
+    NO a volver a trocear: los chunks son los mismos. Sin esta reutilización, la
+    única forma de probar otro embedding es pagar de nuevo el chunking, y eso
+    convierte una comparación de treinta centavos en una de sesenta dólares.
+    """
+    base = os.path.join(project_root, config.paths.chunks_data_path.lstrip("./"), file_stem)
+    if not os.path.isdir(base):
+        return None
+    corridas = sorted(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
+    return os.path.join(base, corridas[-1]) if corridas else None
+
+
 def _load_manifest() -> dict:
     if os.path.exists(MANIFEST_PATH):
         try:
@@ -209,6 +231,11 @@ def _parse_args():
     p.add_argument("--solo", action="append", default=[], metavar="TEXTO",
                    help="procesa solo los documentos cuyo nombre contenga TEXTO "
                         "(se puede repetir)")
+    p.add_argument("--reusar-chunks", action="store_true",
+                   help="no vuelve a trocear: reutiliza los chunks ya generados y "
+                        "rehace enriquecimiento, embeddings e indexado. Es lo que "
+                        "permite cambiar de modelo de embeddings sin volver a pagar "
+                        "el modelo de visión")
     p.add_argument("--dry-run", action="store_true",
                    help="lista los documentos que se procesarían y termina, sin gastar nada")
     return p.parse_args()
@@ -247,7 +274,9 @@ if __name__ == "__main__":
 
         pdf_hash = _compute_file_hash(PDF_PATH)
         prev_entry = manifest.get(file_stem)
-        if prev_entry and prev_entry.get("sha256") == pdf_hash and prev_entry.get("status") == "success":
+        if (not args.reusar_chunks and prev_entry
+                and prev_entry.get("sha256") == pdf_hash
+                and prev_entry.get("status") == "success"):
             print(f"⏭️  {file_stem}: sin cambios desde la última ingesta exitosa, se omite.")
             skipped_docs.append(file_stem)
             continue
@@ -265,19 +294,28 @@ if __name__ == "__main__":
             extension = os.path.splitext(PDF_PATH)[1].lower()
             clase_chunker, campo_entrada = CHUNKERS[extension]
 
-            chunk_task = clase_chunker()
-            chunk_task._task_settings = task_settings
-            chunk_task._input_data = {campo_entrada: PDF_PATH}
+            chunks_dir = None
+            if args.reusar_chunks:
+                chunks_dir = chunks_ya_generados(file_stem)
+                if chunks_dir:
+                    print(f"♻️  Reutilizando chunks de {os.path.basename(chunks_dir)} "
+                          f"(no se vuelve a llamar al modelo de visión)")
+                else:
+                    print(f"   sin chunks previos: se trocea normalmente")
 
-            chunk_result: TaskReturnData = chunk_task.execute()
-            if chunk_result.error:
-                print("❌ Chunking error:", chunk_result.error)
-                failed_docs.append((file_stem, f"Chunking: {chunk_result.error}"))
-                continue
+            if chunks_dir is None:
+                chunk_task = clase_chunker()
+                chunk_task._task_settings = task_settings
+                chunk_task._input_data = {campo_entrada: PDF_PATH}
 
-            
-            chunks_dir = chunk_result.payload["chunks"]
-            print(f"✅ Chunking OK. Carpeta: {chunks_dir}")
+                chunk_result: TaskReturnData = chunk_task.execute()
+                if chunk_result.error:
+                    print("❌ Chunking error:", chunk_result.error)
+                    failed_docs.append((file_stem, f"Chunking: {chunk_result.error}"))
+                    continue
+
+                chunks_dir = chunk_result.payload["chunks"]
+                print(f"✅ Chunking OK. Carpeta: {chunks_dir}")
 
             # --------------------
             # 1.5) VALIDACIÓN Y ENRIQUECIMIENTO
