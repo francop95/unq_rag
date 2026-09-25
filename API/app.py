@@ -106,6 +106,77 @@ def serve_media(relpath):
     return send_from_directory(directory, filename)
 
 
+@app.route("/feedback/motivos", methods=["GET", "OPTIONS"])
+def feedback_motivos():
+    """
+    Los motivos por los que una respuesta puede no servir.
+
+    Los define el backend y no el frontend para que la lista y lo que se guarda
+    en la base no puedan divergir: si el catálogo viviera en el cliente, una
+    versión vieja del frontend mandaría etiquetas que la base no reconoce.
+    """
+    if request.method == "OPTIONS":
+        return make_response("", 204)
+    from telemetria import MOTIVOS
+    return jsonify({"motivos": MOTIVOS})
+
+
+@app.route("/feedback", methods=["POST", "OPTIONS"])
+def feedback():
+    """
+    Registra si una respuesta sirvió, y por qué no cuando no sirvió.
+
+    Body: {"query_id": "...", "util": false,
+           "motivos": ["contexto_ausente"], "comentario": "..."}
+
+    El `query_id` es el que devuelve /get_response, y es lo que enlaza la
+    opinión con los chunks que se recuperaron y sus scores. Sin ese enlace un
+    "está mal" no dice en qué etapa se rompió.
+    """
+    if request.method == "OPTIONS":
+        return make_response("", 204)
+    if not _token_ok():
+        return make_response(jsonify({"error": "no autorizado"}), 401)
+
+    cuerpo = request.get_json(silent=True) or {}
+    query_id = str(cuerpo.get("query_id") or "").strip()
+    if not query_id:
+        return make_response(jsonify({"error": "falta query_id"}), 400)
+    if "util" not in cuerpo:
+        return make_response(jsonify({"error": "falta util (true/false)"}), 400)
+
+    from telemetria import guardar_feedback
+    try:
+        reg = guardar_feedback(
+            query_id=query_id,
+            util=bool(cuerpo.get("util")),
+            motivos=cuerpo.get("motivos") or [],
+            comentario=cuerpo.get("comentario"),
+        )
+    except Exception as e:
+        app.logger.error(f"[{query_id}] [FEEDBACK] no se pudo guardar: {e}")
+        return make_response(jsonify({"error": "no se pudo guardar"}), 500)
+    return jsonify({"ok": True, "feedback": reg})
+
+
+@app.route("/ejecucion/<query_id>", methods=["GET", "OPTIONS"])
+def ver_ejecucion_endpoint(query_id):
+    """
+    Todo lo registrado de una consulta: contextos recuperados con su posición y
+    score, qué se mostró, y el feedback recibido. Es la vista de diagnóstico
+    para entender qué pasó en esa ejecución.
+    """
+    if request.method == "OPTIONS":
+        return make_response("", 204)
+    if not _token_ok():
+        return make_response(jsonify({"error": "no autorizado"}), 401)
+    from telemetria import ver_ejecucion
+    datos = ver_ejecucion(query_id)
+    if datos is None:
+        return make_response(jsonify({"error": "no encontrada"}), 404)
+    return jsonify(datos)
+
+
 @app.route("/get_response", methods=["POST", "OPTIONS"])
 def process_request():
     """
@@ -199,7 +270,14 @@ def process_request():
         app.logger.error(f"[{query_id}] [MAIN] Exception: {str(e)}")
 
 
-    result = make_response(jsonify({"Results": final_response_filtered}))
+    # El query_id se devuelve porque es la clave con la que el frontend manda el
+    # feedback y con la que /ejecucion/<id> recupera qué pasó. Se genera acá
+    # —el cliente no lo elige— así que sin devolverlo no hay forma de enlazar
+    # una opinión con la ejecución que la motivó.
+    result = make_response(jsonify({
+        "Results": final_response_filtered,
+        "query_id": query_id,
+    }))
     result.headers["Content-Type"] = "application/json"
 
     app.logger.info(f"[{query_id}] [MAIN] Query ID Execution Ends!")

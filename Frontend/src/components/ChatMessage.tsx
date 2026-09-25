@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import type { ChatMessage as ChatMessageT } from "../types/chat";
 import { collectMedia } from "../lib/media";
 import SourcesPanel from "./SourcesPanel";
+import { FeedbackWidget } from "./FeedbackWidget";
 import MediaGallery from "./MediaGallery";
 import Lightbox from "./Lightbox";
 
@@ -112,6 +113,12 @@ export default function ChatMessage({ message }: { message: ChatMessageT }) {
             mediaEntries={mediaEntries}
             onOpenMedia={setLightboxIndex}
           />
+        )}
+
+        {/* Solo sobre respuestas reales: pedir feedback de un error de conexión
+            recoge ruido y además no hay ejecución registrada a la que atarlo. */}
+        {message.role === "assistant" && !message.isError && message.queryId && (
+          <FeedbackWidget queryId={message.queryId} />
         )}
       </div>
 

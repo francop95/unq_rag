@@ -50,7 +50,7 @@ export default function App() {
         }
       }
 
-      const results = await askQuestion(trimmed, conversationId.current, history);
+      const { results, queryId } = await askQuestion(trimmed, conversationId.current, history);
       const first = results[0];
 
       const assistantMessage: ChatMessageT = {
@@ -60,6 +60,7 @@ export default function App() {
           ? first.answer
           : "No encontré información suficiente para responder con certeza. ¿Podés darme más detalle (código de falla, componente, página del manual)?",
         sources: first?.sources?.filter((s) => s.file_name),
+        queryId,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, assistantMessage]);

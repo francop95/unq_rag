@@ -479,3 +479,56 @@ diagnosticar rate limits, chequear primero `grep insufficient_quota` en el log.
 
 Cada test corresponde a un bug real que se encontró y arregló. Si alguno se rompe, ese bug
 volvió.
+
+---
+
+## 📝 Feedback y telemetría
+
+Cada consulta queda registrada con lo que hizo falta para responderla, y quien
+pregunta puede decir si la respuesta sirvió. Las dos mitades comparten el
+`query_id`, y ese enlace es lo que hace accionable al feedback: sin saber qué
+chunks llegaron y con qué score, un "está mal" no dice en qué etapa se rompió.
+
+### Por qué se guarda cada cosa
+
+Los modos de falla de este sistema no se distinguen mirando solo la respuesta:
+
+| Síntoma | Qué hay que mirar |
+|---|---|
+| el fragmento correcto no se recuperó | los scores de lo que sí llegó |
+| se recuperó pero quedó fuera del top-k | la posición |
+| se recuperó y el modelo no lo usó | si lo citó |
+| vino del documento equivocado | el `file_name` |
+| la imagen no correspondía | el `media_path` |
+
+Por eso se registra **una fila por chunk recuperado** con posición, score, tipo,
+si se mostró y si traía imagen.
+
+### Endpoints
+
+| | |
+|---|---|
+| `GET /feedback/motivos` | el catálogo de motivos (lo define el backend, no el cliente) |
+| `POST /feedback` | `{query_id, util, motivos[], comentario}` |
+| `GET /ejecucion/<query_id>` | todo lo registrado de esa consulta |
+
+`/get_response` devuelve `query_id`, que es con lo que el frontend envía el
+feedback.
+
+### Revisar lo recibido
+
+```bash
+cd API
+python -m telemetria.revisar                  # resumen y motivos más frecuentes
+python -m telemetria.revisar --negativos      # solo lo que falló
+python -m telemetria.revisar --id <query_id>  # una ejecución, chunk por chunk
+python -m telemetria.revisar --csv salida.csv # para abrir en una planilla
+```
+
+### Dónde
+
+SQLite en `Ingestion/data/telemetria/ejecuciones.sqlite3`, configurable con
+`TELEMETRY_DB_PATH`. Aparte del índice a propósito: un problema escribiendo
+telemetría no puede dejar sin servicio al retrieval. Por la misma razón, toda
+escritura va envuelta — si la telemetría falla, se registra en el log y la
+respuesta sigue su camino.

@@ -1,4 +1,4 @@
-import type { ApiResponse, ApiResult, TableMedia } from "../types/api";
+import type { ApiResponse, ApiResult, FeedbackReason, TableMedia } from "../types/api";
 import { newId } from "../lib/ids";
 
 export const API_BASE_URL: string =
@@ -45,7 +45,7 @@ export async function askQuestion(
   history: HistoryTurn[] = [],
   /** Contra qué API preguntar. Por defecto la principal; la comparación pasa la otra. */
   baseUrl: string = API_BASE_URL,
-): Promise<ApiResult[]> {
+): Promise<{ results: ApiResult[]; queryId?: string }> {
   const res = await fetch(`${baseUrl}/get_response`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -64,7 +64,7 @@ export async function askQuestion(
   }
 
   const data: ApiResponse = await res.json();
-  return data.Results ?? [];
+  return { results: data.Results ?? [], queryId: data.query_id };
 }
 
 /**
@@ -98,4 +98,36 @@ export async function fetchTableMedia(mediaPath: string): Promise<TableMedia> {
     throw new Error(`No se pudo cargar la tabla (${res.status})`);
   }
   return res.json();
+}
+
+/**
+ * Los motivos por los que una respuesta puede no servir.
+ *
+ * Los define la API y no el frontend: si el catálogo viviera acá, una versión
+ * vieja del cliente mandaría etiquetas que la base no reconoce y ese feedback
+ * se perdería en silencio.
+ */
+export async function fetchFeedbackReasons(
+  baseUrl: string = API_BASE_URL,
+): Promise<FeedbackReason[]> {
+  const res = await fetch(`${baseUrl}/feedback/motivos`, {});
+  if (!res.ok) throw new Error(`El servidor respondió ${res.status}`);
+  const data = await res.json();
+  return data.motivos ?? [];
+}
+
+/** Envía la valoración de una respuesta. `queryId` es el que devolvió /get_response. */
+export async function sendFeedback(
+  queryId: string,
+  util: boolean,
+  motivos: string[] = [],
+  comentario = "",
+  baseUrl: string = API_BASE_URL,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query_id: queryId, util, motivos, comentario }),
+  });
+  if (!res.ok) throw new Error(`El servidor respondió ${res.status}`);
 }

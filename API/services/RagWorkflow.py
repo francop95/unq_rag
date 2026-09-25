@@ -10,6 +10,7 @@ from utils.FormatResponse import format_response
 import time
 import csv
 from pathlib import Path
+from telemetria import registrar_ejecucion
 
 # logging
 logger = logging.getLogger('app.RagWorkflow')
@@ -130,6 +131,10 @@ class RagWorkflow:
                 logger.info(f"[{self.query_id}] [RagWorkflow] Cache HIT (coincidencia exacta)")
                 timings["total_time"] = time.perf_counter() - t0
                 self._log_timings(data, timings, stage="cache_hit")
+                # Se registra igual: una respuesta servida de caché también puede
+                # estar mal, y si no queda registrada, el feedback sobre ella no
+                # tiene contra qué mirarse.
+                registrar_ejecucion(data, cached, timings, desde_cache=True)
                 return cached
             logger.info(f"[{self.query_id}] [RagWorkflow] Cache MISS")
 
@@ -209,6 +214,8 @@ class RagWorkflow:
 
         timings["total_time"] = time.perf_counter() - t0
         self._log_timings(data, timings, stage="full_flow")
+
+        registrar_ejecucion(data, final_response_filtered, timings)
 
         return final_response_filtered
 

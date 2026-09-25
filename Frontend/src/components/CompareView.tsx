@@ -55,7 +55,7 @@ async function ask(variant: Variant, query: string, conversationId: string): Pro
   try {
     // Sin historial a propósito: la comparación tiene que medir la misma pregunta
     // contra los dos índices, y un follow-up reescrito introduce una variable más.
-    const results = await askQuestion(query, conversationId, [], variant.baseUrl);
+    const { results } = await askQuestion(query, conversationId, [], variant.baseUrl);
     const result = results[0];
     return {
       result,

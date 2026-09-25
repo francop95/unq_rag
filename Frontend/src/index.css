@@ -193,3 +193,104 @@ body {
 .animate-pulse-dot {
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
+
+/* ---------------------------------------------------------------- feedback */
+/* Discreto a propósito: acompaña la respuesta, no compite con ella. */
+.feedback {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+
+.feedback__botones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.feedback__pregunta {
+  color: var(--color-muted);
+  margin: 0 0 0.4rem;
+}
+
+.feedback__botones .feedback__pregunta {
+  margin: 0;
+}
+
+.feedback__boton {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.feedback__boton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.feedback__boton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.feedback__boton--primario {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.feedback__detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.feedback__motivos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Dos columnas donde entren; en pantallas angostas cae a una sola. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.2rem 1rem;
+}
+
+.feedback__motivos label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  cursor: pointer;
+  line-height: 1.35;
+}
+
+.feedback__comentario {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+.feedback__acciones {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.feedback__gracias {
+  color: var(--color-muted);
+  margin: 0;
+}
+
+.feedback__error {
+  color: #f87171;
+  margin: 0;
+}

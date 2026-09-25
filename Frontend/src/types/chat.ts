@@ -7,4 +7,6 @@ export interface ChatMessage {
   sources?: Source[];
   isError?: boolean;
   timestamp: number;
+  /** Id de la ejecución en la API, para poder enviar feedback sobre esta respuesta. */
+  queryId?: string;
 }

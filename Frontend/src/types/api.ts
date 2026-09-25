@@ -29,6 +29,18 @@ export interface ApiResult {
 
 export interface ApiResponse {
   Results: ApiResult[];
+  /**
+   * Lo genera la API, no el cliente. Es la clave con la que se envía el feedback
+   * y con la que el backend recupera qué chunks se recuperaron en esa ejecución.
+   */
+  query_id?: string;
+}
+
+/** Un motivo por el que una respuesta puede no haber servido. Los define la API. */
+export interface FeedbackReason {
+  id: string;
+  etiqueta: string;
+  ayuda?: string;
 }
 
 export interface TableMedia {
