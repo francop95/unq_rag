@@ -515,6 +515,20 @@ si se mostró y si traía imagen.
 `/get_response` devuelve `query_id`, que es con lo que el frontend envía el
 feedback.
 
+### Panel web
+
+La forma rápida: **`http://<ip>/api/telemetria`**, con el mismo usuario y
+contraseña del sitio. Trae ocho consultas listas para un clic y una caja de SQL
+para lo que no esté previsto (Ctrl/Cmd + Enter para ejecutar).
+
+Es de **solo lectura**, con tres defensas independientes: la conexión se abre en
+modo `ro` —SQLite rechaza escribir a nivel de archivo—, se exige que la consulta
+empiece con `SELECT` o `WITH`, y se rechazan las palabras que modifican. Las
+tres están porque la que falle no va a avisar.
+
+Las consultas guardadas viven en `telemetria/consultas.py`, no en el HTML, para
+que el panel y la línea de comandos usen las mismas.
+
 ### Verlo en el servidor desplegado
 
 ```bash

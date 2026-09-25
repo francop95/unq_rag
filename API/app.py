@@ -106,6 +106,51 @@ def serve_media(relpath):
     return send_from_directory(directory, filename)
 
 
+@app.route("/telemetria", methods=["GET"])
+def panel_telemetria():
+    """
+    Panel para consultar la telemetría desde el navegador.
+
+    Entra por el mismo nginx que la demo, así que lo protege la misma
+    contraseña. Existe porque mirar los datos no puede requerir SSH, bajarse un
+    archivo e instalar un cliente de SQLite: con esa fricción, nadie los mira.
+    """
+    from telemetria.panel import pagina_html
+    r = make_response(pagina_html())
+    r.headers["Content-Type"] = "text/html; charset=utf-8"
+    # El panel trae su CSS y su JS embebidos, así que puede correr sin
+    # 'unsafe-inline' relajado para el resto de la API.
+    r.headers["Content-Security-Policy"] = (
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+        "connect-src 'self'; form-action 'none'; frame-ancestors 'none'"
+    )
+    return r
+
+
+@app.route("/telemetria/consulta", methods=["POST", "OPTIONS"])
+def telemetria_consulta():
+    """
+    Ejecuta una consulta de SOLO LECTURA sobre la telemetría.
+
+    La validación vive en `telemetria.store.consultar`, no acá: la misma
+    protección tiene que aplicar venga la consulta del panel o de donde sea.
+    """
+    if request.method == "OPTIONS":
+        return make_response("", 204)
+    if not _token_ok():
+        return make_response(jsonify({"error": "no autorizado"}), 401)
+
+    sql = (request.get_json(silent=True) or {}).get("sql", "")
+    from telemetria import consultar
+    try:
+        return jsonify(consultar(sql))
+    except ValueError as e:
+        return make_response(jsonify({"error": str(e)}), 400)
+    except Exception as e:
+        app.logger.warning(f"[TELEMETRIA] consulta fallida: {e}")
+        return make_response(jsonify({"error": f"la consulta falló: {e}"}), 400)
+
+
 @app.route("/feedback/motivos", methods=["GET", "OPTIONS"])
 def feedback_motivos():
     """

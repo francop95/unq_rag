@@ -35,6 +35,7 @@ la telemetría falla, se registra en el log y la respuesta sigue su camino.
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import uuid
@@ -389,3 +390,62 @@ def ver_ejecucion(query_id: str) -> Optional[Dict[str, Any]]:
         except Exception:
             ejec[k.replace("_json", "")] = {}
     return ejec
+
+
+# Palabras que no pueden aparecer en una consulta del panel. La telemetría es
+# para mirar, no para modificar: una consulta escrita a mano en un navegador no
+# puede borrar el registro de lo que pasó.
+_PROHIBIDAS = (
+    "insert", "update", "delete", "drop", "alter", "create", "replace",
+    "attach", "detach", "pragma", "vacuum", "reindex", "truncate",
+)
+
+
+def consultar(sql: str, limite: int = 500) -> Dict[str, Any]:
+    """
+    Ejecuta una consulta de SOLO LECTURA y devuelve columnas y filas.
+
+    Tres defensas, no una: la conexión se abre en modo `ro` (SQLite rechaza
+    cualquier escritura a nivel de archivo), se exige que empiece con SELECT o
+    WITH, y se rechazan las palabras que modifican. Una sola de las tres
+    alcanzaría en teoría; las tres están porque la que falle no va a avisar.
+    """
+    limpia = (sql or "").strip().rstrip(";").strip()
+    if not limpia:
+        raise ValueError("consulta vacía")
+
+    bajo = limpia.lower()
+    if not (bajo.startswith("select") or bajo.startswith("with")):
+        raise ValueError("solo se permiten consultas SELECT")
+    if ";" in limpia:
+        raise ValueError("una sola consulta por vez")
+    for palabra in _PROHIBIDAS:
+        if re.search(rf"\b{palabra}\b", bajo):
+            raise ValueError(f"'{palabra}' no está permitido: el panel es de solo lectura")
+
+    ruta = ruta_db()
+    if not os.path.exists(ruta):
+        return {"columnas": [], "filas": [], "total": 0}
+
+    # file:...?mode=ro — el propio SQLite impide escribir, aunque el filtro de
+    # arriba fallara.
+    con = sqlite3.connect(f"file:{ruta}?mode=ro", uri=True, timeout=10.0)
+    try:
+        con.row_factory = sqlite3.Row
+        filas = list(con.execute(limpia))
+    finally:
+        con.close()
+
+    columnas = list(filas[0].keys()) if filas else []
+    datos = [[_valor_plano(f[c]) for c in columnas] for f in filas[:limite]]
+    return {"columnas": columnas, "filas": datos, "total": len(filas),
+            "truncado": len(filas) > limite}
+
+
+def _valor_plano(v: Any) -> Any:
+    if v is None:
+        return None
+    if isinstance(v, (int, float, bool)):
+        return v
+    s = str(v)
+    return s if len(s) <= 500 else s[:500] + "…"
