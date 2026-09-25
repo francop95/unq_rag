@@ -241,7 +241,9 @@ class Configuration:
     # Ingestion sigue construyendo la colección `visual_docs` (110 imágenes): es barato
     # y deja la puerta abierta.
     USE_VISUAL_RETRIEVAL = False
-    VISUAL_INDEX_NAME = "visual_docs"
+    # Configurable para poder apuntar a la colección visual multimodal
+    # (visual_docs_v2_mm) sin tocar la de CLIP, y comparar las dos.
+    VISUAL_INDEX_NAME = os.getenv("VISUAL_INDEX_NAME", "visual_docs")
     CLIP_MODEL = "clip-ViT-B-32"
     VISUAL_TOP_K = 5
 

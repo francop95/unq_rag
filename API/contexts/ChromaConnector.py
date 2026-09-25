@@ -113,6 +113,10 @@ class ChromaConnection:
         self.visual_collection = None
         self.bm25_index: Optional[BM25Index] = None
         self.clip_model = None
+        # Proveedor multimodal para embeber la consulta visual, cuando el índice
+        # visual vive en el mismo espacio que el textual.
+        self.visual_query_provider = None
+        self._embedding_config = data
         self.reranker: Optional[CrossEncoderReranker] = None
         self.context_expander: Optional[ContextExpander] = None
 
@@ -422,7 +426,42 @@ class ChromaConnection:
             self.bm25_index = None
 
     def _load_clip_model(self):
-        if not self.use_visual_retrieval or SentenceTransformer is None:
+        """
+        Carga el modelo que embebe la CONSULTA para buscar en el índice visual.
+
+        Dos caminos, y cuál se usa lo decide con qué se construyó ese índice:
+
+        - CLIP: su espacio de 512 dimensiones es propio, así que la consulta hay
+          que embeberla con el mismo CLIP. Es un modelo local y pesa.
+        - Un modelo multimodal (cohere.embed-v4): imagen y texto viven en el
+          MISMO espacio de 1536, así que la consulta se embebe con el proveedor
+          de embeddings de siempre y no hace falta cargar nada local.
+
+        El segundo camino se activa cuando el proveedor soporta imágenes, que es
+        exactamente la condición bajo la cual `scripts/rebuild_visual_index.py`
+        pudo construir la colección multimodal.
+        """
+        if not self.use_visual_retrieval:
+            return
+
+        # ¿El proveedor de embeddings ya sabe embeber imágenes? Entonces el
+        # índice visual está en su mismo espacio y no hace falta CLIP.
+        try:
+            from contexts.embedding_provider import from_config
+
+            proveedor = from_config(self._embedding_config)
+            if proveedor.soporta_imagenes():
+                self.visual_query_provider = proveedor
+                logger.info(
+                    f"[Chroma] Consulta visual por {proveedor.model} "
+                    f"(mismo espacio que el texto); CLIP no se carga"
+                )
+                return
+        except Exception as e:
+            logger.debug(f"[Chroma] proveedor multimodal no disponible: {e}")
+
+        if SentenceTransformer is None:
+            logger.warning("[Chroma] sentence-transformers no está instalado: sin búsqueda visual")
             return
         try:
             logger.info(f"[Chroma] Cargando modelo CLIP: {self.clip_model_name}")
@@ -508,13 +547,20 @@ class ChromaConnection:
 
             # 3) Visual (CLIP) — resultados aparte, informativos (no participan del
             #    gate de relevancia textual, pero sí del fusionado/reranking si hay texto)
-            if self.use_visual_retrieval and self.visual_collection is not None and self.clip_model is not None and query_text:
+            tiene_visual = (self.visual_query_provider is not None
+                            or self.clip_model is not None)
+            if self.use_visual_retrieval and self.visual_collection is not None and tiene_visual and query_text:
                 try:
-                    query_visual_emb = self.clip_model.encode(
-                        query_text, convert_to_tensor=False, show_progress_bar=False
-                    )
+                    if self.visual_query_provider is not None:
+                        vector_visual = self.visual_query_provider.embed(
+                            [query_text], input_type="search_query"
+                        )[0]
+                    else:
+                        vector_visual = self.clip_model.encode(
+                            query_text, convert_to_tensor=False, show_progress_bar=False
+                        ).tolist()
                     visual_res = self.visual_collection.query(
-                        query_embeddings=[query_visual_emb.tolist()],
+                        query_embeddings=[vector_visual],
                         n_results=self.visual_top_k,
                         include=["documents", "metadatas", "distances"],
                     )
