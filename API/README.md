@@ -515,7 +515,22 @@ si se mostró y si traía imagen.
 `/get_response` devuelve `query_id`, que es con lo que el frontend envía el
 feedback.
 
-### Revisar lo recibido
+### Verlo en el servidor desplegado
+
+```bash
+./deploy/ver-feedback.sh                 # resumen y motivos más frecuentes
+./deploy/ver-feedback.sh --negativos     # solo lo que falló
+./deploy/ver-feedback.sh --id <query_id> # una ejecución, chunk por chunk
+./deploy/ver-feedback.sh --tablas        # esquema de las tres tablas
+./deploy/ver-feedback.sh --sql "SELECT ..."   # consulta libre
+./deploy/ver-feedback.sh --bajar         # trae la base para revisarla local
+```
+
+El host de AWS no tiene `sqlite3`, así que todo pasa por el contenedor de la
+API. La base vive en `Ingestion/data/telemetria/ejecuciones.sqlite3`, dentro del
+volumen montado: sobrevive a los redespliegues.
+
+### Revisar lo recibido (en local)
 
 ```bash
 cd API
