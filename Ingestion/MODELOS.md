@@ -18,10 +18,10 @@ que no está medido se dice que no está medido.
 | [1. Cómo se mide](#1-cómo-se-mide) | la métrica, el set y su sesgo conocido |
 | [2. Embeddings de texto](#2-embeddings-de-texto) | OpenAI vs Cohere: −7 puntos |
 | [3. Embeddings de imagen](#3-embeddings-de-imagen) | CLIP vs Cohere: gana el nuevo |
-| [4. Modelo de chunking](#4-modelo-de-chunking-multimodal) | gpt-4o vs gpt-5: −2,3 puntos y 7× el costo |
+| [4. Modelo de chunking](#4-modelo-de-chunking-multimodal) | gpt-4o vs gpt-5: −2,3 puntos y 7× el costo; qué se deduplica |
 | [5. Comparación de extremo a extremo](#5-comparación-de-extremo-a-extremo) | las cuatro configuraciones en una tabla |
 | [6. ¿El multimodal se justifica?](#6-el-pipeline-multimodal-se-justifica) | contra la línea base: 340× el costo |
-| [7. Técnicas de retrieval](#7-técnicas-de-retrieval-6-evaluadas-3-desactivadas) | reranking, BM25, gates, visual |
+| [7. Técnicas de retrieval](#7-técnicas-de-retrieval-8-evaluadas-3-desactivadas) | gates, cupo, reranking, BM25, visual |
 | [8. Qué falta medir](#8-qué-falta-medir) | lo que no se sabe |
 | [9. Resumen de decisiones](#9-resumen-de-decisiones) | la tabla final |
 
@@ -96,6 +96,28 @@ python run_eval.py
 El harness embebe la consulta con el proveedor configurado, el mismo que usa la
 API. Antes llamaba a OpenAI directo, lo que con el índice en Bedrock hacía que
 midiera un sistema que no era el de producción.
+
+### Con qué modelo se midió, y por qué importa decirlo
+
+Todo lo de este documento se midió con **`gpt-4.1`** redactando la respuesta,
+corriendo la API de forma nativa.
+
+Eso no era lo que respondía en el servidor. `docker compose` inyectaba
+`OPENAI_MODEL` **definida y vacía**, que no es lo mismo que ausente:
+`os.getenv` no aplica su default ante una cadena vacía, y el valor vacío bajaba
+por la cadena de resolución del modelo hasta su último eslabón, `gpt-4o-mini`,
+sin una línea de log. Todo lo que corría en contenedor —el despliegue incluido—
+respondía y clasificaba intención con ese modelo.
+
+El síntoma visible era el clasificador de intención marcando preguntas técnicas
+legítimas como `invalid` y devolviendo *"formulá una pregunta técnica concreta"*.
+Las cifras de acá nunca estuvieron mal; lo que estaba mal era suponer que el
+sistema desplegado era el sistema medido.
+
+Queda anotado porque es el modo de fallo más caro de este proyecto y ya apareció
+tres veces: el eval embebiendo con otro proveedor que el índice (§1), la
+colección visual vacía creada en silencio (§7) y esto. Las tres veces el sistema
+no falló: siguió respondiendo, con otra cosa.
 
 ---
 
@@ -228,6 +250,36 @@ El mismo documento (PowerFlex, 126 páginas) con cada modelo:
 `gpt-5` produjo además **más** chunks (12.965 vectores contra 10.376) y aun así
 recuperó peor. Más troceado no es mejor troceado.
 
+### Qué se deduplica y qué no
+
+La ingesta descarta chunks casi idénticos por similitud de texto, para sacar el
+boilerplate que repiten los manuales de fabricante. El umbral tenía un supuesto
+equivocado: que dos textos muy parecidos dicen lo mismo.
+
+Lo destapó revisar si un documento nuevo entraba limpio. Las páginas 3 y 4 del
+export de configuración del TBEN traen su programa ARGEE, con reglas de la forma
+`Semaforo = 0 → salida 7 := 0` y `Semaforo > 0 → salida 7 := 1`. Son **96%
+idénticas como texto** y dicen cosas opuestas. La deduplicación se comía la
+segunda: el índice habría sabido cuándo la salida se apaga y no cuándo se
+enciende. Media regla de control, perdida en silencio.
+
+Ahora la similitud solo descarta si además coinciden **los números y los
+operadores de comparación**. En documentación técnica esa diferencia *es* el
+contenido: pasa igual con tablas de parámetros cuyas filas difieren solo en un
+valor, y con nombres de señal que difieren solo en el índice.
+
+Medido en las dos direcciones, que es lo que importa en un cambio así:
+
+| | Antes | Después |
+|---|---|---|
+| Chunks del export TBEN | 8 | **9** |
+| Duplicados reales en PowerFlex | 25 | 25 |
+| Duplicados reales en su edición vieja | 21 | 21 |
+| Duplicados reales en la referencia ARGEE | 14 | 14 |
+
+Lo único que se sigue perdiendo del TBEN es `Alias Variables (hidden)`, 24
+caracteres de nada. El boilerplate que el filtro existe para cazar sigue yéndose.
+
 ---
 
 ## 5. Comparación de extremo a extremo
@@ -297,7 +349,7 @@ Esa es la decisión: el costo se paga por las figuras y los planos, no por el
 texto. En un corpus sin contenido gráfico la línea base sería la opción
 correcta.
 
-## 7. Técnicas de retrieval: 6 evaluadas, 3 desactivadas
+## 7. Técnicas de retrieval: 8 evaluadas, 3 desactivadas
 
 Las mismas mediciones, aplicadas a las técnicas del pipeline de consulta. Están
 acá porque la pregunta que responden es idéntica —¿esto aporta o no?— y tenerlas
@@ -476,6 +528,8 @@ una vara sin ese sesgo, a costa de perder comparabilidad con lo histórico.
 | Embeddings de texto | `text-embedding-3-large` | `embed-v4` medido: −7 puntos |
 | Embeddings de imagen | `cohere.embed-v4` | adoptado, **pero el retrieval visual sigue apagado** |
 | Base vectorial | ChromaDB embebido | sin cambios; migrar a Qdrant es infraestructura, no calidad |
+| **Redacción de la respuesta** | **`gpt-4.1`** | con el que se midió todo acá; ver §1 sobre el entorno |
+| Clasificación de intención | `gpt-4.1` | el mismo; con un modelo más débil rechaza preguntas válidas |
 
 Todos se cambian por entorno: `multimodal_model`, `enrichment_model`,
 `embedding_provider`, `embedding_model`, `embedding_region` en el `.env` de la
