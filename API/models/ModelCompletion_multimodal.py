@@ -229,6 +229,18 @@ class ModelCompletion(Completion):
         """
         model = self.OPENAI_MODEL
         pdfs = [self.electric_diagram_path, self.tben_diagram_path] if self.attach_electric_diagrams else []
+        # Un plano que no está en disco degrada la respuesta; que la tumbe entera
+        # es peor. `_ensure_file_id` levanta FileNotFoundError y la excepción se
+        # come toda la contestación, así que el filtro va acá y no allá.
+        # Pasó de verdad: al renombrar el corpus, `electric_diagram_path` quedó
+        # apuntando a un archivo inexistente y fallaba toda pregunta eléctrica.
+        faltantes = [p for p in pdfs if not os.path.exists(p)]
+        if faltantes:
+            logger.warning(
+                f"[{self.query_id}] [GPTCompletion] Planos no encontrados, se "
+                f"responde sin ellos: {[os.path.basename(p) for p in faltantes]}"
+            )
+            pdfs = [p for p in pdfs if os.path.exists(p)]
 
         # Si hay PDFs, vamos directo a Responses (ChatCompletions no adjunta input_file)
         if pdfs:

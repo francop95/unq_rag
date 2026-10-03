@@ -24,7 +24,7 @@ class Configuration:
     _ingestion_raw_data_dir = os.path.abspath(os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "Ingestion", "data", "raw_data"
     ))
-    electric_diagram_path = os.path.join(_ingestion_raw_data_dir, "Plano distribucion electrica.pdf")
+    electric_diagram_path = os.path.join(_ingestion_raw_data_dir, "1_Plano distribucion electrica_v1.pdf")
     tben_diagram_path = os.path.join(_ingestion_raw_data_dir, "conexionadoTben.pdf")
 
     #########################################################################################
@@ -362,10 +362,21 @@ class Configuration:
     # preguntas de proceso/térmicas respondidas desde la Tesis del secadero) —
     # así se evita costo/tokens sin beneficio en esos casos, sin dejar de
     # priorizar los planos en el resto.
+    #
+    # Los nombres tienen que coincidir EXACTO con el `file_name` del índice: la
+    # comparación es por igualdad, así que un nombre viejo no falla ruidosamente,
+    # simplemente nunca coincide y los planos dejan de adjuntarse en silencio.
+    # Pasó al renombrar el corpus con prefijos: "Plano distribucion electrica.pdf"
+    # pasó a "1_Plano distribucion electrica_v1.pdf" y "variadorPowerFlex4M.pdf"
+    # a "manual powerflex 4m.pdf", y la lista quedó atrás.
     ELECTRIC_DIAGRAM_RELATED_FILES = [
-        "Plano distribucion electrica.pdf",
+        "1_Plano distribucion electrica_v1.pdf",
+        "2_Planos_secadero_codificados_propuesta.pdf",
+        "Poster_didactico_secadero_componentes_y_planos.pdf",
         "conexionadoTben.pdf",
-        "variadorPowerFlex4M.pdf",
+        "tben-L4-8ioL.pdf",
+        "Secadero v01 On TBEN-L4-8IOL.pdf",
+        "manual powerflex 4m.pdf",
     ]
 
     #########################################################################################
