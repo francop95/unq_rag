@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { mediaUrl, sourceDocumentUrl } from "../api/client";
 import { CONTENT_TYPE_LABEL, type MediaEntry } from "../lib/media";
 import TableBlock from "./TableBlock";
@@ -15,17 +15,46 @@ interface Props {
  * Los planos técnicos se leen ampliados, así que el zoom y el paneo no son un lujo:
  * a 224px de alto en la tarjeta no se distingue una etiqueta de borne.
  */
+// Escala mínima y máxima, relativas al ajuste a pantalla. El máximo es alto
+// porque 308 de los 1074 recortes del índice miden menos de 1000 px de ancho y
+// alguno 93: sin poder pasar del tamaño natural, esos son ilegibles.
+const ESCALA_MIN = 0.5;
+const ESCALA_MAX = 8;
+const PASO = 1.35;
+
 export default function Lightbox({ entries, index, onClose, onNavigate }: Props) {
-  const [zoomed, setZoomed] = useState(false);
+  // 1 = ajustada a la pantalla. El zoom multiplica desde ahí, no desde el tamaño
+  // del archivo: así una imagen chica también se agranda, que es lo que el
+  // botón anterior no hacía (con `max-w-none`, ajustada y "ampliada" eran la
+  // misma cosa para cualquier imagen más chica que la ventana).
+  const [escala, setEscala] = useState(1);
+  const [desplazamiento, setDesplazamiento] = useState({ x: 0, y: 0 });
+  const [arrastrando, setArrastrando] = useState(false);
+  const inicioArrastre = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
   const entry = entries[index];
+  const ampliada = escala > 1.001;
+
+  const reencuadrar = useCallback(() => {
+    setEscala(1);
+    setDesplazamiento({ x: 0, y: 0 });
+  }, []);
+
+  const cambiarEscala = useCallback((factor: number) => {
+    setEscala((e) => {
+      const nueva = Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, e * factor));
+      // Al volver al ajuste se recentra: si no, queda del tamaño correcto pero corrida.
+      if (Math.abs(nueva - 1) < 0.01) setDesplazamiento({ x: 0, y: 0 });
+      return nueva;
+    });
+  }, []);
 
   const go = useCallback(
     (delta: number) => {
       const next = (index + delta + entries.length) % entries.length;
-      setZoomed(false);
+      reencuadrar();
       onNavigate(next);
     },
-    [index, entries.length, onNavigate],
+    [index, entries.length, onNavigate, reencuadrar],
   );
 
   useEffect(() => {
@@ -33,6 +62,9 @@ export default function Lightbox({ entries, index, onClose, onNavigate }: Props)
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowRight") go(1);
       if (e.key === "ArrowLeft") go(-1);
+      if (e.key === "+" || e.key === "=") cambiarEscala(PASO);
+      if (e.key === "-" || e.key === "_") cambiarEscala(1 / PASO);
+      if (e.key === "0") reencuadrar();
     }
     window.addEventListener("keydown", onKey);
     // Mientras el visor está abierto el fondo no debe scrollear.
@@ -42,7 +74,7 @@ export default function Lightbox({ entries, index, onClose, onNavigate }: Props)
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previousOverflow;
     };
-  }, [go, onClose]);
+  }, [go, onClose, cambiarEscala, reencuadrar]);
 
   if (!entry) return null;
 
@@ -69,20 +101,41 @@ export default function Lightbox({ entries, index, onClose, onNavigate }: Props)
         )}
 
         {entry.kind === "image" && (
-          <button
-            type="button"
-            onClick={() => setZoomed((v) => !v)}
-            title={zoomed ? "Ajustar a pantalla" : "Ampliar al tamaño original"}
-            className="shrink-0 rounded-lg border border-white/15 p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
-          >
-            <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
-              {zoomed ? (
-                <path d="M7.5 3v4.5H3M12.5 17v-4.5H17M3 12.5h4.5V17M17 7.5h-4.5V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              ) : (
-                <path d="M3 7.5V3h4.5M17 12.5V17h-4.5M12.5 3H17v4.5M7.5 17H3v-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              )}
-            </svg>
-          </button>
+          <div className="flex shrink-0 items-center gap-1 rounded-lg border border-white/15">
+            <button
+              type="button"
+              onClick={() => cambiarEscala(1 / PASO)}
+              disabled={escala <= ESCALA_MIN + 0.001}
+              title="Alejar (−)"
+              className="rounded-l-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
+                <path d="M3.5 8h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+            {/* El porcentaje, además de los botones: sin él no se sabe si el
+                clic hizo algo, que es exactamente lo que fallaba con las
+                imágenes chicas. Y sirve de botón para volver a ajustar. */}
+            <button
+              type="button"
+              onClick={reencuadrar}
+              title="Ajustar a pantalla (0)"
+              className="min-w-[3.4rem] px-1 py-2 font-mono text-[0.7rem] tabular-nums text-white/70 transition hover:text-white"
+            >
+              {Math.round(escala * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => cambiarEscala(PASO)}
+              disabled={escala >= ESCALA_MAX - 0.001}
+              title="Acercar (+)"
+              className="rounded-r-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
+                <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         )}
 
         <a
@@ -111,21 +164,53 @@ export default function Lightbox({ entries, index, onClose, onNavigate }: Props)
 
       {/* Contenido */}
       <div
-        className={`relative flex-1 ${zoomed ? "overflow-auto" : "flex items-center justify-center overflow-hidden"} p-4`}
+        className="relative flex flex-1 items-center justify-center overflow-hidden p-4"
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
+        }}
+        onWheel={(e) => {
+          if (entry.kind !== "image") return;
+          // Solo con Ctrl/Cmd, como en cualquier visor: una rueda que hace zoom
+          // sin modificador secuestra el gesto de scrollear la página.
+          if (!e.ctrlKey && !e.metaKey) return;
+          cambiarEscala(e.deltaY < 0 ? PASO : 1 / PASO);
         }}
       >
         {entry.kind === "image" ? (
           <img
             src={mediaUrl(entry.path)}
             alt={`${label} — ${entry.fileName} página ${entry.page}`}
-            onClick={() => setZoomed((v) => !v)}
-            className={`crisp-lineart ${
-              zoomed
-                ? "max-w-none cursor-zoom-out rounded-lg bg-white"
-                : "max-h-full max-w-full cursor-zoom-in rounded-lg bg-white object-contain shadow-2xl"
-            }`}
+            draggable={false}
+            onDoubleClick={() => (ampliada ? reencuadrar() : cambiarEscala(PASO * PASO))}
+            onPointerDown={(e) => {
+              if (!ampliada) return;
+              (e.target as HTMLElement).setPointerCapture(e.pointerId);
+              inicioArrastre.current = {
+                x: e.clientX, y: e.clientY,
+                dx: desplazamiento.x, dy: desplazamiento.y,
+              };
+              setArrastrando(true);
+            }}
+            onPointerMove={(e) => {
+              const a = inicioArrastre.current;
+              if (!a) return;
+              setDesplazamiento({
+                x: a.dx + (e.clientX - a.x),
+                y: a.dy + (e.clientY - a.y),
+              });
+            }}
+            onPointerUp={() => { inicioArrastre.current = null; setArrastrando(false); }}
+            onPointerCancel={() => { inicioArrastre.current = null; setArrastrando(false); }}
+            style={{
+              // `object-contain` nunca agranda, solo achica, así que el ajuste
+              // base deja chico un recorte de 400 px. El `scale` va encima y sí
+              // agranda: es lo que permite leer una imagen pequeña, que es
+              // justo lo que el botón anterior no hacía.
+              transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px) scale(${escala})`,
+              transition: arrastrando ? "none" : "transform .14s ease-out",
+              cursor: ampliada ? (arrastrando ? "grabbing" : "grab") : "zoom-in",
+            }}
+            className="crisp-lineart max-h-full max-w-full rounded-lg bg-white object-contain shadow-2xl"
           />
         ) : (
           // Las tablas se alinean arriba y usan todo el ancho disponible: centradas
