@@ -42,6 +42,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+try:
+    from telemetria.consumo import cerrar as cerrar_consumo
+except Exception:  # registrar no puede fallar por el medidor
+    def cerrar_consumo(_qid):
+        return {}
+
 logger = logging.getLogger("app.Telemetria")
 
 _lock = threading.Lock()
@@ -346,6 +352,12 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
                     "intencion": (data.get("query_intent") or {}).get("question_type"),
                     "pregunta_invalida": bool(data.get("invalid_question_found")),
                     "respuesta_generica": bool(data.get("generic_ans_found")),
+                    # Tokens y dólares de ESTA consulta. Va acá y no en una
+                    # columna propia porque `extra_json` ya existía sin usarse y
+                    # la lectura lo parsea sola; una columna nueva obligaría a
+                    # migrar bases ya desplegadas por un dato que casi siempre
+                    # se consulta promediado, no filtrado.
+                    "consumo": cerrar_consumo(query_id),
                     }, ensure_ascii=False)[:4000],
     )
 

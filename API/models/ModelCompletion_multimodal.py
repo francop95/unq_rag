@@ -3,6 +3,12 @@ import logging
 from time import perf_counter
 from typing import Any, Dict, List
 import os
+
+try:
+    from telemetria.consumo import anotar as anotar_consumo
+except Exception:  # la API tiene que responder aunque la telemetría no cargue
+    def anotar_consumo(*_a, **_k):
+        return None
 import sys
 import httpx
 
@@ -260,6 +266,7 @@ class ModelCompletion(Completion):
                 input=structured_input,
                 max_output_tokens=self.max_tokens,
             )
+            anotar_consumo(self.query_id, model, getattr(r, "usage", None))
             return self._normalize_response_to_chat_choice(r)
 
         # --- Ruta Chat Completions, sólo texto ---
@@ -272,6 +279,7 @@ class ModelCompletion(Completion):
                     temperature=0.7,
                     top_p=0.95,
                 )
+                anotar_consumo(self.query_id, model, getattr(resp, "usage", None))
                 content = resp.choices[0].message.content if resp and resp.choices else ""
                 return {"choices": [{"message": {"content": content}}]}
             except APIStatusError as e:
@@ -286,6 +294,7 @@ class ModelCompletion(Completion):
             input=prompt,
             max_output_tokens=self.max_tokens,
         )
+        anotar_consumo(self.query_id, model, getattr(r, "usage", None))
         return self._normalize_response_to_chat_choice(r)
 
 
