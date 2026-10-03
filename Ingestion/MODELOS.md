@@ -22,6 +22,7 @@ que no está medido se dice que no está medido.
 | [5. Comparación de extremo a extremo](#5-comparación-de-extremo-a-extremo) | las cuatro configuraciones en una tabla |
 | [6. ¿El multimodal se justifica?](#6-el-pipeline-multimodal-se-justifica) | contra la línea base: 340× el costo |
 | [7. Técnicas de retrieval](#7-técnicas-de-retrieval-8-evaluadas-3-desactivadas) | gates, cupo, reranking, BM25, visual |
+| [7bis. Qué cuesta una pregunta](#7bis-qué-cuesta-responder-una-pregunta) | USD 0,0221 de promedio, medido |
 | [8. Qué falta medir](#8-qué-falta-medir) | lo que no se sabe |
 | [9. Resumen de decisiones](#9-resumen-de-decisiones) | la tabla final |
 
@@ -503,6 +504,57 @@ La telemetría registra el embudo completo de cada consulta (ver
 después de cada etapa, más los candidatos crudos con su score y si sobrevivieron.
 Es lo que permite distinguir "el chunk correcto no se recuperó" de "se recuperó y
 lo filtró un gate", que son problemas distintos con arreglos distintos.
+
+---
+
+## 7bis. Qué cuesta responder una pregunta
+
+La ingesta tenía medidor desde hace tiempo; la API no tenía ninguno. Cada
+respuesta de OpenAI trae su `usage` y los tres puntos de llamada lo tiraban, así
+que la pregunta "¿cuánto sale una consulta?" no tenía respuesta. Ahora
+`API/telemetria/consumo.py` acumula los tokens por `query_id` y los deja en el
+`extra_json` de la ejecución.
+
+Ocho preguntas representativas, con `gpt-4.1`:
+
+| Tipo | Entrada | Salida | USD |
+|---|---|---|---|
+| Eléctrica, con planos adjuntos | 12.586 | 512 | 0,0293 |
+| Falla | 10.864 | 1.014 | 0,0298 |
+| Parámetro de manual | 11.027 | 456 | 0,0257 |
+| Programa de control | 9.796 | 329 | 0,0222 |
+| Proceso | 8.222 | 627 | 0,0215 |
+| Fuera de tema, rechazada | 2.134 | 45 | **0,0046** |
+| **Promedio** | **9.241** | **449** | **0,0221** |
+
+Tres cosas que el promedio solo no dice:
+
+- **La entrada domina 20 a 1.** Se paga el contexto que entra, no la respuesta
+  que sale. Recuperar de más es lo caro; redactar de más, casi gratis.
+- **Los planos adjuntos cuestan 3.220 tokens y USD 0,006 por consulta**, un 26%
+  de una pregunta eléctrica. Medido encendiendo y apagando el adjunto sobre la
+  misma pregunta, no estimado.
+- **Rechazar sale un quinto que responder.** El gate de fuera de tema hace una
+  sola llamada y corta antes del retrieval: además de evitar respuestas
+  inventadas, ahorra.
+
+### Contra el costo de construir el índice
+
+La ingesta completa son USD 7,36 por única vez. A USD 0,0221 la pregunta, la
+operación supera a la construcción del índice a las **333 preguntas**. Y hasta
+unas 750 preguntas mensuales el servidor (~USD 17/mes) cuesta más que el modelo.
+
+### Por página, los tres niveles
+
+El mismo documento (PowerFlex, 126 páginas) procesado de tres maneras:
+
+| Troceado | Por página | Las 126 páginas | Contra la base |
+|---|---|---|---|
+| Texto + OCR (línea base) | USD 0,00006 | USD 0,008 | 1x |
+| **`gpt-4o` con visión** | **USD 0,0154** | **USD 1,94** | **257x** |
+| `gpt-5` con visión | USD 0,1015 | USD 12,79 | 1.690x |
+
+El salto grande no es de `gpt-4o` a `gpt-5`: es de no mirar la página a mirarla.
 
 ---
 
