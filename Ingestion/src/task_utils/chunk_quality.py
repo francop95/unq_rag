@@ -9,6 +9,7 @@ Se integra después del chunking y antes de embeddings.
 import hashlib
 import json
 from typing import List, Dict, Any, Tuple
+import re
 from difflib import SequenceMatcher
 from logger import Logger
 
@@ -134,6 +135,26 @@ class ChunkDeduplicator:
         """Computa hash MD5 del texto."""
         return hashlib.md5(text.encode()).hexdigest()
 
+    # Tokens cuya diferencia cambia el significado aunque el texto sea casi
+    # idéntico: números, operadores de comparación y los sufijos numerados de
+    # señales (Output_value_1 vs Output_value_3).
+    _SIGNIFICATIVOS = re.compile(r"[-+]?\d+(?:[.,]\d+)?|[<>]=?|==|!=|=")
+
+    @classmethod
+    def _diferencia_significativa(cls, t1: str, t2: str) -> bool:
+        """
+        True si los dos textos difieren en sus números u operadores.
+
+        En documentación técnica esa diferencia ES el contenido. Dos reglas de
+        un programa de control —"Semaforo = 0 → salida 0" y "Semaforo > 0 →
+        salida 1"— son 96% idénticas como texto y afirman lo opuesto. Medido
+        sobre el export del TBEN: el deduplicador descartaba la segunda, y el
+        índice quedaba sabiendo cuándo se apaga la salida pero no cuándo se
+        enciende. Lo mismo vale para tablas de parámetros, donde las filas
+        difieren solo en el valor.
+        """
+        return cls._SIGNIFICATIVOS.findall(t1) != cls._SIGNIFICATIVOS.findall(t2)
+
     @staticmethod
     def _text_similarity(text1: str, text2: str) -> float:
         """
@@ -220,6 +241,16 @@ class ChunkDeduplicator:
                     sim = self._text_similarity(text, unique_text)
 
                     if sim >= self.similarity_threshold:
+                        # Similares en el texto, pero si difieren en sus números
+                        # u operadores no son duplicados: esa diferencia es lo
+                        # que dicen. Descartar uno deja la mitad de una lógica
+                        # de control o una fila de una tabla de parámetros.
+                        if self._diferencia_significativa(text, unique_text):
+                            logger.debug(
+                                f"Similar (sim={sim:.2f}) pero difiere en valores: se conserva. "
+                                f"{text[:50]}..."
+                            )
+                            continue
                         logger.debug(f"Chunk similar removido (sim={sim:.2f}): {text[:50]}...")
                         is_duplicate = True
                         stats["similarity_removed"] += 1
