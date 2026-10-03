@@ -61,6 +61,11 @@ DOCUMENTOS = (
     "Poster_didactico_secadero_componentes_y_planos",
     "1_Plano distribucion electrica_v1",
     "conexionadoTben",
+    # Export de configuración del TBEN con su programa ARGEE. Trae las
+    # asignaciones de puerto reales de la configuración que corre —qué sensor
+    # está en qué puerto IO-Link, con qué escala sale el variador— que ninguna
+    # otra fuente tiene: el plano muestra el cableado, no la configuración.
+    "Secadero v01 On TBEN-L4-8IOL",
 )
 
 PROMPT = """Sos un ingeniero de mantenimiento documentando las conexiones de un

@@ -613,17 +613,6 @@
       "origen_dato": "extraido"
     },
     {
-      "origen": "TH01",
-      "destino": "VFD01",
-      "tipo": "controla",
-      "funcion": "controla",
-      "evidencia": "El reparto de órdenes al VFD01 entre C0 y C6 debe verificarse (D10).",
-      "confianza": "media",
-      "fuente": "2_Planos_secadero_codificados_propuesta p2 chunk_3",
-      "bidireccional": false,
-      "origen_dato": "extraido"
-    },
-    {
       "origen": "SSR01",
       "destino": "R01",
       "tipo": "alimenta",
