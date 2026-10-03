@@ -1,0 +1,164 @@
+{
+  "componentes": [
+    {
+      "codigo": "QD01",
+      "nombre": "Interruptor diferencial general",
+      "alias": "Inter. dif. 40 A / 30 mA"
+    },
+    {
+      "codigo": "QF01",
+      "nombre": "Interruptor termomagnético general",
+      "alias": "Inter. Ter. 25 A"
+    },
+    {
+      "codigo": "QF02",
+      "nombre": "Interruptor termomagnético de calefacción",
+      "alias": "Inter. Ter. 15 A"
+    },
+    {
+      "codigo": "QF03",
+      "nombre": "Interruptor termomagnético del forzador",
+      "alias": "Inter. Ter. 10 A"
+    },
+    {
+      "codigo": "QF04",
+      "nombre": "Interruptor termomagnético de control",
+      "alias": "Inter. Ter. 25 A bipolar"
+    },
+    {
+      "codigo": "R01",
+      "nombre": "Resistencia calefactora 1",
+      "alias": "Grupo 3 x 2 kW"
+    },
+    {
+      "codigo": "R02",
+      "nombre": "Resistencia calefactora 2",
+      "alias": "Grupo 3 x 2 kW"
+    },
+    {
+      "codigo": "R03",
+      "nombre": "Resistencia calefactora 3",
+      "alias": "Grupo 3 x 2 kW"
+    },
+    {
+      "codigo": "SSR01",
+      "nombre": "Relé de estado sólido 1",
+      "alias": "KM1 no equivale individualmente a este SSR"
+    },
+    {
+      "codigo": "SSR02",
+      "nombre": "Relé de estado sólido 2",
+      "alias": "KM1 no equivale individualmente a este SSR"
+    },
+    {
+      "codigo": "SSR03",
+      "nombre": "Relé de estado sólido 3",
+      "alias": "KM1 no equivale individualmente a este SSR"
+    },
+    {
+      "codigo": "TS01…",
+      "nombre": "Termostatos de protección térmica",
+      "alias": "Termostato bulbo capilar"
+    },
+    {
+      "codigo": "SBE01",
+      "nombre": "Pulsador de parada de emergencia",
+      "alias": "Parada de emergencia"
+    },
+    {
+      "codigo": "M01",
+      "nombre": "Motor del forzador",
+      "alias": "M1"
+    },
+    {
+      "codigo": "VENT01",
+      "nombre": "Conjunto forzador de aire",
+      "alias": "Forzador"
+    },
+    {
+      "codigo": "VFD01",
+      "nombre": "Variador de frecuencia",
+      "alias": "INV1; PowerFlex 4M"
+    },
+    {
+      "codigo": "QM01",
+      "nombre": "Guardamotor del forzador",
+      "alias": "F1"
+    },
+    {
+      "codigo": "PS01",
+      "nombre": "Fuente de alimentación de 24 Vcc",
+      "alias": "Fuente 220 VCA a 24 Vcc / 10 A"
+    },
+    {
+      "codigo": "PS02",
+      "nombre": "Fuente de alimentación de 5 Vcc",
+      "alias": "Fuente 220 VCA a 5 Vcc / 2 A"
+    },
+    {
+      "codigo": "IO01",
+      "nombre": "Módulo de entradas/salidas TBEN",
+      "alias": "TBEN; distintas variantes en documentos"
+    },
+    {
+      "codigo": "IF01",
+      "nombre": "Interfaz DP1213",
+      "alias": "DP1213"
+    },
+    {
+      "codigo": "MCU01",
+      "nombre": "Arduino Uno",
+      "alias": "Arduino uno"
+    },
+    {
+      "codigo": "SV01",
+      "nombre": "Servomotor 1",
+      "alias": "Servo 1"
+    },
+    {
+      "codigo": "SV02",
+      "nombre": "Servomotor 2",
+      "alias": "Servo 2"
+    },
+    {
+      "codigo": "CMP01",
+      "nombre": "Compuerta de intercambio de aire 1",
+      "alias": "Válvula; válvula extractora"
+    },
+    {
+      "codigo": "CMP02",
+      "nombre": "Compuerta de intercambio de aire 2",
+      "alias": "Válvula; válvula extractora"
+    },
+    {
+      "codigo": "TH01",
+      "nombre": "Sensor de temperatura y humedad 1",
+      "alias": "C4; Temperatura1; Humedad1"
+    },
+    {
+      "codigo": "TH02",
+      "nombre": "Sensor de temperatura y humedad 2",
+      "alias": "C5; Temperatura2; Humedad2"
+    },
+    {
+      "codigo": "X01",
+      "nombre": "Grupo de bornes de referencia 1",
+      "alias": "X1"
+    },
+    {
+      "codigo": "X02",
+      "nombre": "Grupo de bornes de referencia 2",
+      "alias": "X2"
+    },
+    {
+      "codigo": "X03",
+      "nombre": "Grupo de bornes de referencia 3",
+      "alias": "X3"
+    },
+    {
+      "codigo": "PC01",
+      "nombre": "Computadora de supervisión",
+      "alias": "PC; extremo externo de Ethernet P1"
+    }
+  ]
+}

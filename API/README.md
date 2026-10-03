@@ -482,6 +482,32 @@ volvió.
 
 ---
 
+## 🏷️ Nomenclatura en las respuestas
+
+Cada respuesta que menciona un actuador, sensor o protección indica su código
+acordado: *"los relés de estado sólido (SSR01-SSR03)"*, *"el variador (VFD01)"*.
+En un tablero con cuatro interruptores termomagnéticos, "el interruptor" no
+alcanza para ir a buscarlo.
+
+El glosario sale de la hoja `Nomenclatura` del inventario y se versiona como
+JSON para poder revisarlo en un diff cuando el inventario cambie:
+
+```bash
+cd Ingestion && python scripts/generar_nomenclatura.py   # → API/configs/nomenclatura.json
+```
+
+Se inyecta entero en el prompt de respuesta —32 componentes, unos 700 tokens—
+en vez de filtrarlo por la pregunta: filtrar exigiría saber de antemano qué
+componentes va a mencionar la respuesta, que es justo lo que no se sabe hasta
+tenerla.
+
+**Verificado que no inventa códigos.** El riesgo de darle una lista es que
+extienda el patrón a componentes que no están en ella. Probado con preguntas
+sobre el PowerFlex y el TBEN: solo cita códigos del glosario. Si el inventario
+no tiene un componente, la respuesta lo nombra sin código, que es lo correcto.
+
+---
+
 ## 📝 Feedback y telemetría
 
 Cada consulta queda registrada con lo que hizo falta para responderla, y quien

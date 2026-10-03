@@ -8,6 +8,7 @@ from typing import Dict, List, Any
 from time import perf_counter
 import numpy as np
 from utils.utils import calculate_num_of_tokens
+from configs.nomenclatura import bloque_para_prompt
 
 # Get the path of the top-level directory
 top_level_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -141,6 +142,17 @@ class RetrieverQna:
             context,
             data["query"],
         )
+
+        # Nomenclatura: que la respuesta diga "el variador (VFD01)" y no "el
+        # variador". En un tablero con cuatro interruptores termomagnéticos,
+        # "el interruptor" no alcanza para ir a buscarlo.
+        #
+        # Va después del .format y no dentro de la plantilla porque el glosario
+        # se genera desde el inventario: embebido en Configuration quedaría
+        # congelado, y habría que tocar código cada vez que cambie un código.
+        glosario = bloque_para_prompt()
+        if glosario:
+            prompt = f"{prompt}\n{glosario}"
         message_prompt = [
             {"role": "system", "content": data["gpt_sys_msg_content"]},
             {"role": "user", "content": prompt},
