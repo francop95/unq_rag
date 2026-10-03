@@ -66,30 +66,115 @@ def bloques_de_texto(page):
     return salida
 
 
+# Qué fracción de un bloque de texto tiene que caer dentro del recorte para
+# considerarlo parte de esta figura. Por encima, el recorte se expande hasta
+# contenerlo entero; por debajo, es un vecino y el recorte se achica para
+# dejarlo afuera.
+#
+# Este umbral es lo que impide fusionar figuras. La primera versión expandía
+# ante CUALQUIER intersección, y en un póster a varias columnas rozar el borde
+# de la columna de al lado hacía tragarse esa columna entera: un recorte
+# terminaba conteniendo las secciones 06 y 07 juntas. Un bloque apenas rozado no
+# pertenece a la figura, y meterlo adentro es peor que dejarlo afuera.
+FRACCION_PERTENENCIA = 0.45
+
+# Piso de achique: fracción mínima del área original que debe conservar el
+# recorte. Con vecinos invadiendo por dos lados, los achiques sucesivos
+# colapsaban la figura —visto: un recorte de 3276 px de ancho terminó en 120—.
+# Por debajo de este piso se abandona el ajuste y se deja el bbox original con
+# su margen: un recorte que corta un poco de texto es un defecto menor; uno que
+# borra la figura es inservible.
+MINIMO_AREA_CONSERVADA = 0.55
+
+# Un bloque mucho más ancho (o alto) que el recorte no pertenece a esa figura
+# por más que se solapen: es un título de sección o un pie que cruza la página.
+# Son los que rompían la separación entre columnas — el título "DEL CÓDIGO EN LA
+# FOTO AL MISMO CÓDIGO EN EL PLANO" cruza el póster entero, tenía la mitad de su
+# área dentro de un recorte de media página, pasaba el umbral de pertenencia y
+# estiraba el borde hasta el ancho completo, fusionando las secciones 06 y 07.
+FACTOR_BLOQUE_AJENO = 1.5
+
+
+def _solapamiento(a, b) -> float:
+    """Fracción del bloque `b` que cae dentro del rectángulo `a`."""
+    ax0, ay0, ax1, ay1 = a
+    bx0, by0, bx1, by1 = b
+    ancho = max(0.0, min(ax1, bx1) - max(ax0, bx0))
+    alto = max(0.0, min(ay1, by1) - max(ay0, by0))
+    area_b = max(1e-9, (bx1 - bx0) * (by1 - by0))
+    return (ancho * alto) / area_b
+
+
 def expandir(bbox, bloques, tope):
     """
-    Expande el bbox hasta contener enteros los bloques que intersecta.
+    Ajusta el bbox para que ningún bloque de texto quede partido.
 
-    Devuelve (bbox_nuevo, cuantos_bloques_partia). Si la expansión supera el
-    tope de área, devuelve la página completa.
+    Un bloque mayormente adentro se incluye entero (expandiendo); uno apenas
+    rozado se deja afuera (achicando). Devuelve (bbox_nuevo, bloques_que_partía).
+    Si la expansión superara el tope de área, usa la página completa.
     """
     x0, y0, x1, y1 = bbox
     x0, y0 = max(0.0, x0 - MARGEN), max(0.0, y0 - MARGEN)
     x1, y1 = min(1.0, x1 + MARGEN), min(1.0, y1 + MARGEN)
 
-    partidos = 0
-    for bx0, by0, bx1, by1 in bloques:
-        # ¿se solapan?
-        if bx1 <= x0 or bx0 >= x1 or by1 <= y0 or by0 >= y1:
-            continue
-        # ¿está contenido entero?
-        if bx0 >= x0 and bx1 <= x1 and by0 >= y0 and by1 <= y1:
-            continue
-        partidos += 1
-        x0, y0 = min(x0, bx0), min(y0, by0)
-        x1, y1 = max(x1, bx1), max(y1, by1)
+    ancho_figura = max(1e-9, bbox[2] - bbox[0])
+    alto_figura = max(1e-9, bbox[3] - bbox[1])
 
-    if (x1 - x0) * (y1 - y0) > tope:
+    partidos = 0
+    for bloque in bloques:
+        bx0, by0, bx1, by1 = bloque
+        frac = _solapamiento((x0, y0, x1, y1), bloque)
+        if frac <= 0.0:
+            continue
+        if frac >= 0.999:
+            continue  # ya está entero adentro
+
+        partidos += 1
+
+        # ¿Es un bloque que cruza más allá de esta figura? Se mide contra el
+        # bbox ORIGINAL, no contra la caja que se va expandiendo: si se mide
+        # contra la caja, incluir un bloque la ensancha y el siguiente bloque
+        # ancho ya no parece ajeno. Esa cascada llevaba un recorte de media
+        # columna (0.45) al ancho completo de la página (0.96).
+        ajeno = ((bx1 - bx0) > FACTOR_BLOQUE_AJENO * ancho_figura
+                 or (by1 - by0) > FACTOR_BLOQUE_AJENO * alto_figura)
+
+        if frac >= FRACCION_PERTENENCIA and not ajeno:
+            # Pertenece a esta figura: se expande para no cortarlo.
+            x0, y0 = min(x0, bx0), min(y0, by0)
+            x1, y1 = max(x1, bx1), max(y1, by1)
+        else:
+            # Es de al lado: se retrocede el borde por el que entra, en vez de
+            # tragárselo. Se elige el eje con menos invasión para no mutilar la
+            # figura por el lado equivocado.
+            invade_izq = bx1 - x0 if bx0 < x0 else 0.0
+            invade_der = x1 - bx0 if bx1 > x1 else 0.0
+            invade_arr = by1 - y0 if by0 < y0 else 0.0
+            invade_aba = y1 - by0 if by1 > y1 else 0.0
+            opciones = [(invade_izq, "izq"), (invade_der, "der"),
+                        (invade_arr, "arr"), (invade_aba, "aba")]
+            opciones = [o for o in opciones if o[0] > 0]
+            if not opciones:
+                continue
+            _, lado = min(opciones)
+            if lado == "izq":
+                x0 = min(x1, bx1)
+            elif lado == "der":
+                x1 = max(x0, bx0)
+            elif lado == "arr":
+                y0 = min(y1, by1)
+            else:
+                y1 = max(y0, by0)
+
+    area_orig = max(1e-9, (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]))
+    area_nueva = max(0.0, x1 - x0) * max(0.0, y1 - y0)
+
+    if area_nueva < MINIMO_AREA_CONSERVADA * area_orig:
+        # El ajuste mutiló la figura: se vuelve al bbox original con margen.
+        return (max(0.0, bbox[0] - MARGEN), max(0.0, bbox[1] - MARGEN),
+                min(1.0, bbox[2] + MARGEN), min(1.0, bbox[3] + MARGEN)), partidos
+
+    if area_nueva > tope:
         return (0.0, 0.0, 1.0, 1.0), partidos
     return (max(0.0, x0), max(0.0, y0), min(1.0, x1), min(1.0, y1)), partidos
 
