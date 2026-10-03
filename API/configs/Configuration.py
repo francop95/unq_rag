@@ -410,7 +410,10 @@ class Configuration:
     # Se lee con os.getenv y no con Configuration.get() porque este último
     # devuelve el atributo de clase cuando no es None, así que una variable de
     # entorno nunca llegaría a pisarlo.
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
+    # `or` y no el default de getenv: una variable definida y vacia —lo que
+    # inyecta docker compose con ${OPENAI_MODEL:-}— no activa ese default, y el
+    # valor vacio se propagaba hasta el fallback mas barato sin avisar.
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL") or "gpt-4.1"
     OPENAI_EMB_MODEL = "text-embedding-3-large"
 
     # Proveedor de embeddings: "openai" (default) o "bedrock".

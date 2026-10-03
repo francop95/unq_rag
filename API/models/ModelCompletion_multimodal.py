@@ -51,7 +51,17 @@ class ModelCompletion(Completion):
         self.completion_success = data["completion_success"]
 
         self.OPENAI_MODEL = dynamic_params.get("model") or dynamic_params.get("openai_model") \
-                            or data.get("openai_model1") or data.get("openai_model") or "gpt-4o-mini"
+                            or data.get("openai_model1") or data.get("openai_model")
+        if not self.OPENAI_MODEL:
+            # El ultimo eslabon de la cadena es un modelo mas debil y mas barato.
+            # Llegar hasta aca siempre es un error de configuracion, y antes
+            # pasaba callado: el despliegue entero respondia con gpt-4o-mini
+            # porque una variable de entorno llegaba vacia.
+            self.OPENAI_MODEL = "gpt-4o-mini"
+            logger.warning(
+                f"[{self.query_id}] [GPTCompletion] Sin modelo configurado; se "
+                f"usa {self.OPENAI_MODEL}. Revisa OPENAI_MODEL en el entorno."
+            )
         self.max_tokens = int(dynamic_params.get('max_tokens') or data.get("max_tokens", 1024))
         api_key = data.get("openai_keys") or os.getenv("OPENAI_API_KEY")
         if not api_key:
