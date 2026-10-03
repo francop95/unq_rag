@@ -247,24 +247,43 @@ class Configuration:
 
     ### RETRIEVAL AVANZADO (paridad con Ingestion/scripts/hybrid_multimodal_search.py)
 
-    # Índice visual (CLIP) con diagramas/imágenes indexados por Ingestion.
+    # Índice visual con diagramas/imágenes indexados por Ingestion.
     #
-    # DESACTIVADO por medición: igual que BM25, apagarlo no cambia ni un dígito del
-    # eval. Ahorra cargar el modelo CLIP (~90 MB) en cada arranque de la API.
+    # DESACTIVADO por medición, ahora SÍ contra consultas visuales. La salvedad que
+    # estaba acá antes —"el eval son consultas de texto, así que esto no se puede
+    # medir"— ya no corre: se reapuntó el set visual al corpus actual
+    # (eval/eval_visual_v4_4o.jsonl, 18 de 24 preguntas) y se midió.
     #
-    # Con una salvedad honesta: el eval son consultas de TEXTO, y CLIP existe para
-    # buscar por semejanza visual ("el diagrama que tiene un contactor y tres
-    # fusibles"). Lo que sí está medido es que, como está cableado, es inerte para
-    # cualquier tipo de consulta: un candidato que solo encuentra CLIP no tiene
-    # `dense_similarity` y el gate lo descarta siempre. Si algún día se quiere evaluar
-    # de verdad, hace falta un eval con consultas visuales Y revisar ese cableado.
+    # Lo primero que aparece es que no hay margen: con el visual APAGADO, sobre
+    # consultas puramente visuales, el índice de texto da recall@10 17/18 y
+    # recall@1 14/18. Los chunks de imagen llevan la descripción que generó el
+    # modelo de visión, así que el denso ya encuentra el diagrama por su contenido.
     #
-    # Ingestion sigue construyendo la colección `visual_docs` (110 imágenes): es barato
-    # y deja la puerta abierta.
+    # Encendido, con CLIP contra visual_docs_v4_4o:
+    #
+    #   configuración                    aporte exclusivo   recall@10  recall@1  MRR
+    #   apagado (base)                          -             17/18     14/18   0.810
+    #   CLIP, fusion_admits_sparse=false        0             17/18     14/18   0.810
+    #   CLIP, fusion_admits_sparse=true        14             17/18     14/18   0.810
+    #   CLIP + fusion_decides_order=true       14             17/18     14/18   0.811
+    #
+    # "Aporte exclusivo" = ítems del contexto final que trajo CLIP y el denso no.
+    # Con admits_sparse apagado es CERO: los 13 que encuentra ya estaban. Con él
+    # encendido entran 14 en 9 de 18 preguntas y no mueven ninguna métrica, así que
+    # ocupan lugar del top_k sin ganárselo. La cobertura de media se queda en 8.
+    #
+    # La colección embed-v4 (visual_docs_v4_4o_mm, 1536) NO es consultable hoy: el
+    # proveedor de texto es OpenAI, soporta_imagenes() da False y la consulta cae a
+    # CLIP, que produce 512. Chroma rechaza por dimensión y el error queda dentro
+    # del try. Usarla exige pasar el texto a Cohere, que son 7 puntos menos (ver §2
+    # de MODELOS.md). Esa puerta está cerrada por ahora.
+    #
+    # Ingestion sigue construyendo las dos colecciones: es barato y deja la puerta
+    # abierta a un corpus con más diagramas, donde la respuesta puede cambiar.
     USE_VISUAL_RETRIEVAL = False
-    # Configurable para poder apuntar a la colección visual multimodal
-    # (visual_docs_v2_mm) sin tocar la de CLIP, y comparar las dos.
-    VISUAL_INDEX_NAME = os.getenv("VISUAL_INDEX_NAME", "visual_docs")
+    # El default apunta a una colección que EXISTE. Antes decía "visual_docs", que
+    # quedó viejo al renombrar: encender el visual consultaba una colección vacía.
+    VISUAL_INDEX_NAME = os.getenv("VISUAL_INDEX_NAME", "visual_docs_v4_4o")
     CLIP_MODEL = "clip-ViT-B-32"
     VISUAL_TOP_K = 5
 

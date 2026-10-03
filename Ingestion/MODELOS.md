@@ -312,7 +312,7 @@ en otro archivo obliga a buscar en dos lugares para defender una decisión.
 | Cupo para otros documentos (2 de 10) | **activo** | ver abajo: la métrica no se mueve, pero arregla un fallo real |
 | **Cross-encoder reranking** | **desactivado** | ver abajo |
 | **BM25 híbrido** | **desactivado** | no aporta en este corpus |
-| **Retrieval visual (CLIP)** | **desactivado** | sin medir si aporta o mete ruido |
+| **Retrieval visual** | **desactivado** | medido contra consultas visuales: aporte exclusivo 0 |
 | Query expansion | no implementada | el índice multi-vector ya cubre la paráfrasis |
 
 ### Por qué hay un cupo reservado para otros documentos
@@ -371,6 +371,52 @@ de 2 documentos distintos en el top-10, así que es un set que no castiga la
 monopolización. Un set regenerado contra el corpus actual (ver §8) probablemente
 sí la castigaría.
 
+### Por qué el retrieval visual está apagado
+
+Durante mucho tiempo acá decía "sin medir". La objeción era legítima: el eval son
+consultas de texto, y un índice visual existe para buscar por semejanza de imagen
+—*"el diagrama que tiene un contactor y tres fusibles"*—, así que medirlo con
+preguntas de texto no probaba nada.
+
+Se midió con consultas visuales. El set visual se reapuntó al corpus actual en
+`eval/eval_visual_v4_4o.jsonl`: **18 de 24** preguntas. Las 5 de
+`variadorPowerFlex4M.pdf` se remapearon a `manual powerflex 4m.pdf` porque los dos
+archivos son byte-idénticos, un renombre y nada más. Las 6 restantes se
+descartaron: apuntan al catálogo TBEN viejo y a la tesis vieja, que **no** son los
+documentos actuales renombrados sino archivos distintos, y remapear sus páginas
+habría sido inventar datos.
+
+Lo primero que aparece es que casi no hay margen. Con el visual **apagado**, sobre
+consultas puramente visuales, el índice de texto ya da recall@10 17/18 y recall@1
+14/18. La razón es el pipeline multimodal: cada chunk de imagen lleva la
+descripción que le generó el modelo de visión, así que el denso encuentra el
+diagrama por su contenido sin necesitar mirarlo.
+
+| Configuración | Aporte exclusivo | recall@10 | recall@1 | MRR | media |
+|---|---|---|---|---|---|
+| apagado (base) | — | 17/18 | 14/18 | 0,810 | 8 |
+| CLIP, `fusion_admits_sparse=false` | **0** | 17/18 | 14/18 | 0,810 | 8 |
+| CLIP, `fusion_admits_sparse=true` | 14 | 17/18 | 14/18 | 0,810 | 8 |
+| CLIP + `fusion_decides_order=true` | 14 | 17/18 | 14/18 | 0,811 | 8 |
+
+*Aporte exclusivo* son los ítems del contexto final que trajo CLIP y el denso no.
+Con `admits_sparse` apagado es **cero**: los 13 que CLIP encuentra ya los había
+traído el denso, es puramente redundante. Con él encendido entran 14 ítems
+exclusivos en 9 de las 18 preguntas y **no mueven ninguna métrica**: ocupan
+asientos del `top_k` sin ganárselos.
+
+**La colección embed-v4 no es consultable hoy.** `visual_docs_v4_4o_mm` tiene 1536
+dimensiones, pero el proveedor de texto de la API es OpenAI, `soporta_imagenes()`
+da `False` y la consulta visual cae a CLIP, que produce 512. Chroma rechaza por
+dimensión —el mismo error que en §2, esta vez atrapado en un `try` y degradado a
+warning— así que la búsqueda se saltea. Habilitarla exige pasar el texto a Cohere,
+que cuesta 7 puntos (§2). Esa puerta está cerrada mientras el texto siga en OpenAI.
+
+Dos trampas que la medición destapó y quedaron corregidas: el default de
+`VISUAL_INDEX_NAME` era `visual_docs`, un nombre viejo, y el conector usaba
+`get_or_create_collection`, que ante un nombre inexistente devuelve una colección
+**vacía** en vez de fallar. Encender el visual consultaba la nada en silencio.
+
 ### Por qué el reranking está apagado
 
 El pipeline arma un pool y después corta en 10 chunks. Con reranking, ese corte
@@ -409,6 +455,10 @@ lo filtró un gate", que son problemas distintos con arreglos distintos.
 ---
 
 ## 8. Qué falta medir
+
+**Las 6 preguntas visuales descartadas.** Apuntan al catálogo TBEN y a la tesis
+viejos, documentos que ya no están y cuyos reemplazos son archivos distintos.
+Regenerarlas con `eval/generate_visual_eval.py` devolvería el set a 24.
 
 **El sesgo del set.** Las preguntas se generaron contra el corpus viejo.
 Regenerar un set contra el corpus actual con `eval/generate_eval_set.py` daría

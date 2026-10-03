@@ -270,11 +270,22 @@ class ChromaConnection:
         if not self.use_visual_retrieval:
             return
         try:
-            self.visual_collection = self.client.get_or_create_collection(
-                name=self.visual_index_name,
-                metadata={"hnsw:space": "cosine"},
-            )
-            logger.info(f"[Chroma] Colección visual conectada: {self.visual_index_name}")
+            # get_collection y no get_or_create: con `create`, un nombre que no
+            # existe devuelve una colección VACÍA en vez de fallar, y la búsqueda
+            # visual queda devolviendo cero sin que nada lo diga. Pasó con el
+            # default "visual_docs", que quedó viejo al renombrar las colecciones.
+            self.visual_collection = self.client.get_collection(name=self.visual_index_name)
+            n = self.visual_collection.count()
+            if n == 0:
+                logger.warning(
+                    f"[Chroma] La colección visual '{self.visual_index_name}' está "
+                    f"vacía; la búsqueda visual no va a aportar nada."
+                )
+            else:
+                logger.info(
+                    f"[Chroma] Colección visual conectada: {self.visual_index_name} "
+                    f"({n} vectores)"
+                )
         except Exception as e:
             logger.warning(f"[Chroma] No se pudo conectar colección visual: {e}")
             self.visual_collection = None
