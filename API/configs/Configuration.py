@@ -160,6 +160,27 @@ class Configuration:
     #   python eval/run_eval.py --variant exclude_synthetic_questions=true
     EXCLUDE_SYNTHETIC_QUESTIONS = False
 
+    # Asientos del top_k reservados para documentos distintos al dominante.
+    #
+    # No es un gate: los gates descartan candidatos malos, esto reserva lugar.
+    # Existe porque el tamaño de un documento decide cuántos asientos se lleva.
+    # Medido sobre las consultas de telemetría: 7 de 18 tienen un documento
+    # ocupando más del 70% de los 40 candidatos del over-fetch.
+    #
+    #   python eval/run_eval.py --variant other_docs_quota=2
+    # Medido sobre eval_set (54 en tema): answer-present 93.0% con cupo 0, 2 y 3
+    # —no mueve la métrica— y recall@10 29/54 y el gate fuera de tema 5/5 también
+    # quedan igual. Cambia el contexto en 3 de 59 preguntas, ninguna para peor.
+    # No mueve más porque el gate cruzado (2.c) ya descartó a los otros
+    # documentos antes: el cupo solo alcanza a los que están a menos de 0.10 del
+    # top-1, que es el caso ARGEE. Es angosto a propósito.
+    #
+    # Lo que sí arregla, medido de punta a punta con "¿Cómo se calcula la salida
+    # hacia el variador en el programa ARGEE?": con 0 responde el ejemplo
+    # genérico del manual (32767 - Input_value); con 2 responde la fórmula real
+    # del programa instalado (4000 + Variador * 160).
+    OTHER_DOCS_QUOTA = 2
+
     RELATIVE_GATE_ENABLED = False
     RELATIVE_GATE_MARGIN = 0.15
 

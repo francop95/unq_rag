@@ -1,5 +1,6 @@
 # chroma_connection.py
 import logging
+from collections import Counter
 from typing import Any, Dict, List, Optional
 import os
 
@@ -80,6 +81,8 @@ class ChromaConnection:
         )
         self.cross_doc_gate_enabled: bool = bool(data.get("cross_doc_gate_enabled", True))
         self.cross_doc_gate_margin: float = float(data.get("cross_doc_gate_margin", 0.10))
+        # Asientos del top_k reservados para documentos distintos al dominante.
+        self.other_docs_quota: int = int(data.get("other_docs_quota", 0))
 
         # retrieval avanzado (todos opcionales vía config, degradan a solo-dense si fallan)
         # Ver el comentario del gate de relevancia y FUSION_* en Configuration: sin
@@ -880,6 +883,44 @@ class ChromaConnection:
                     )
                 relevant = filtrados
 
+            # 2.d) CUPO PARA OTROS DOCUMENTOS.
+            #
+            # Los gates de arriba QUITAN candidatos malos. Este reserva asientos.
+            # Resuelven problemas distintos: un documento grande puede llenar el
+            # top_k con chunks legítimos —que ningún gate tiene motivo para
+            # descartar— y dejar afuera al documento que sí tiene la respuesta.
+            #
+            # Medido sobre las consultas registradas en telemetría: 7 de 18
+            # tienen un solo documento ocupando más del 70% de los 40 candidatos
+            # del over-fetch, y una lo ocupa entero. La mediana es 48%.
+            #
+            # El caso que lo motivó: "¿Cómo se calcula la salida hacia el
+            # variador en el programa ARGEE?". El programa real está indexado y
+            # contiene la fórmula (4000 + Variador * 160), pero queda en la
+            # posición 15 con 0.64 mientras las 12 primeras son del manual del
+            # fabricante entre 0.72 y 0.64. No es ruido: son chunks buenos de un
+            # documento de 3973 vectores contra uno de 83. Gana el volumen, no
+            # la pertinencia, y la respuesta sale del ejemplo genérico del
+            # manual en vez del programa que corre en la planta.
+            #
+            # Se reservan asientos en lugar de poner un techo al documento
+            # dominante a propósito: hay preguntas cuya respuesta SÍ está toda
+            # en un documento, y recortarlo ahí sería perder contexto bueno.
+            # Con cupo 2 y top_k 10 el dominante conserva 8.
+            if self.other_docs_quota > 0:
+                elegidos, entraron = self._aplicar_cupo_otros_documentos(
+                    relevant, top_k, self.other_docs_quota
+                )
+                if entraron:
+                    logger.info(
+                        f"[{qid}][Chroma] Cupo otros documentos: entran "
+                        f"{len(entraron)} de {sorted(entraron)}"
+                    )
+                if len(elegidos) != len(relevant):
+                    self._traza_etapa("cupo otros documentos", len(relevant), len(elegidos),
+                                      f"cupo {self.other_docs_quota} sobre top_k {top_k}")
+                relevant = elegidos
+
             # Planos dinámicos: se adjuntan si el contexto relevante viene de
             # documentos eléctricos/de cableado, o si no se pudo determinar la
             # fuente. Para preguntas de proceso/térmicas respondidas desde otros
@@ -1164,6 +1205,42 @@ class ChromaConnection:
         if "dense_similarity" in c:
             return float(c["dense_similarity"]) * 100.0
         return float(c.get("fused_score", 0.0)) * 100.0
+
+    @staticmethod
+    def _aplicar_cupo_otros_documentos(candidatos, top_k, cupo):
+        """Reserva `cupo` asientos del top_k para documentos distintos al dominante.
+
+        Devuelve (seleccion, nombres_que_entraron). No inventa candidatos: solo
+        puede promover los que ya sobrevivieron a los gates, así que si no hay
+        nada de otro documento la selección queda igual que el corte por score.
+        """
+        def _doc(c):
+            return (c.get("metadata") or {}).get("file_name")
+
+        if len(candidatos) <= top_k:
+            return list(candidatos), set()
+
+        ordenados = sorted(candidatos,
+                           key=lambda c: c.get("dense_similarity", 0.0),
+                           reverse=True)
+        elegidos = ordenados[:top_k]
+        dominante = Counter(_doc(c) for c in elegidos).most_common(1)[0][0]
+        faltan = cupo - sum(1 for c in elegidos if _doc(c) != dominante)
+        if faltan <= 0:
+            return elegidos, set()
+
+        entran = [c for c in ordenados[top_k:] if _doc(c) != dominante][:faltan]
+        if not entran:
+            return elegidos, set()
+
+        # Salen los PEORES del dominante, nunca los de otros documentos que ya
+        # habían entrado por mérito propio. Por id() y no por igualdad: dos
+        # candidatos con el mismo contenido son dicts iguales y `in` sacaría
+        # el equivocado.
+        del_dominante = [c for c in elegidos if _doc(c) == dominante]
+        salen = {id(c) for c in del_dominante[-len(entran):]}
+        return ([c for c in elegidos if id(c) not in salen] + entran,
+                {_doc(c) for c in entran})
 
     def _candidates_to_df(self, data: Dict[str, Any], n: int, candidates: List[Dict[str, Any]]) -> pd.DataFrame:
         qid = data.get("query_id", "no-qid")

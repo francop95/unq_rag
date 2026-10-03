@@ -309,10 +309,67 @@ en otro archivo obliga a buscar en dos lugares para defender una decisión.
 | Preguntas sintéticas (multi-vector) | **activa** | excluirlas cuesta 93,0% → 83,7% de respuesta presente |
 | Expansión de contexto (prev/next) | **activa** | recupera el chunk vecino cuando el recuperado queda corto |
 | Gate de relevancia (0.50) + gate cruzado | **activos** | el cruzado evita que documentos ajenos llenen el top-k |
+| Cupo para otros documentos (2 de 10) | **activo** | ver abajo: la métrica no se mueve, pero arregla un fallo real |
 | **Cross-encoder reranking** | **desactivado** | ver abajo |
 | **BM25 híbrido** | **desactivado** | no aporta en este corpus |
 | **Retrieval visual (CLIP)** | **desactivado** | sin medir si aporta o mete ruido |
 | Query expansion | no implementada | el índice multi-vector ya cubre la paráfrasis |
+
+### Por qué hay un cupo reservado para otros documentos
+
+Los dos gates **quitan** candidatos malos. Este **reserva asientos**, y hace
+falta porque resuelve el problema opuesto: un documento grande puede llenar el
+top-k con chunks perfectamente legítimos —que ningún gate tiene motivo para
+descartar— y dejar afuera al documento que sí tiene la respuesta.
+
+El tamaño no es un detalle del corpus, es el factor que decide:
+
+| Documento | Vectores |
+|---|---|
+| `ARGEE_Reference_Manual.pdf` (manual del fabricante) | 3973 |
+| `manual powerflex 4m.pdf` | 3726 |
+| `Secadero v01 On TBEN-L4-8IOL.pdf` (el programa instalado) | 83 |
+
+**El caso que lo motivó.** A la pregunta *"¿Cómo se calcula la salida hacia el
+variador en el programa ARGEE?"* el sistema contestaba con un ejemplo genérico
+del manual del fabricante, `32767 - Input_value`, en vez de la fórmula del
+programa que corre en la planta, `4000 + (Variador * 160)`. En la telemetría el
+embudo no filtraba nada —37 candidatos entraban y 37 salían de los tres gates—
+y las 12 primeras posiciones eran todas del manual, entre 0.72 y 0.64. El chunk
+correcto estaba recuperado, en la posición 15, con 0.64. Lo mataba el corte por
+`top_k`, no un gate. No era ruido ganándole a la señal: eran chunks buenos de un
+documento 48 veces más grande.
+
+La monopolización es la norma, no la excepción. Sobre las consultas registradas
+en telemetría, 7 de 18 tienen un solo documento ocupando más del 70% de los 40
+candidatos del over-fetch, una lo ocupa entero, y la mediana es 48%.
+
+**Lo medido.** Sobre `eval_set` (54 preguntas en tema), con cupo 0, 2 y 3:
+
+| Cupo | Respuesta presente | recall@10 | MRR | Gate fuera de tema |
+|---|---|---|---|---|
+| 0 (apagado) | 93,0% | 29/54 | 0,425 | 5/5 |
+| 2 | 93,0% | 29/54 | 0,425 | 5/5 |
+| 3 | 93,0% | 29/54 | 0,425 | 5/5 |
+
+La métrica no se mueve. Cambia el contexto entregado en 3 de 59 preguntas del
+set, ninguna para peor. No se mueve más porque el gate cruzado ya descartó a los
+otros documentos antes de que el cupo pueda reservarles lugar: solo alcanza a
+los que están a menos de 0.10 del top-1 —el caso ARGEE—, y eso es deliberado,
+porque no tiene que resucitar lo que el gate mató a propósito.
+
+**Entonces por qué se activa si no mueve la métrica.** Porque arregla un fallo
+real que el set no contiene, sin costar nada en lo que el set sí mide. Medido de
+punta a punta sobre la pregunta del variador: con cupo 0 la respuesta es el
+ejemplo del manual; con cupo 2 es la fórmula del programa instalado, con la
+aritmética correcta. Es el mismo criterio con el que están apagados el
+reranking y BM25 —no aportan—, aplicado al revés: esto no resta y suma en un
+caso que importa.
+
+Vale leerlo también como un límite del set: 48 de sus 59 preguntas traen menos
+de 2 documentos distintos en el top-10, así que es un set que no castiga la
+monopolización. Un set regenerado contra el corpus actual (ver §8) probablemente
+sí la castigaría.
 
 ### Por qué el reranking está apagado
 

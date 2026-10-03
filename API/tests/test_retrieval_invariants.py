@@ -251,3 +251,56 @@ def test_query_intent_elige_el_modelo_del_proveedor_configurado():
     assert QueryIntent(dict(base)).model_selected == "gpt-4.1"
     with pytest.raises(ValueError):
         QueryIntent({**base, "query_intent_model_type": "inventado"})
+
+
+# ──────────────────────────────────────────── cupo de asientos para otros documentos
+
+def test_el_cupo_entra_cuando_un_documento_llena_el_top_k():
+    """Un documento grande puede llenar el top_k con chunks legítimos y dejar
+    afuera al que tiene la respuesta: el caso ARGEE, donde el manual del
+    fabricante (3973 vectores) tapaba al programa instalado (83)."""
+    grandes = [cand(f"manual {i}", dense=0.72 - i * 0.005, file_name="manual.pdf")
+               for i in range(12)]
+    propio = cand("programa real", dense=0.64, file_name="programa.pdf")
+    sel, entraron = ChromaConnection._aplicar_cupo_otros_documentos(
+        grandes + [propio], top_k=10, cupo=2)
+    docs = [c["metadata"]["file_name"] for c in sel]
+    assert len(sel) == 10
+    assert "programa.pdf" in docs, "el documento tapado tiene que entrar"
+    assert docs.count("manual.pdf") == 9, "solo cede los asientos que hagan falta"
+    assert entraron == {"programa.pdf"}
+
+
+def test_el_cupo_no_desplaza_a_quien_entro_por_merito():
+    """Los asientos que ceden son los del dominante, nunca los de un tercer
+    documento que ya había entrado por score."""
+    grandes = [cand(f"manual {i}", dense=0.90 - i * 0.01, file_name="manual.pdf")
+               for i in range(9)]
+    tercero = cand("tercero", dense=0.85, file_name="otro.pdf")
+    tapado = cand("tapado", dense=0.50, file_name="programa.pdf")
+    sel, _ = ChromaConnection._aplicar_cupo_otros_documentos(
+        grandes + [tercero, tapado], top_k=10, cupo=2)
+    docs = [c["metadata"]["file_name"] for c in sel]
+    assert "otro.pdf" in docs and "programa.pdf" in docs
+    assert docs.count("manual.pdf") == 8
+
+
+def test_el_cupo_no_hace_nada_si_ya_hay_variedad():
+    """Si el top_k ya trae suficientes documentos distintos, el orden por score
+    no se toca: el cupo es un piso, no una cuota obligatoria."""
+    cands = ([cand(f"a{i}", dense=0.9 - i * 0.01, file_name="a.pdf") for i in range(8)]
+             + [cand("b", dense=0.80, file_name="b.pdf"),
+                cand("c", dense=0.79, file_name="c.pdf"),
+                cand("a9", dense=0.10, file_name="a.pdf")])
+    sel, entraron = ChromaConnection._aplicar_cupo_otros_documentos(cands, top_k=10, cupo=2)
+    assert entraron == set()
+    assert [c["text"] for c in sel] == [c["text"] for c in
+            sorted(cands, key=lambda c: c["dense_similarity"], reverse=True)[:10]]
+
+
+def test_el_cupo_no_inventa_candidatos():
+    """Si todo lo que sobrevivió a los gates es de un solo documento, el cupo
+    no puede —ni debe— traer nada de otro lado."""
+    cands = [cand(f"a{i}", dense=0.9 - i * 0.01, file_name="a.pdf") for i in range(15)]
+    sel, entraron = ChromaConnection._aplicar_cupo_otros_documentos(cands, top_k=10, cupo=2)
+    assert len(sel) == 10 and entraron == set()
