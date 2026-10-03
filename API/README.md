@@ -496,7 +496,21 @@ JSON para poder revisarlo en un diff cuando el inventario cambie:
 cd Ingestion && python scripts/generar_nomenclatura.py   # → API/configs/nomenclatura.json
 ```
 
-Se inyecta entero en el prompt de respuesta —32 componentes, unos 700 tokens—
+Cada entrada lleva el código, el alias de los planos, **la ubicación física y
+la referencia en el plano rotulado**. Eso es la etiqueta completa: el código
+solo dice cuál es, no dónde ir a buscarlo, y en mantenimiento esa es la mitad
+del trabajo.
+
+El modelo decide cuándo usar cada parte. En una pregunta de diagnóstico da la
+etiqueta entera —*"el interruptor diferencial general (QD01, en el tablero;
+plano P1: alimentación general)"*— y en una conceptual solo el código, porque
+repetir dónde está montado algo mientras se explica cómo funciona estorba más
+de lo que ayuda.
+
+El borne del TBEN sale del grafo, no del glosario: *"TH01 está conectado al
+borne C4 del módulo IO01"*.
+
+Se inyecta entero en el prompt de respuesta —32 componentes, unos 1400 tokens—
 en vez de filtrarlo por la pregunta: filtrar exigiría saber de antemano qué
 componentes va a mencionar la respuesta, que es justo lo que no se sabe hasta
 tenerla.

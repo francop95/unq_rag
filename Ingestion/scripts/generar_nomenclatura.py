@@ -35,6 +35,19 @@ def main() -> int:
         print("  el inventario no tiene hoja 'Nomenclatura'")
         return 1
 
+    # Ubicación física por código, desde el inventario: la hoja de nomenclatura
+    # tiene la referencia al plano pero no dónde está montado el componente.
+    ubicaciones = {}
+    if "Inventario" in wb.sheetnames:
+        inv = wb["Inventario"]
+        fs = [[("" if c is None else str(c).strip()) for c in r]
+              for r in inv.iter_rows(values_only=True)]
+        fs = [f for f in fs if any(f)]
+        for f in fs[3:]:
+            cod = f[10].strip() if len(f) > 10 and f[10] else ""
+            if cod:
+                ubicaciones[cod] = f[7].strip() if len(f) > 7 and f[7] else ""
+
     ws = wb["Nomenclatura"]
     filas = [[("" if c is None else str(c).strip()) for c in r]
              for r in ws.iter_rows(values_only=True)]
@@ -48,7 +61,15 @@ def main() -> int:
         alias = (f[3] if len(f) > 3 else "").strip()
         if not codigo or not nombre:
             continue
-        componentes.append({"codigo": codigo, "nombre": nombre, "alias": alias})
+        componentes.append({
+            "codigo": codigo, "nombre": nombre, "alias": alias,
+            # Dónde encontrarlo: la referencia en el plano rotulado ("P1: ramal
+            # calefacción") y la ubicación física ("Tablero"). Sin esto la
+            # respuesta da el código pero no dice dónde ir a buscarlo, que es la
+            # mitad del trabajo de mantenimiento.
+            "en_plano": (f[4] if len(f) > 4 else "").strip(),
+            "ubicacion": ubicaciones.get(codigo, ""),
+        })
 
     os.makedirs(os.path.dirname(SALIDA), exist_ok=True)
     with open(SALIDA, "w", encoding="utf-8") as fh:

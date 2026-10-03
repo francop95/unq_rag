@@ -55,19 +55,33 @@ def bloque_para_prompt() -> str:
     lineas = []
     for c in comps:
         linea = f"{c['codigo']} = {c['nombre']}"
+        extras = []
         if c.get("alias"):
-            linea += f" (en los planos: {c['alias']})"
+            extras.append(f"en los planos: {c['alias']}")
+        if c.get("ubicacion"):
+            extras.append(f"ubicación: {c['ubicacion']}")
+        if c.get("en_plano"):
+            extras.append(f"plano rotulado: {c['en_plano']}")
+        if extras:
+            linea += " [" + " · ".join(extras) + "]"
         lineas.append(linea)
 
     return (
-        "\nNOMENCLATURA DEL EQUIPO (código acordado = componente):\n"
+        "\nNOMENCLATURA DEL EQUIPO (código = componente [dónde encontrarlo]):\n"
         + "\n".join(lineas)
-        + "\n\nCuando menciones un actuador, sensor, protección o equipo que esté en\n"
-          "esta lista, agregá su código entre paréntesis la primera vez que aparezca:\n"
-          '"los relés de estado sólido (SSR01-SSR03)", "el variador (VFD01)".\n'
+        + "\n\nCuando menciones un actuador, sensor, protección o equipo de esta lista,\n"
+          "identificalo la primera vez que aparezca:\n"
+          '  "los relés de estado sólido (SSR01-SSR03)"\n'
+          '  "el variador (VFD01)"\n'
+          "Y si la pregunta es de diagnóstico, inspección o de dónde está algo,\n"
+          "agregá también dónde encontrarlo:\n"
+          '  "el interruptor de calefacción (QF02, en el tablero; plano P1, ramal\n'
+          '   calefacción)"\n'
           "Reglas:\n"
           "- Solo para componentes de la lista. Si no está, no inventes un código.\n"
           "- Una vez por respuesta y por componente, no en cada mención.\n"
           "- El código acompaña al nombre, no lo reemplaza: quien pregunta puede no\n"
           "  conocer la nomenclatura todavía.\n"
+          "- La ubicación solo cuando aporte. En una pregunta conceptual sobre cómo\n"
+          "  funciona algo, repetir dónde está montado estorba más de lo que ayuda.\n"
     )
