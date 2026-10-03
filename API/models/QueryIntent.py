@@ -110,7 +110,24 @@ class QueryIntent:
                 dynamic_params = {
                     'model': self.model_selected, "max_tokens": token_cnt + self.buffer_tokens
                     }
-                self.chat_obj = ModelCompletion(data, self.model_type, dynamic_params=dynamic_params)
+                # Los planos NO van a la clasificación de intención.
+                #
+                # `attach_electric_diagrams` vale True cuando la clave falta, y acá
+                # siempre falta: la setea la búsqueda en Chroma, que corre DESPUÉS.
+                # Así que el clasificador recibía los dos PDF de planos adjuntos y
+                # contestaba sobre ellos en vez de sobre la pregunta.
+                #
+                # Medido sobre las 6 preguntas del set que el clasificador rechazaba:
+                # con los planos adjuntos, 4 de 6 salen "invalid"; sin ellos, 6 de 6
+                # salen "new". Una de las rechazadas era "¿qué parámetro tengo que
+                # tocar para resetear el variador a valores de fábrica?".
+                #
+                # Se pasa una copia y no se toca `data`: el flujo posterior sí los
+                # necesita, y es la búsqueda la que decide si corresponden.
+                self.chat_obj = ModelCompletion(
+                    dict(data, attach_electric_diagrams=False),
+                    self.model_type, dynamic_params=dynamic_params,
+                )
                 query_intent, query_intent_raw_response = self.chat_obj.get_response(self.message_prompt, data)
                 data["query_intent_raw_gpt_response"] = query_intent_raw_response
 
