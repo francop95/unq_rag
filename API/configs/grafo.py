@@ -149,12 +149,25 @@ def bloque_para_prompt(pregunta: str, contexto: str = "") -> str:
         partes = [f"- {_describir(c)}"]
         if n.get("sistema"):
             partes.append(f"  sistema: {n['sistema']}")
+        # Se separa por procedencia. Una arista del inventario la revisó una
+        # persona; una extraída la leyó un modelo de visión de un plano, y
+        # presentarlas igual haría que el modelo afirme con la misma seguridad
+        # un dato verificado y uno inferido de una imagen.
+        def _listar(aristas, campo):
+            doc = [a for a in aristas if a.get("origen_dato") != "extraido"]
+            ext = [a for a in aristas if a.get("origen_dato") == "extraido"]
+            txt = []
+            if doc:
+                txt.append(", ".join(_describir(a[campo]) for a in doc))
+            if ext:
+                txt.append(", ".join(_describir(a[campo]) for a in ext)
+                           + " [leído de un plano, sin verificar]")
+            return "; ".join(txt)
+
         if v["entra"]:
-            partes.append("  lo alimenta/controla: "
-                          + ", ".join(_describir(a["origen"]) for a in v["entra"]))
+            partes.append("  lo alimenta/controla: " + _listar(v["entra"], "origen"))
         if v["sale"]:
-            partes.append("  alimenta/controla a: "
-                          + ", ".join(_describir(a["destino"]) for a in v["sale"]))
+            partes.append("  alimenta/controla a: " + _listar(v["sale"], "destino"))
         if v["bidireccional"]:
             otros = [a["destino"] if a["origen"] == c else a["origen"] for a in v["bidireccional"]]
             partes.append("  conectado con: " + ", ".join(_describir(o) for o in otros))
@@ -184,10 +197,14 @@ def bloque_para_prompt(pregunta: str, contexto: str = "") -> str:
                         + "\n".join(f"- {r}" for r in rutas))
 
     return (
-        "\nCONEXIONES DOCUMENTADAS (del inventario revisado):\n"
+        "\nCONEXIONES CONOCIDAS:\n"
         + "\n".join(lineas)
         + bloque_rutas
-        + "\n\nEsta lista de conexiones es COMPLETA para los componentes nombrados: lo que\n"
+        + "\n\nLas conexiones sin aclaración vienen del inventario revisado por una\n"
+          "persona. Las marcadas [leído de un plano, sin verificar] las extrajo un\n"
+          "modelo de visión de un plano: usalas, pero decí que están pendientes de\n"
+          "verificación cuando la respuesta dependa de ellas.\n"
+          "\nEsta lista de conexiones es COMPLETA para los componentes nombrados: lo que\n"
           "no figura acá no está documentado. Si te preguntan qué depende de un\n"
           "componente, respondé con lo que figura y decí explícitamente que es lo\n"
           "único documentado. No deduzcas conexiones porque dos componentes aparezcan\n"

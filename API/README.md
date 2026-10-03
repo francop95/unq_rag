@@ -508,6 +508,54 @@ no tiene un componente, la respuesta lo nombra sin código, que es lo correcto.
 
 ---
 
+## 🕸️ Grafo de componentes
+
+El sistema contestaba bien las relaciones de un salto —cada fila de la tabla de
+conexiones es una arista y el retrieval la encuentra— pero fallaba en la
+agregación. A *"listá los componentes que dependen de PS01"* respondía con las
+protecciones de aguas arriba, confundiendo "aparece en el mismo plano" con
+"depende de". Mejor retrieval no lo arreglaba: el modelo tenía los fragmentos
+correctos y dedujo mal la dirección.
+
+### Dos capas, con procedencia distinta
+
+| Capa | Aristas | Cómo se obtiene |
+|---|---|---|
+| **Inventario** | 11 | determinista, desde las tablas revisadas por una persona |
+| **Extraída** | 18 | un LLM sobre los planos codificados y los programas de control |
+
+Se presentan **separadas** en el prompt. Una arista del inventario la revisó
+alguien; una extraída la leyó un modelo de visión de un plano. Mostrarlas igual
+haría que la respuesta afirme con la misma seguridad un dato verificado y uno
+inferido de una imagen. Las extraídas salen marcadas y la respuesta lo dice:
+*"Esta información fue leída de un plano, por lo que está pendiente de
+verificación."*
+
+### Por qué la extracción va acotada
+
+Medido antes de correrla: solo 35 de 2113 chunks mencionan dos o más códigos, y
+20 son del propio Excel — los códigos son una convención reciente y la tesis
+dice "el variador". Buscando por nombre dan 1118, pero dominados por falsos
+positivos ("medición de humedad" coincide con TH01/TH02 porque el alias
+contiene "humedad").
+
+Se acotó a los planos codificados y los programas de control: **70 chunks**.
+Ahí hay relaciones reales y ausentes del Excel —`write_register(0x4400,
+variador)`, el Arduino hacia los servos— y el ruido es bajo. Los manuales del
+fabricante quedan afuera: describen un producto genérico, y "el variador" en el
+manual del PowerFlex no es una referencia a VFD01.
+
+### Reconstruirlo
+
+```bash
+cd Ingestion
+python scripts/construir_grafo.py        # capa determinista
+python scripts/extraer_relaciones.py     # estima
+python scripts/extraer_relaciones.py --escribir
+```
+
+---
+
 ## 📝 Feedback y telemetría
 
 Cada consulta queda registrada con lo que hizo falta para responderla, y quien
