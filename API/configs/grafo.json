@@ -1,0 +1,706 @@
+{
+  "nodos": {
+    "QD01": {
+      "codigo": "QD01",
+      "id_inventario": "I001",
+      "nombre": "Interruptor diferencial general",
+      "sistema": "Protecciones",
+      "datos": "40 A; sensibilidad 30 mA.",
+      "funcion": "Protección diferencial de la alimentación.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 p.19 y fig.3.3 p.22",
+      "alias": "Inter. dif. 40 A / 30 mA",
+      "en_plano": "P1: alimentación general"
+    },
+    "QF01": {
+      "codigo": "QF01",
+      "id_inventario": "I002",
+      "nombre": "Interruptor termomagnético general",
+      "sistema": "Protecciones",
+      "datos": "25 A en plano y texto.",
+      "funcion": "Protección general contra sobrecorriente.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 p.19 y fig.3.3 p.22",
+      "alias": "Inter. Ter. 25 A",
+      "en_plano": "P1: alimentación general"
+    },
+    "QF02": {
+      "codigo": "QF02",
+      "id_inventario": "I003",
+      "nombre": "Interruptor termomagnético de calefacción",
+      "sistema": "Protecciones",
+      "datos": "Trifásico; 15 A documentados.",
+      "funcion": "Protección del ramal de calefacción.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 p.19",
+      "alias": "Inter. Ter. 15 A",
+      "en_plano": "P1: ramal calefacción"
+    },
+    "QF03": {
+      "codigo": "QF03",
+      "id_inventario": "I004",
+      "nombre": "Interruptor termomagnético del forzador",
+      "sistema": "Protecciones",
+      "datos": "Trifásico; 10 A documentados.",
+      "funcion": "Protección del ramal del variador.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 p.19",
+      "alias": "Inter. Ter. 10 A",
+      "en_plano": "P1: ramal variador"
+    },
+    "QF04": {
+      "codigo": "QF04",
+      "id_inventario": "I005",
+      "nombre": "Interruptor termomagnético de control",
+      "sistema": "Protecciones",
+      "datos": "Bipolar de 25 A según texto; alimenta las dos fuentes.",
+      "funcion": "Protección del ramal de control.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 p.19",
+      "alias": "Inter. Ter. 25 A bipolar",
+      "en_plano": "P1: ramal de fuentes"
+    },
+    "R01": {
+      "codigo": "R01",
+      "id_inventario": "I006",
+      "nombre": "Resistencia calefactora 1",
+      "sistema": "Calefacción",
+      "datos": "2 kW por unidad; 220/380 Vca según tesis.",
+      "funcion": "Generación de calor.",
+      "ubicacion": "Cámara superior",
+      "fuente": "F01; F02 pp.15–16, figs.2.8–2.11",
+      "alias": "Grupo 3 x 2 kW",
+      "en_plano": "P1: elemento 1 de izquierda a derecha"
+    },
+    "R02": {
+      "codigo": "R02",
+      "id_inventario": "I007",
+      "nombre": "Resistencia calefactora 2",
+      "sistema": "Calefacción",
+      "datos": "2 kW por unidad; 220/380 Vca según tesis.",
+      "funcion": "Generación de calor.",
+      "ubicacion": "Cámara superior",
+      "fuente": "F01; F02 pp.15–16, figs.2.8–2.11",
+      "alias": "Grupo 3 x 2 kW",
+      "en_plano": "P1: elemento 2 de izquierda a derecha"
+    },
+    "R03": {
+      "codigo": "R03",
+      "id_inventario": "I008",
+      "nombre": "Resistencia calefactora 3",
+      "sistema": "Calefacción",
+      "datos": "2 kW por unidad; 220/380 Vca según tesis.",
+      "funcion": "Generación de calor.",
+      "ubicacion": "Cámara superior",
+      "fuente": "F01; F02 pp.15–16, figs.2.8–2.11",
+      "alias": "Grupo 3 x 2 kW",
+      "en_plano": "P1: elemento 3 de izquierda a derecha"
+    },
+    "SSR01": {
+      "codigo": "SSR01",
+      "id_inventario": "I009",
+      "nombre": "Relé de estado sólido 1",
+      "sistema": "Calefacción",
+      "datos": "Tres SSR según texto y fotografía. Modelo completo pendiente.",
+      "funcion": "Conmutación de una resistencia.",
+      "ubicacion": "Tablero",
+      "fuente": "F02 p.19 y fig.3.4 p.22; F01",
+      "alias": "KM1 no equivale individualmente a este SSR",
+      "en_plano": "P1: llamada colectiva en KM1"
+    },
+    "SSR02": {
+      "codigo": "SSR02",
+      "id_inventario": "I010",
+      "nombre": "Relé de estado sólido 2",
+      "sistema": "Calefacción",
+      "datos": "Tres SSR según texto y fotografía. Modelo completo pendiente.",
+      "funcion": "Conmutación de una resistencia.",
+      "ubicacion": "Tablero",
+      "fuente": "F02 p.19 y fig.3.4 p.22; F01",
+      "alias": "KM1 no equivale individualmente a este SSR",
+      "en_plano": "P1: llamada colectiva en KM1"
+    },
+    "SSR03": {
+      "codigo": "SSR03",
+      "id_inventario": "I011",
+      "nombre": "Relé de estado sólido 3",
+      "sistema": "Calefacción",
+      "datos": "Tres SSR según texto y fotografía. Modelo completo pendiente.",
+      "funcion": "Conmutación de una resistencia.",
+      "ubicacion": "Tablero",
+      "fuente": "F02 p.19 y fig.3.4 p.22; F01",
+      "alias": "KM1 no equivale individualmente a este SSR",
+      "en_plano": "P1: llamada colectiva en KM1"
+    },
+    "TS01…": {
+      "codigo": "TS01…",
+      "id_inventario": "I012",
+      "nombre": "Termostatos de bulbo capilar",
+      "sistema": "Protección térmica",
+      "datos": "Rango 0–300 °C; cantidad pendiente. En fig.5.5 se ven dos mandos.",
+      "funcion": "Corte por temperatura en el circuito descrito.",
+      "ubicacion": "Bulbos en calefacción; mandos exteriores",
+      "fuente": "F01; F02 pp.15–16 y p.30 figs.5.4–5.5",
+      "alias": "Termostato bulbo capilar",
+      "en_plano": "P1: símbolo de termostato"
+    },
+    "SBE01": {
+      "codigo": "SBE01",
+      "id_inventario": "I013",
+      "nombre": "Pulsador de parada de emergencia",
+      "sistema": "Emergencia",
+      "datos": "Señal hacia TBEN C3; circuito de calefacción descrito en serie.",
+      "funcion": "Orden de parada de emergencia.",
+      "ubicacion": "Tablero, ubicación exacta pendiente",
+      "fuente": "F01; F02 pp.19,23,26,31; F03",
+      "alias": "Parada de emergencia",
+      "en_plano": "P1: pulsador; P2: entrada C3"
+    },
+    "VENT01": {
+      "codigo": "VENT01",
+      "id_inventario": "I014",
+      "nombre": "Conjunto forzador de aire",
+      "sistema": "Ventilación",
+      "datos": "Diámetro 61 cm; giro en ambos sentidos según tesis.",
+      "funcion": "Circulación interna del aire.",
+      "ubicacion": "Cámara superior",
+      "fuente": "F02 pp.13–14, fig.2.7",
+      "alias": "Forzador",
+      "en_plano": "P1: nota vinculada a M01"
+    },
+    "M01": {
+      "codigo": "M01",
+      "id_inventario": "I015",
+      "nombre": "Motor trifásico del forzador",
+      "sistema": "Ventilación",
+      "datos": "1 HP; 1500 rpm; conexión estrella según tesis.",
+      "funcion": "Accionamiento del forzador I014.",
+      "ubicacion": "Integrado en el forzador",
+      "fuente": "F01; F02 pp.13–14",
+      "alias": "M1",
+      "en_plano": "P1: símbolo de motor"
+    },
+    "VFD01": {
+      "codigo": "VFD01",
+      "id_inventario": "I016",
+      "nombre": "Variador de frecuencia",
+      "sistema": "Ventilación",
+      "datos": "Familia PowerFlex 4M; referencia completa pendiente.",
+      "funcion": "Regulación de velocidad y sentido del motor.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 pp.18–19,23; F03",
+      "alias": "INV1; PowerFlex 4M",
+      "en_plano": "P1: INV1; P2: variador"
+    },
+    "QM01": {
+      "codigo": "QM01",
+      "id_inventario": "I017",
+      "nombre": "Guardamotor del forzador",
+      "sistema": "Protecciones",
+      "datos": "Rango 1,1–1,6 A en plano; ajuste 1,6 A según tesis.",
+      "funcion": "Protección del motor descrita en la documentación.",
+      "ubicacion": "Tablero; dibujado aguas abajo del variador",
+      "fuente": "F01; F02 p.19 y fig.3.5 p.23",
+      "alias": "F1",
+      "en_plano": "P1: F1"
+    },
+    "IO01": {
+      "codigo": "IO01",
+      "id_inventario": "I018",
+      "nombre": "Módulo de entradas/salidas TBEN",
+      "sistema": "Control",
+      "datos": "Turck; variantes de denominación entre documentos.",
+      "funcion": "Interfaz de señales y comunicaciones del secadero.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 pp.18,23–25; F03",
+      "alias": "TBEN; distintas variantes en documentos",
+      "en_plano": "P1: bloque TBEN; P2: módulo"
+    },
+    "IF01": {
+      "codigo": "IF01",
+      "id_inventario": "I019",
+      "nombre": "Interfaz del variador",
+      "sistema": "Control",
+      "datos": "La tesis describe conversión a 4–20 mA.",
+      "funcion": "Interfaz entre TBEN y variador.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 pp.18–19,23; F03",
+      "alias": "DP1213",
+      "en_plano": "P1: dos referencias de enlace; P2: interfaz"
+    },
+    "PS01": {
+      "codigo": "PS01",
+      "id_inventario": "I020",
+      "nombre": "Fuente de alimentación de 24 Vcc",
+      "sistema": "Alimentación",
+      "datos": "Entrada 220 Vca; salida 24 Vcc/10 A según plano.",
+      "funcion": "Alimentación del módulo TBEN.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 p.19",
+      "alias": "Fuente 220 VCA a 24 Vcc / 10 A",
+      "en_plano": "P1: fuente del TBEN"
+    },
+    "PS02": {
+      "codigo": "PS02",
+      "id_inventario": "I021",
+      "nombre": "Fuente de alimentación de 5 Vcc",
+      "sistema": "Alimentación",
+      "datos": "Entrada 220 Vca; salida 5 Vcc/2 A según plano.",
+      "funcion": "Alimentación del subsistema Arduino/servos según esquema.",
+      "ubicacion": "Tablero",
+      "fuente": "F01; F02 p.19",
+      "alias": "Fuente 220 VCA a 5 Vcc / 2 A",
+      "en_plano": "P1: fuente del Arduino/servos"
+    },
+    "MCU01": {
+      "codigo": "MCU01",
+      "id_inventario": "I022",
+      "nombre": "Arduino Uno",
+      "sistema": "Control",
+      "datos": "Programa y versión no aportados como archivo separado.",
+      "funcion": "Control de dos servomotores.",
+      "ubicacion": "Ubicación física a verificar",
+      "fuente": "F01; F02 pp.16–19 y apéndice",
+      "alias": "Arduino uno",
+      "en_plano": "P1: bloque Arduino"
+    },
+    "SV01": {
+      "codigo": "SV01",
+      "id_inventario": "I023",
+      "nombre": "Servomotor 1",
+      "sistema": "Intercambio de aire",
+      "datos": "MG946R según tesis.",
+      "funcion": "Accionamiento de una compuerta.",
+      "ubicacion": "Abertura del secadero; posición pendiente",
+      "fuente": "F01; F02 pp.16–17",
+      "alias": "Servo 1",
+      "en_plano": "P1: símbolo Servo 1"
+    },
+    "SV02": {
+      "codigo": "SV02",
+      "id_inventario": "I024",
+      "nombre": "Servomotor 2",
+      "sistema": "Intercambio de aire",
+      "datos": "MG946R según tesis.",
+      "funcion": "Accionamiento de una compuerta.",
+      "ubicacion": "Abertura del secadero; posición pendiente",
+      "fuente": "F01; F02 pp.16–17",
+      "alias": "Servo 2",
+      "en_plano": "P1: símbolo Servo 2"
+    },
+    "CMP01": {
+      "codigo": "CMP01",
+      "id_inventario": "I025",
+      "nombre": "Compuerta de intercambio de aire 1",
+      "sistema": "Intercambio de aire",
+      "datos": "Mecanismo de madera accionado por servo.",
+      "funcion": "Regular intercambio de aire con el ambiente.",
+      "ubicacion": "Abertura del secadero; posición pendiente",
+      "fuente": "F02 pp.16–17 y p.30",
+      "alias": "Válvula; válvula extractora",
+      "en_plano": "P1: nota asociada a SV01"
+    },
+    "CMP02": {
+      "codigo": "CMP02",
+      "id_inventario": "I026",
+      "nombre": "Compuerta de intercambio de aire 2",
+      "sistema": "Intercambio de aire",
+      "datos": "Mecanismo de madera accionado por servo.",
+      "funcion": "Regular intercambio de aire con el ambiente.",
+      "ubicacion": "Abertura del secadero; posición pendiente",
+      "fuente": "F02 pp.16–17 y p.30",
+      "alias": "Válvula; válvula extractora",
+      "en_plano": "P1: nota asociada a SV02"
+    },
+    "TH01": {
+      "codigo": "TH01",
+      "id_inventario": "I027",
+      "nombre": "Sensor combinado de temperatura y humedad, canal 1",
+      "sistema": "Instrumentación",
+      "datos": "Modelo no confirmado para este secadero.",
+      "funcion": "Medición de temperatura y humedad.",
+      "ubicacion": "Ambiente según variables de p.56; verificar",
+      "fuente": "F02 pp.23,25,56; F03",
+      "alias": "C4; Temperatura1; Humedad1",
+      "en_plano": "P2: sensor conectado a C4"
+    },
+    "TH02": {
+      "codigo": "TH02",
+      "id_inventario": "I028",
+      "nombre": "Sensor combinado de temperatura y humedad, canal 2",
+      "sistema": "Instrumentación",
+      "datos": "Modelo no confirmado para este secadero.",
+      "funcion": "Medición de temperatura y humedad.",
+      "ubicacion": "Interior según variables de p.56; verificar",
+      "fuente": "F02 pp.23,25,56; F03",
+      "alias": "C5; Temperatura2; Humedad2",
+      "en_plano": "P2: sensor conectado a C5"
+    },
+    "PC01": {
+      "codigo": "PC01",
+      "id_inventario": "I029",
+      "nombre": "Computadora de supervisión",
+      "sistema": "Supervisión",
+      "datos": "Programa Python; comunicación Modbus TCP con TBEN.",
+      "funcion": "Operación, registro y ejecución de control desde PC.",
+      "ubicacion": "Puesto de operación; ubicación pendiente",
+      "fuente": "F02 pp.23,25–27 y apéndice",
+      "alias": "PC; extremo externo de Ethernet P1",
+      "en_plano": "P2: destino del enlace Ethernet"
+    },
+    "Fuera de la tabla": {
+      "codigo": "Fuera de la tabla",
+      "id_inventario": "I046",
+      "nombre": "Sensores DHT22 de ensayos en Oro del Inca",
+      "sistema": "Otro equipo",
+      "datos": "Mediciones dentro/fuera del secadero de la cooperativa.",
+      "funcion": "Caracterización de recetas en otro secadero.",
+      "ubicacion": "Cooperativa Oro del Inca",
+      "fuente": "F02 pp.35–37"
+    },
+    "X01 / X02 / X03": {
+      "codigo": "X01 / X02 / X03",
+      "id_inventario": "I032",
+      "nombre": "Borneras y distribución interna",
+      "sistema": "Interconexión",
+      "datos": "Regletas visibles en foto de tablero.",
+      "funcion": "Conexión y distribución de potencia/control.",
+      "ubicacion": "Tablero",
+      "fuente": "F02 fig.3.2 p.21; F03"
+    }
+  },
+  "aristas": [
+    {
+      "origen": "PS01",
+      "destino": "IO01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "Alimentación",
+      "funcion": "Alimentación",
+      "fuente": "F01; F02 p.23",
+      "bidireccional": false,
+      "verificacion_pendiente": "Identificar conector, polaridad y separación de alimentaciones.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "IO01",
+      "destino": "VFD01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C0",
+      "funcion": "Salida de control según texto",
+      "fuente": "F02 p.23; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "Verificar marcha, habilitación y sentido; bornes de destino.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "IO01",
+      "destino": "SSR01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C1",
+      "funcion": "Salida de control según texto",
+      "fuente": "F02 pp.19,23; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "No tomar como pinout definitivo: verificar cadena de corte y reparto entre SSR.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "IO01",
+      "destino": "SSR02",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C1",
+      "funcion": "Salida de control según texto",
+      "fuente": "F02 pp.19,23; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "No tomar como pinout definitivo: verificar cadena de corte y reparto entre SSR.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "IO01",
+      "destino": "SSR03",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C1",
+      "funcion": "Salida de control según texto",
+      "fuente": "F02 pp.19,23; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "No tomar como pinout definitivo: verificar cadena de corte y reparto entre SSR.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "SBE01",
+      "destino": "IO01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C3",
+      "funcion": "Entrada según texto",
+      "fuente": "F02 p.23; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "Identificar contactos, lógica y relación con corte físico.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "TH01",
+      "destino": "IO01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C4",
+      "funcion": "Medición; protocolo a confirmar",
+      "fuente": "F02 pp.23,25,56; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "Confirmar sensor, ubicación, protocolo y registros.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "TH02",
+      "destino": "IO01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C5",
+      "funcion": "Medición; protocolo a confirmar",
+      "fuente": "F02 pp.23,25,56; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "Confirmar sensor, ubicación, protocolo y registros.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "IO01",
+      "destino": "IF01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C6",
+      "funcion": "Interfaz; 4–20 mA hacia variador según texto",
+      "fuente": "F02 pp.18–19,23; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "Confirmar tipo de enlace TBEN–DP1213 y función/bornes de salida.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "IF01",
+      "destino": "VFD01",
+      "tipo": "alimenta_o_controla",
+      "puerto": "C6",
+      "funcion": "Interfaz; 4–20 mA hacia variador según texto",
+      "fuente": "F02 pp.18–19,23; F03",
+      "bidireccional": false,
+      "verificacion_pendiente": "Confirmar tipo de enlace TBEN–DP1213 y función/bornes de salida.",
+      "nota": "",
+      "origen_dato": "inventario"
+    },
+    {
+      "origen": "IO01",
+      "destino": "PC01",
+      "tipo": "conecta_con",
+      "puerto": "P1",
+      "funcion": "Ethernet / Modbus TCP/IP",
+      "fuente": "F02 pp.23,25; F03",
+      "bidireccional": true,
+      "verificacion_pendiente": "Identificar cable, IP y configuración; validar pinout con manual del modelo.",
+      "nota": "",
+      "origen_dato": "inventario"
+    }
+  ],
+  "discrepancias": [
+    {
+      "id": "D01",
+      "prioridad": "Alta",
+      "registros": "I009–I011 | SSR01–SSR03",
+      "componentes": [
+        "Conmutación de calefacción"
+      ],
+      "tema": "F01: referencia KM1 y conmutación tripolar.",
+      "pregunta": "¿KM1 representa los SSR, un contactor anterior o un componente adicional?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D02",
+      "prioridad": "Alta",
+      "registros": "I012; I006–I008 | TS01…; R01–R03",
+      "componentes": [
+        "Cantidad y cobertura de termostatos"
+      ],
+      "tema": "F01: representación de un termostato.",
+      "pregunta": "¿Cuántos termostatos hay y qué resistencia o zona protege cada uno? ¿Cuáles son sus ajustes?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D03",
+      "prioridad": "Alta",
+      "registros": "I013; I016; I022 | SBE01; VFD01; MCU01",
+      "componentes": [
+        "Alcance de la parada de emergencia"
+      ],
+      "tema": "F01/F02 p.19: cadena asociada a calefacción y señal hacia TBEN.",
+      "pregunta": "¿Qué se interrumpe físicamente y qué depende del programa? ¿Cómo se realiza el rearme?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D04",
+      "prioridad": "Alta",
+      "registros": "I018 | IO01",
+      "componentes": [
+        "Identificación exacta del TBEN"
+      ],
+      "tema": "F02 texto: TBEN-L4-8IO. F01: TBEN-L4-8IOL.",
+      "pregunta": "¿Cuál es la referencia de placa y qué funciones/puertos tiene la unidad instalada?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D05",
+      "prioridad": "Media",
+      "registros": "I002 | QF01",
+      "componentes": [
+        "Polos de protección general"
+      ],
+      "tema": "F02 p.19: termomagnético trifásico.",
+      "pregunta": "¿Cuántos polos tiene y cómo está conectado el neutro?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D06",
+      "prioridad": "Alta",
+      "registros": "I005 | QF04",
+      "componentes": [
+        "Calibre de protección de control"
+      ],
+      "tema": "F01 y F02 p.19: 25 A.",
+      "pregunta": "¿El interruptor de control instalado coincide con los 25 A escritos?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D07",
+      "prioridad": "Alta",
+      "registros": "I017 | QM01",
+      "componentes": [
+        "Guardamotores en fotografía"
+      ],
+      "tema": "F01/F02 p.19: un guardamotor del forzador, F1.",
+      "pregunta": "¿Qué función tiene cada unidad? ¿Hay un componente fuera de uso o un ramal no dibujado?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D08",
+      "prioridad": "Media",
+      "registros": "I023–I026 | SV01/SV02; CMP01/CMP02",
+      "componentes": [
+        "Compuertas y sentido del flujo"
+      ],
+      "tema": "F02 pp.16–17: válvulas de entrada/salida.",
+      "pregunta": "¿Cómo se identifican físicamente las compuertas y cómo cambia el flujo con el giro?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D09",
+      "prioridad": "Alta",
+      "registros": "I027; I028; I046 | TH01/TH02",
+      "componentes": [
+        "Modelo y ubicación de sensores"
+      ],
+      "tema": "F02 pp.23–25/F03: sensores en C4 y C5; p.56 asigna variables ambiente/interior.",
+      "pregunta": "¿Qué sensores están instalados en este secadero y cuál corresponde a cada canal?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D10",
+      "prioridad": "Alta",
+      "registros": "I016; I018; I019 | VFD01; IO01; IF01",
+      "componentes": [
+        "Órdenes al variador"
+      ],
+      "tema": "F02 p.23: C0 para variador y C6 para DP1213.",
+      "pregunta": "¿Qué señal maneja marcha/sentido y cuál la referencia de velocidad? ¿Cuáles son los bornes?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D11",
+      "prioridad": "Alta",
+      "registros": "I009–I011; I018 | SSR01–SSR03; IO01",
+      "componentes": [
+        "Salida de resistencias"
+      ],
+      "tema": "F02 p.23: pines 1 y 4 de C1.",
+      "pregunta": "¿Los SSR se accionan juntos o por separado y cuáles son los pines de cada circuito?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D12",
+      "prioridad": "Alta",
+      "registros": "I006–I008 | R01–R03",
+      "componentes": [
+        "Tensión y conexión de calefactores"
+      ],
+      "tema": "F02 p.15: 2 kW, 220/380 Vca por resistencia.",
+      "pregunta": "¿Qué dice cada placa y cuál es su tensión efectiva y conexión actual?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D13",
+      "prioridad": "Alta",
+      "registros": "I018; I022; I029; I031 | IO01; MCU01; PC01",
+      "componentes": [
+        "Distribución del control y respaldos"
+      ],
+      "tema": "F02 p.25 describe programa en TBEN y programa externo en PC.",
+      "pregunta": "¿Qué lógica corre en PC, TBEN y Arduino? ¿Qué versiones están en uso y dónde están los respaldos?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D14",
+      "prioridad": "Alta",
+      "registros": "I016; I018; I019; I032; I034 | VFD01; IO01; IF01; X01–X03",
+      "componentes": [
+        "Bornes y plano de mando"
+      ],
+      "tema": "F03 contiene X1, X2, X3 y puertos C0–C7/P1.",
+      "pregunta": "¿Existe un plano de mando completo? ¿Qué designa cada X y cada conductor?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D15",
+      "prioridad": "Alta",
+      "registros": "I021–I024 | PS02; MCU01; SV01/SV02",
+      "componentes": [
+        "Alimentación de Arduino y servos"
+      ],
+      "tema": "F01 muestra fuente de 5 V/2 A hacia Arduino y servos asociados.",
+      "pregunta": "¿Cómo se alimentan realmente los servos y Arduino y cuál es el retorno común?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D16",
+      "prioridad": "Media",
+      "registros": "I043 | Sin código en tabla",
+      "componentes": [
+        "Señalización mencionada en software"
+      ],
+      "tema": "F02 p.65/apéndice incluye semáforo.",
+      "pregunta": "¿Existe señalización física? ¿Qué salidas y estados utiliza?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D17",
+      "prioridad": "Media",
+      "registros": "I044 | C2, sin código nuevo",
+      "componentes": [
+        "Extractor previsto frente a instalado"
+      ],
+      "tema": "F02 p.23: C2 reservado para futuro extractor.",
+      "pregunta": "¿Se instaló el extractor o sigue siendo una reserva?",
+      "estado": "Pendiente"
+    },
+    {
+      "id": "D18",
+      "prioridad": "Alta",
+      "registros": "Todos | Todos los códigos",
+      "componentes": [
+        "Vigencia documental y nomenclatura"
+      ],
+      "tema": "F01: hoja 2, sin fecha/revisión completada.",
+      "pregunta": "¿Qué versión representa el equipo actual y qué convención de códigos se adoptará?",
+      "estado": "En revisión"
+    }
+  ]
+}

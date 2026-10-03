@@ -9,6 +9,7 @@ from time import perf_counter
 import numpy as np
 from utils.utils import calculate_num_of_tokens
 from configs.nomenclatura import bloque_para_prompt
+from configs.grafo import bloque_para_prompt as relaciones_para_prompt
 
 # Get the path of the top-level directory
 top_level_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -153,6 +154,13 @@ class RetrieverQna:
         glosario = bloque_para_prompt()
         if glosario:
             prompt = f"{prompt}\n{glosario}"
+
+        # Conexiones documentadas de los componentes que aparecen en la pregunta
+        # o en el contexto. Va después del glosario porque lo complementa: uno
+        # dice qué es cada código, el otro con qué se conecta.
+        relaciones = relaciones_para_prompt(data.get("query", ""), context)
+        if relaciones:
+            prompt = f"{prompt}\n{relaciones}"
         message_prompt = [
             {"role": "system", "content": data["gpt_sys_msg_content"]},
             {"role": "user", "content": prompt},
