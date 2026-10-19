@@ -646,9 +646,27 @@ Con 2 ya se pierden casi 5 puntos, así que el piso está entre 2 y 4.
 Sobre los sets dirigidos, con 4: idéntico en las preguntas que cruzan documentos
 (6/8) y **mejor** en los recorridos del grafo (12/12 contra 11/12).
 
-Lo que se paga son las dos métricas que este documento desconfía: recall@10 baja
-de 29 a 28 y MRR de 0,425 a 0,396. La respuesta llega igual de seguido, un poco
-más abajo en la lista.
+Lo que se paga son las dos métricas que este documento desconfía: MRR baja de
+0,425 a 0,393. La respuesta llega igual de seguido, un poco más abajo en la
+lista.
+
+**Adoptado en producción.** El índice se reconstruyó con 4 (USD 0,39,
+`--reusar-chunks`) y quedó en 5.864 vectores contra 10.459. Verificado sobre el
+índice real, no sobre el de prueba:
+
+| | Antes (8) | Ahora (4) |
+|---|---|---|
+| Respuesta presente | 93,0% | **93,0%** |
+| recall@10 (texto) | 29/54 | **29/54** |
+| MRR | 0,425 | 0,393 |
+| Chunks con media, set de texto | 4 de 10 | **5 de 10** |
+| Chunks con media, set visual | 8 de 10 | **8 de 10** |
+| recall@10 visual | 17/18 | **17/18** |
+| recall@1 visual | 14/18 | 13/18 |
+| Gate fuera de tema | 5/5 | **5/5** |
+
+Se verificó aparte la cobertura de media porque es la fila con la que se
+justifica el costo del pipeline multimodal (§6), y se mantiene en 8 de 10.
 
 ### Una corrección: el volumen no causa la monopolización
 
@@ -782,6 +800,7 @@ una vara sin ese sesgo, a costa de perder comparabilidad con lo histórico.
 | Embeddings de texto | `text-embedding-3-large` | `embed-v4` medido: −7 puntos |
 | Embeddings de imagen | `cohere.embed-v4` | adoptado, **pero el retrieval visual sigue apagado** |
 | Base vectorial | ChromaDB embebido | sin cambios; migrar a Qdrant es infraestructura, no calidad |
+| Preguntas sintéticas por chunk | **4** | medido: 8 da lo mismo, 2 pierde 5 puntos |
 | **Redacción de la respuesta** | **`gpt-4.1`** | con el que se midió todo acá; ver §1 sobre el entorno |
 | Clasificación de intención | `gpt-4.1` | el mismo; con un modelo más débil rechaza preguntas válidas |
 
