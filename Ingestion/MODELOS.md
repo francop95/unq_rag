@@ -573,8 +573,8 @@ Vale leerlo junto al ruido de la métrica (§1): dos corridas idénticas dan 35 
 ### Resolución de entidades: el índice ahora sabe que son el mismo equipo
 
 El mismo variador es `VFD01` en el inventario, `INV1` en la tesis y
-`PowerFlex 4M` en el manual del fabricante, que son 3.626 vectores y **no dice
-`VFD01` ni una vez**. Nada en el índice los vinculaba.
+`PowerFlex 4M` en el manual del fabricante, que es el documento más grande del
+corpus y **no dice `VFD01` ni una vez**. Nada en el índice los vinculaba.
 
 Se construyó el resolutor (`API/configs/entidades.py`) y se etiquetó el índice
 (`scripts/etiquetar_entidades.py`), sin recalcular embeddings porque las
@@ -582,9 +582,13 @@ etiquetas son metadatos:
 
 | Documento | Vínculo |
 |---|---|
-| `manual powerflex 4m.pdf` | 562 chunks mencionan `VFD01` + 3.064 por ser su manual |
-| `ARGEE_Reference_Manual.pdf` | 625 mencionan `IO01` |
+| `manual powerflex 4m.pdf` | los que mencionan `VFD01`, más el resto por ser su manual |
+| `ARGEE_Reference_Manual.pdf` | los que mencionan `IO01`, igual |
 | El chunk que calcula la salida del variador | `VFD01` |
+
+Las cuentas exactas cambian con cada reconstrucción del índice —hoy son 1.598
+chunks con `ent_VFD01` sobre 5.864—, así que acá se describe la cobertura y el
+número del día se saca con `scripts/etiquetar_entidades.py --dry-run`.
 
 Dos cosas que el etiquetado destapó. La regla de límite de palabra excluía el
 guion y dejaba el manual `TBEN-L4-8IOL` **entero sin etiquetar**. Y el programa
@@ -637,7 +641,7 @@ preguntas por chunk.
 | 0 (excluidas en consulta) | — | — | 86,0% | — | — |
 | 2 | 3.868 | 65% | 88,4% | 27/54 | 0,386 |
 | **4** | **5.862** | **77%** | **93,0%** | 28/54 | 0,396 |
-| 8 (producción) | 10.459 | 87% | **93,0%** | 29/54 | 0,425 |
+| 8 (la anterior) | 10.459 | 87% | **93,0%** | 29/54 | 0,425 |
 
 **La mitad de las preguntas sintéticas son redundantes.** Con 4 se obtiene el
 mismo 93,0% que con 8, con un índice 44% más chico y una ingesta más barata.
