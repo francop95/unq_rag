@@ -89,6 +89,29 @@ guarda, por documento, su hash y el resultado de la última corrida.
 Tocar un archivo sin cambiar su contenido no cuesta nada, y cambiar un byte lo
 reprocesa completo. No hay reprocesado parcial por páginas.
 
+### Y cuándo queda superado por otro
+
+El hash responde *¿este archivo cambió?*. No responde *¿otro archivo lo
+reemplaza?*, que es una pregunta distinta y la que falló de verdad: al renombrar
+el corpus, la copia vieja del plano siguió en su lugar y el sistema adjuntaba una
+revisión anterior sin que nada avisara.
+
+El manifiesto guarda ahora, además del hash, el **documento lógico** y su
+**revisión**, leídos del nombre:
+
+| Nombre del archivo | Documento lógico | Revisión |
+|---|---|---|
+| `1_Plano distribucion electrica_v1` | `plano distribucion electrica` | 1 |
+| `Plano distribucion electrica` | `plano distribucion electrica` | — |
+| `Secadero v01 On TBEN-L4-8IOL` | `secadero v01 on tben-l4-8iol` | — |
+
+Ingestar una revisión más nueva marca las anteriores como `vigente: false` y lo
+dice mientras corre. La lectura está anclada al final del nombre a propósito: el
+`v01` de la tercera fila va en el medio, no es una revisión.
+
+Se lee del nombre y no del contenido porque es una heurística declarada,
+revisable de un vistazo, en vez de una inferencia sobre el PDF.
+
 ---
 
 ## 4. Las ocho etapas, en orden
@@ -358,6 +381,13 @@ a llamar al modelo.
 
 **Un formato desconocido se ignora sin error.** Ver la sección 2.
 
+**Una copia vieja fuera del corpus no la ve el manifiesto.** El manifiesto solo
+conoce los archivos que ingesta. Si queda una copia anterior en otro lado y la
+configuración de la API le apunta, no se entera nadie. Para eso está
+`scripts/verificar_vigencia.py`, que compara las tres listas que nada más
+compara: lo que el índice contiene, lo que el manifiesto declara vigente y lo que
+la configuración de la API nombra.
+
 **El índice visual se construye siempre, aunque esté apagado en la consulta.**
 Es barato y deliberado, pero significa que el conteo de vectores del archivo
 (11.085) no es el de la colección que sirve la API (10.459).
@@ -376,6 +406,14 @@ python src/main_multimodal.py --reusar-chunks       # re-embebe sin volver a tro
 
 `--reusar-chunks` es el que permite comparar modelos de embedding sin pagar otra
 vez el troceado, que es la parte cara.
+
+Dos scripts que no corren solos y conviene conocer:
+
+```
+python scripts/verificar_vigencia.py     # índice, manifiesto y config coinciden
+python scripts/generar_inventario.py     # el Excel a registros con clave por código
+python scripts/recortar_sin_cortar_texto.py   # re-recorta figuras sin llamar al modelo
+```
 
 Modelos, todos cambiables por entorno:
 

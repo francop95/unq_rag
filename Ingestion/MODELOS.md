@@ -542,6 +542,34 @@ Queda activo porque no resta y porque hace algo que el retrieval no puede:
 afirmar que una lista de conexiones es **completa**, lo que habilita responder
 "no hay otra conexión documentada". Ese uso no está medido.
 
+### Las tablas como registros consultables
+
+Una tabla de parámetros entra al índice como un bloque de Markdown. Eso responde
+una pregunta semántica y no una exacta: la corriente nominal de un interruptor es
+una celda, y se estaba recuperando por similitud contra un bloque de texto.
+
+Cada fila del inventario es ahora un registro con clave por código acordado
+(`scripts/generar_inventario.py` → `API/configs/inventario.json`): **46 registros,
+todos con datos documentados, y los 32 códigos de la nomenclatura resuelven a
+uno**. Los valores van dentro del glosario y no en un bloque aparte, que
+repetiría código, nombre y ubicación de 32 componentes para agregar una columna.
+El glosario crece unos 475 tokens por consulta.
+
+Medido con `eval/eval_parametros.jsonl`, 12 preguntas cuya respuesta es
+exactamente una de esas celdas:
+
+| | Respuesta correcta |
+|---|---|
+| Con los datos estructurados | 11/11 verificables |
+| Sin ellos (glosario anterior) | 11/11 verificables |
+
+No cambia nada acá, por la misma razón que el grafo: el retrieval ya trae el
+chunk de la tabla con esas cifras. Lo que compra es un valor que sobrevive a que
+el retrieval **no** traiga ese chunk, y eso este set no lo prueba.
+
+Vale leerlo junto al ruido de la métrica (§1): dos corridas idénticas dan 35 y
+36 sobre 43, así que un empate 11/11 dice "no empeora", no "no aporta".
+
 ### Por qué el reranking está apagado
 
 El pipeline arma un pool y después corta en 10 chunks. Con reranking, ese corte
