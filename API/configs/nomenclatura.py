@@ -16,6 +16,7 @@ variador": en un tablero con cuatro interruptores termomagnéticos, decir
 import json
 import logging
 import os
+from functools import lru_cache
 from typing import Any, Dict, List
 
 logger = logging.getLogger("app.Nomenclatura")
@@ -40,6 +41,36 @@ def componentes() -> List[Dict[str, Any]]:
     return _cache
 
 
+@lru_cache(maxsize=1)
+def _datos_inventario() -> dict:
+    """Código -> los datos documentados de su fila del inventario.
+
+    Viene de `Ingestion/scripts/generar_inventario.py`, que vuelca el Excel a
+    registros con clave. El dato que importa es la columna "Datos documentados":
+    corrientes, tensiones y modelos que hoy solo existían dentro de un chunk de
+    tabla en Markdown, recuperables por similitud y no por búsqueda exacta.
+
+    Si el archivo no está, el glosario sigue funcionando sin esta parte: es una
+    mejora del bloque, no un requisito.
+    """
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inventario.json")
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            inv = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    por_id = {r["id_registro"]: r for r in inv.get("registros", [])}
+    salida = {}
+    for codigo, ids in (inv.get("por_codigo") or {}).items():
+        datos = [por_id[i]["datos"] for i in ids if por_id.get(i, {}).get("datos")]
+        funcion = next((por_id[i]["funcion"] for i in ids if por_id.get(i, {}).get("funcion")), "")
+        if datos or funcion:
+            # Varias filas por código pasa con los grupos (SSR01-SSR03): se
+            # conserva la primera, que es la que describe la unidad.
+            salida[codigo] = {"datos": datos[0] if datos else "", "funcion": funcion}
+    return salida
+
+
 def bloque_para_prompt() -> str:
     """
     El glosario como texto para el prompt, o cadena vacía si no hay datos.
@@ -62,12 +93,18 @@ def bloque_para_prompt() -> str:
             extras.append(f"ubicación: {c['ubicacion']}")
         if c.get("en_plano"):
             extras.append(f"plano rotulado: {c['en_plano']}")
+        # Los datos de placa van en el glosario y no en un bloque aparte: un
+        # segundo bloque repetiría código, nombre y ubicación de los 32
+        # componentes para agregar una columna.
+        inv = _datos_inventario().get(c["codigo"]) or {}
+        if inv.get("datos"):
+            extras.append(f"documentado: {inv['datos']}")
         if extras:
             linea += " [" + " · ".join(extras) + "]"
         lineas.append(linea)
 
     return (
-        "\nNOMENCLATURA DEL EQUIPO (código = componente [dónde encontrarlo]):\n"
+        "\nNOMENCLATURA DEL EQUIPO (código = componente [dónde encontrarlo · qué dice la documentación]):\n"
         + "\n".join(lineas)
         + "\n\nCuando menciones un actuador, sensor, protección o equipo de esta lista,\n"
           "identificalo la primera vez que aparezca:\n"

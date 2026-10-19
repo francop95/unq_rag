@@ -1,0 +1,12 @@
+{"question":"¿Cuál es la corriente del interruptor diferencial general?","answer_key":"40 A con sensibilidad de 30 mA","category":"parametro_inventario"}
+{"question":"¿De cuántos amperes es el interruptor de calefacción?","answer_key":"15 A, trifásico","category":"parametro_inventario"}
+{"question":"¿Qué corriente tiene el termomagnético del forzador?","answer_key":"10 A, trifásico","category":"parametro_inventario"}
+{"question":"¿Cuál es la potencia del motor del forzador y a qué velocidad gira?","answer_key":"1 HP y 1500 rpm","category":"parametro_inventario"}
+{"question":"¿Cuánta potencia tiene cada resistencia calefactora?","answer_key":"2 kW por unidad","category":"parametro_inventario"}
+{"question":"¿Qué tensión y corriente entrega la fuente de 24 volts?","answer_key":"24 Vcc / 10 A, con entrada de 220 Vca","category":"parametro_inventario"}
+{"question":"¿En qué valor está ajustado el guardamotor?","answer_key":"1,6 A, con rango 1,1-1,6 A","category":"parametro_inventario"}
+{"question":"¿Qué diámetro tiene el forzador de aire?","answer_key":"61 cm","category":"parametro_inventario"}
+{"question":"¿Cuál es el rango de medición del termostato?","answer_key":"0-300 °C","category":"parametro_inventario"}
+{"question":"¿Qué modelo son los servomotores de las compuertas?","answer_key":"MG946R","category":"parametro_inventario"}
+{"question":"¿Qué salida entrega la fuente de 5 volts?","answer_key":"5 Vcc / 2 A","category":"parametro_inventario"}
+{"question":"¿De cuántos amperes es el termomagnético que alimenta las fuentes?","answer_key":"25 A, bipolar","category":"parametro_inventario"}

@@ -1,0 +1,677 @@
+{
+  "registros": [
+    {
+      "id_registro": "I001",
+      "codigos": [
+        "QD01"
+      ],
+      "sistema": "Protecciones",
+      "componente": "Interruptor diferencial general",
+      "cantidad": "1",
+      "referencia_original": "Inter. dif.",
+      "datos": "40 A; sensibilidad 30 mA.",
+      "funcion": "Protección diferencial de la alimentación.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I002",
+      "codigos": [
+        "QF01"
+      ],
+      "sistema": "Protecciones",
+      "componente": "Interruptor termomagnético general",
+      "cantidad": "1",
+      "referencia_original": "Inter. Ter. In:25A",
+      "datos": "25 A en plano y texto.",
+      "funcion": "Protección general contra sobrecorriente.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I003",
+      "codigos": [
+        "QF02"
+      ],
+      "sistema": "Protecciones",
+      "componente": "Interruptor termomagnético de calefacción",
+      "cantidad": "1",
+      "referencia_original": "Inter. Ter. In:15A",
+      "datos": "Trifásico; 15 A documentados.",
+      "funcion": "Protección del ramal de calefacción.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I004",
+      "codigos": [
+        "QF03"
+      ],
+      "sistema": "Protecciones",
+      "componente": "Interruptor termomagnético del forzador",
+      "cantidad": "1",
+      "referencia_original": "Inter. Ter. In:10A",
+      "datos": "Trifásico; 10 A documentados.",
+      "funcion": "Protección del ramal del variador.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I005",
+      "codigos": [
+        "QF04"
+      ],
+      "sistema": "Protecciones",
+      "componente": "Interruptor termomagnético de control",
+      "cantidad": "1",
+      "referencia_original": "Inter. Ter. In:25A",
+      "datos": "Bipolar de 25 A según texto; alimenta las dos fuentes.",
+      "funcion": "Protección del ramal de control.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I006",
+      "codigos": [
+        "R01"
+      ],
+      "sistema": "Calefacción",
+      "componente": "Resistencia calefactora 1",
+      "cantidad": "1",
+      "referencia_original": "Grupo 3 x 2 kW",
+      "datos": "2 kW por unidad; 220/380 Vca según tesis.",
+      "funcion": "Generación de calor.",
+      "ubicacion": "Cámara superior"
+    },
+    {
+      "id_registro": "I007",
+      "codigos": [
+        "R02"
+      ],
+      "sistema": "Calefacción",
+      "componente": "Resistencia calefactora 2",
+      "cantidad": "1",
+      "referencia_original": "Grupo 3 x 2 kW",
+      "datos": "2 kW por unidad; 220/380 Vca según tesis.",
+      "funcion": "Generación de calor.",
+      "ubicacion": "Cámara superior"
+    },
+    {
+      "id_registro": "I008",
+      "codigos": [
+        "R03"
+      ],
+      "sistema": "Calefacción",
+      "componente": "Resistencia calefactora 3",
+      "cantidad": "1",
+      "referencia_original": "Grupo 3 x 2 kW",
+      "datos": "2 kW por unidad; 220/380 Vca según tesis.",
+      "funcion": "Generación de calor.",
+      "ubicacion": "Cámara superior"
+    },
+    {
+      "id_registro": "I009",
+      "codigos": [
+        "SSR01"
+      ],
+      "sistema": "Calefacción",
+      "componente": "Relé de estado sólido 1",
+      "cantidad": "1",
+      "referencia_original": "Sin referencia individual; KM1 en plano",
+      "datos": "Tres SSR según texto y fotografía. Modelo completo pendiente.",
+      "funcion": "Conmutación de una resistencia.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I010",
+      "codigos": [
+        "SSR02"
+      ],
+      "sistema": "Calefacción",
+      "componente": "Relé de estado sólido 2",
+      "cantidad": "1",
+      "referencia_original": "Sin referencia individual; KM1 en plano",
+      "datos": "Tres SSR según texto y fotografía. Modelo completo pendiente.",
+      "funcion": "Conmutación de una resistencia.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I011",
+      "codigos": [
+        "SSR03"
+      ],
+      "sistema": "Calefacción",
+      "componente": "Relé de estado sólido 3",
+      "cantidad": "1",
+      "referencia_original": "Sin referencia individual; KM1 en plano",
+      "datos": "Tres SSR según texto y fotografía. Modelo completo pendiente.",
+      "funcion": "Conmutación de una resistencia.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I012",
+      "codigos": [
+        "TS01…"
+      ],
+      "sistema": "Protección térmica",
+      "componente": "Termostatos de bulbo capilar",
+      "cantidad": "",
+      "referencia_original": "Termostato bulbo capilar",
+      "datos": "Rango 0–300 °C; cantidad pendiente. En fig.5.5 se ven dos mandos.",
+      "funcion": "Corte por temperatura en el circuito descrito.",
+      "ubicacion": "Bulbos en calefacción; mandos exteriores"
+    },
+    {
+      "id_registro": "I013",
+      "codigos": [
+        "SBE01"
+      ],
+      "sistema": "Emergencia",
+      "componente": "Pulsador de parada de emergencia",
+      "cantidad": "1",
+      "referencia_original": "Parada de emergencia",
+      "datos": "Señal hacia TBEN C3; circuito de calefacción descrito en serie.",
+      "funcion": "Orden de parada de emergencia.",
+      "ubicacion": "Tablero, ubicación exacta pendiente"
+    },
+    {
+      "id_registro": "I014",
+      "codigos": [
+        "VENT01"
+      ],
+      "sistema": "Ventilación",
+      "componente": "Conjunto forzador de aire",
+      "cantidad": "1",
+      "referencia_original": "Forzador",
+      "datos": "Diámetro 61 cm; giro en ambos sentidos según tesis.",
+      "funcion": "Circulación interna del aire.",
+      "ubicacion": "Cámara superior"
+    },
+    {
+      "id_registro": "I015",
+      "codigos": [
+        "M01"
+      ],
+      "sistema": "Ventilación",
+      "componente": "Motor trifásico del forzador",
+      "cantidad": "1",
+      "referencia_original": "M1",
+      "datos": "1 HP; 1500 rpm; conexión estrella según tesis.",
+      "funcion": "Accionamiento del forzador I014.",
+      "ubicacion": "Integrado en el forzador"
+    },
+    {
+      "id_registro": "I016",
+      "codigos": [
+        "VFD01"
+      ],
+      "sistema": "Ventilación",
+      "componente": "Variador de frecuencia",
+      "cantidad": "1",
+      "referencia_original": "INV1; PowerFlex 4M",
+      "datos": "Familia PowerFlex 4M; referencia completa pendiente.",
+      "funcion": "Regulación de velocidad y sentido del motor.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I017",
+      "codigos": [
+        "QM01"
+      ],
+      "sistema": "Protecciones",
+      "componente": "Guardamotor del forzador",
+      "cantidad": "1",
+      "referencia_original": "F1",
+      "datos": "Rango 1,1–1,6 A en plano; ajuste 1,6 A según tesis.",
+      "funcion": "Protección del motor descrita en la documentación.",
+      "ubicacion": "Tablero; dibujado aguas abajo del variador"
+    },
+    {
+      "id_registro": "I018",
+      "codigos": [
+        "IO01"
+      ],
+      "sistema": "Control",
+      "componente": "Módulo de entradas/salidas TBEN",
+      "cantidad": "1",
+      "referencia_original": "TBEN-L4-8IOL / TBEN-L4-8IO / TBEN-4L-… (rótulo incompleto)",
+      "datos": "Turck; variantes de denominación entre documentos.",
+      "funcion": "Interfaz de señales y comunicaciones del secadero.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I019",
+      "codigos": [
+        "IF01"
+      ],
+      "sistema": "Control",
+      "componente": "Interfaz del variador",
+      "cantidad": "1",
+      "referencia_original": "DP1213",
+      "datos": "La tesis describe conversión a 4–20 mA.",
+      "funcion": "Interfaz entre TBEN y variador.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I020",
+      "codigos": [
+        "PS01"
+      ],
+      "sistema": "Alimentación",
+      "componente": "Fuente de alimentación de 24 Vcc",
+      "cantidad": "1",
+      "referencia_original": "Fuente 220 VCA a 24 Vcc/10A",
+      "datos": "Entrada 220 Vca; salida 24 Vcc/10 A según plano.",
+      "funcion": "Alimentación del módulo TBEN.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I021",
+      "codigos": [
+        "PS02"
+      ],
+      "sistema": "Alimentación",
+      "componente": "Fuente de alimentación de 5 Vcc",
+      "cantidad": "1",
+      "referencia_original": "Fuente 220 VCA a 5 Vcc/2A",
+      "datos": "Entrada 220 Vca; salida 5 Vcc/2 A según plano.",
+      "funcion": "Alimentación del subsistema Arduino/servos según esquema.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I022",
+      "codigos": [
+        "MCU01"
+      ],
+      "sistema": "Control",
+      "componente": "Arduino Uno",
+      "cantidad": "1",
+      "referencia_original": "Arduino uno",
+      "datos": "Programa y versión no aportados como archivo separado.",
+      "funcion": "Control de dos servomotores.",
+      "ubicacion": "Ubicación física a verificar"
+    },
+    {
+      "id_registro": "I023",
+      "codigos": [
+        "SV01"
+      ],
+      "sistema": "Intercambio de aire",
+      "componente": "Servomotor 1",
+      "cantidad": "1",
+      "referencia_original": "Servo 1",
+      "datos": "MG946R según tesis.",
+      "funcion": "Accionamiento de una compuerta.",
+      "ubicacion": "Abertura del secadero; posición pendiente"
+    },
+    {
+      "id_registro": "I024",
+      "codigos": [
+        "SV02"
+      ],
+      "sistema": "Intercambio de aire",
+      "componente": "Servomotor 2",
+      "cantidad": "1",
+      "referencia_original": "Servo 2",
+      "datos": "MG946R según tesis.",
+      "funcion": "Accionamiento de una compuerta.",
+      "ubicacion": "Abertura del secadero; posición pendiente"
+    },
+    {
+      "id_registro": "I025",
+      "codigos": [
+        "CMP01"
+      ],
+      "sistema": "Intercambio de aire",
+      "componente": "Compuerta de intercambio de aire 1",
+      "cantidad": "1",
+      "referencia_original": "Válvula; válvula extractora",
+      "datos": "Mecanismo de madera accionado por servo.",
+      "funcion": "Regular intercambio de aire con el ambiente.",
+      "ubicacion": "Abertura del secadero; posición pendiente"
+    },
+    {
+      "id_registro": "I026",
+      "codigos": [
+        "CMP02"
+      ],
+      "sistema": "Intercambio de aire",
+      "componente": "Compuerta de intercambio de aire 2",
+      "cantidad": "1",
+      "referencia_original": "Válvula; válvula extractora",
+      "datos": "Mecanismo de madera accionado por servo.",
+      "funcion": "Regular intercambio de aire con el ambiente.",
+      "ubicacion": "Abertura del secadero; posición pendiente"
+    },
+    {
+      "id_registro": "I027",
+      "codigos": [
+        "TH01"
+      ],
+      "sistema": "Instrumentación",
+      "componente": "Sensor combinado de temperatura y humedad, canal 1",
+      "cantidad": "1",
+      "referencia_original": "C4; Temperatura1; Humedad1",
+      "datos": "Modelo no confirmado para este secadero.",
+      "funcion": "Medición de temperatura y humedad.",
+      "ubicacion": "Ambiente según variables de p.56; verificar"
+    },
+    {
+      "id_registro": "I028",
+      "codigos": [
+        "TH02"
+      ],
+      "sistema": "Instrumentación",
+      "componente": "Sensor combinado de temperatura y humedad, canal 2",
+      "cantidad": "1",
+      "referencia_original": "C5; Temperatura2; Humedad2",
+      "datos": "Modelo no confirmado para este secadero.",
+      "funcion": "Medición de temperatura y humedad.",
+      "ubicacion": "Interior según variables de p.56; verificar"
+    },
+    {
+      "id_registro": "I029",
+      "codigos": [
+        "PC01"
+      ],
+      "sistema": "Supervisión",
+      "componente": "Computadora de supervisión",
+      "cantidad": "1",
+      "referencia_original": "PC",
+      "datos": "Programa Python; comunicación Modbus TCP con TBEN.",
+      "funcion": "Operación, registro y ejecución de control desde PC.",
+      "ubicacion": "Puesto de operación; ubicación pendiente"
+    },
+    {
+      "id_registro": "I030",
+      "codigos": [],
+      "sistema": "Interconexión",
+      "componente": "Enlace Ethernet PC–TBEN",
+      "cantidad": "1",
+      "referencia_original": "P1",
+      "datos": "Modbus TCP/IP según tesis; P2 sin uso según texto.",
+      "funcion": "Comunicación de supervisión/control.",
+      "ubicacion": "Entre PC y tablero"
+    },
+    {
+      "id_registro": "I031",
+      "codigos": [],
+      "sistema": "Interconexión",
+      "componente": "Enlace de comunicación PC–Arduino",
+      "cantidad": "",
+      "referencia_original": "ser; enviar_comando_servosrele",
+      "datos": "Uso de comunicación serie en el programa; interfaz física por confirmar.",
+      "funcion": "Envío de comandos a servos.",
+      "ubicacion": "Entre PC y Arduino; pendiente"
+    },
+    {
+      "id_registro": "I032",
+      "codigos": [
+        "X01",
+        "X02",
+        "X03"
+      ],
+      "sistema": "Interconexión",
+      "componente": "Borneras y distribución interna",
+      "cantidad": "",
+      "referencia_original": "X1, X2 y X3 en F03; otros sin identificar",
+      "datos": "Regletas visibles en foto de tablero.",
+      "funcion": "Conexión y distribución de potencia/control.",
+      "ubicacion": "Tablero"
+    },
+    {
+      "id_registro": "I033",
+      "codigos": [],
+      "sistema": "Interconexión",
+      "componente": "Circuito de protección a tierra",
+      "cantidad": "",
+      "referencia_original": "PE",
+      "datos": "Representado en plano; borneras visibles.",
+      "funcion": "Vinculación de masas al conductor de protección.",
+      "ubicacion": "Tablero y equipo"
+    },
+    {
+      "id_registro": "I034",
+      "codigos": [],
+      "sistema": "Interconexión",
+      "componente": "Cables y conectores de señales",
+      "cantidad": "",
+      "referencia_original": "M12; conexiones a C0–C7",
+      "datos": "Conectores y cableado visibles; inventario incompleto.",
+      "funcion": "Transporte de señales de sensores/actuadores.",
+      "ubicacion": "Tablero y campo"
+    },
+    {
+      "id_registro": "I035",
+      "codigos": [],
+      "sistema": "Tablero",
+      "componente": "Gabinete, rieles y canaletas",
+      "cantidad": "1",
+      "referencia_original": "Tablero eléctrico",
+      "datos": "Conjunto visible en fotografía.",
+      "funcion": "Alojamiento y organización de componentes.",
+      "ubicacion": "Exterior del secadero; verificar ubicación"
+    },
+    {
+      "id_registro": "I036",
+      "codigos": [],
+      "sistema": "Estructura",
+      "componente": "Estructura principal de la cámara",
+      "cantidad": "1",
+      "referencia_original": "Estructura principal",
+      "datos": "2,51 × 1,934 × 0,649 m; caños 30×30×1,6 y 30×10×1,6 mm según tesis.",
+      "funcion": "Soporte de la cámara y dispositivos.",
+      "ubicacion": "Secadero"
+    },
+    {
+      "id_registro": "I037",
+      "codigos": [],
+      "sistema": "Estructura",
+      "componente": "Paneles, revestimiento y cubierta",
+      "cantidad": "",
+      "referencia_original": "Fenólicos; revestimiento",
+      "datos": "Paneles de madera fenólica; membrana en pintura según tesis.",
+      "funcion": "Cerramiento de la cámara.",
+      "ubicacion": "Paredes y techo"
+    },
+    {
+      "id_registro": "I038",
+      "codigos": [],
+      "sistema": "Estructura",
+      "componente": "Puerta y herrajes de cierre",
+      "cantidad": "1",
+      "referencia_original": "Puerta",
+      "datos": "Puerta incluida en descripción de la cámara.",
+      "funcion": "Acceso, cierre y carga del secadero.",
+      "ubicacion": "Frente de cámara; confirmar"
+    },
+    {
+      "id_registro": "I039",
+      "codigos": [],
+      "sistema": "Circulación interna",
+      "componente": "Deflectores y divisoria de cámaras",
+      "cantidad": "",
+      "referencia_original": "Paneles curvos; divisoria",
+      "datos": "Deflectores superiores; separación entre calefacción y bandejas.",
+      "funcion": "Distribución del flujo de aire.",
+      "ubicacion": "Interior del secadero"
+    },
+    {
+      "id_registro": "I040",
+      "codigos": [],
+      "sistema": "Carga",
+      "componente": "Estructura portabandejas",
+      "cantidad": "1",
+      "referencia_original": "Habitáculo porta-bandejas",
+      "datos": "1,26 × 0,60 × 1,77 m; capacidad para 24 bandejas.",
+      "funcion": "Soporte y distribución de la carga.",
+      "ubicacion": "Cámara inferior"
+    },
+    {
+      "id_registro": "I041",
+      "codigos": [],
+      "sistema": "Carga",
+      "componente": "Bandejas",
+      "cantidad": "24",
+      "referencia_original": "24 bandejas",
+      "datos": "Cantidad/capacidad descrita en tesis; existencia actual pendiente.",
+      "funcion": "Soporte del producto durante secado.",
+      "ubicacion": "Portabandejas"
+    },
+    {
+      "id_registro": "I042",
+      "codigos": [],
+      "sistema": "Calefacción",
+      "componente": "Soportes y aislaciones de las resistencias",
+      "cantidad": "",
+      "referencia_original": "Planchuela; aislación con teflón",
+      "datos": "Soporte metálico y aislación descritos en tesis.",
+      "funcion": "Sujeción y separación eléctrica de calefactores.",
+      "ubicacion": "Cámara superior"
+    },
+    {
+      "id_registro": "I043",
+      "codigos": [],
+      "sistema": "Señalización",
+      "componente": "Indicador o semáforo de estado",
+      "cantidad": "",
+      "referencia_original": "semáforo en programa",
+      "datos": "Mencionado en comandos de software; hardware sin identificar.",
+      "funcion": "Señalización del estado, si está instalado.",
+      "ubicacion": "No confirmada"
+    },
+    {
+      "id_registro": "I044",
+      "codigos": [],
+      "sistema": "Ampliación prevista",
+      "componente": "Extractor adicional",
+      "cantidad": "",
+      "referencia_original": "C2; EXTRACTOR",
+      "datos": "Reservado para incorporación futura según texto.",
+      "funcion": "Extracción adicional prevista.",
+      "ubicacion": "No confirmada"
+    },
+    {
+      "id_registro": "I045",
+      "codigos": [],
+      "sistema": "Histórico",
+      "componente": "Protectores térmicos tipo Klixon",
+      "cantidad": "",
+      "referencia_original": "Klixon",
+      "datos": "Ensayados y descartados como solución final.",
+      "funcion": "Antecedente de protección térmica.",
+      "ubicacion": "Montajes históricos"
+    },
+    {
+      "id_registro": "I046",
+      "codigos": [],
+      "sistema": "Otro equipo",
+      "componente": "Sensores DHT22 de ensayos en Oro del Inca",
+      "cantidad": "",
+      "referencia_original": "DHT22",
+      "datos": "Mediciones dentro/fuera del secadero de la cooperativa.",
+      "funcion": "Caracterización de recetas en otro secadero.",
+      "ubicacion": "Cooperativa Oro del Inca"
+    }
+  ],
+  "por_codigo": {
+    "QD01": [
+      "I001"
+    ],
+    "QF01": [
+      "I002"
+    ],
+    "QF02": [
+      "I003"
+    ],
+    "QF03": [
+      "I004"
+    ],
+    "QF04": [
+      "I005"
+    ],
+    "R01": [
+      "I006"
+    ],
+    "R02": [
+      "I007"
+    ],
+    "R03": [
+      "I008"
+    ],
+    "SSR01": [
+      "I009"
+    ],
+    "SSR02": [
+      "I010"
+    ],
+    "SSR03": [
+      "I011"
+    ],
+    "TS01…": [
+      "I012"
+    ],
+    "SBE01": [
+      "I013"
+    ],
+    "VENT01": [
+      "I014"
+    ],
+    "M01": [
+      "I015"
+    ],
+    "VFD01": [
+      "I016"
+    ],
+    "QM01": [
+      "I017"
+    ],
+    "IO01": [
+      "I018"
+    ],
+    "IF01": [
+      "I019"
+    ],
+    "PS01": [
+      "I020"
+    ],
+    "PS02": [
+      "I021"
+    ],
+    "MCU01": [
+      "I022"
+    ],
+    "SV01": [
+      "I023"
+    ],
+    "SV02": [
+      "I024"
+    ],
+    "CMP01": [
+      "I025"
+    ],
+    "CMP02": [
+      "I026"
+    ],
+    "TH01": [
+      "I027"
+    ],
+    "TH02": [
+      "I028"
+    ],
+    "PC01": [
+      "I029"
+    ],
+    "X01": [
+      "I032"
+    ],
+    "X02": [
+      "I032"
+    ],
+    "X03": [
+      "I032"
+    ]
+  },
+  "_resumen": {
+    "filas": 46,
+    "con_codigo": 30,
+    "sin_codigo": 16,
+    "codigos": 32,
+    "con_datos": 46
+  }
+}
