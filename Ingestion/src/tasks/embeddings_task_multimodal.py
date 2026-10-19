@@ -211,7 +211,12 @@ class ChunksEmbeddings(Task):
         # Medido sobre ese chunk y tres preguntas reales, la similitud sube de
         # 0,463 a 0,529 en la peor, y sube en las tres. No es cosmético: en el
         # ranking eso es la diferencia entre entrar al contexto y no entrar.
-        entidad_prefijo = _prefijo_entidades(row)
+        # Apagado por medición: el prefijo sube la similitud de TODOS los chunks
+        # de la entidad por igual, así que no cambia el orden dentro del grupo,
+        # que era lo único que importaba. Ver MODELOS.md §7.
+        entidad_prefijo = (_prefijo_entidades(row)
+                           if os.getenv("USE_ENTITY_PREFIX", "").lower() in ("1", "true", "si")
+                           else "")
 
         def add_context(txt: str) -> str:
             parts = [p for p in [entidad_prefijo, context_summary, page_meta,

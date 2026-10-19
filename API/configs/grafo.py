@@ -61,13 +61,26 @@ def codigos_mencionados(texto: str) -> List[str]:
     """
     g = grafo()
     nodos = g.get("nodos", {})
-    encontrados = []
-    for codigo in nodos:
-        if not codigo or not re.match(r"^[A-Z]", codigo):
-            continue
-        # Límite de palabra para que SSR01 no matchee dentro de SSR011.
-        if re.search(rf"\b{re.escape(codigo)}\b", texto, re.IGNORECASE):
-            encontrados.append(codigo)
+
+    # Se delega en el resolutor de entidades, que además del código reconoce el
+    # nombre y los alias: "el variador" o "PowerFlex 4M" llegan a VFD01.
+    #
+    # Antes se cotejaba solo el código literal, y el efecto era que el bloque de
+    # conexiones salía VACÍO justo en las preguntas para las que existe. Medido
+    # con "¿qué alimenta el variador?": el detector viejo devolvía [], el
+    # resolutor devuelve ['VFD01'].
+    #
+    # Se intersecta con los nodos del grafo: el resolutor conoce los 32
+    # componentes del inventario y el grafo puede tener menos.
+    try:
+        from configs.entidades import etiquetas as _etiquetas
+
+        encontrados = [c for c in _etiquetas(texto) if c in nodos]
+    except Exception:
+        # Sin el resolutor, el comportamiento anterior: solo códigos literales.
+        encontrados = [c for c in nodos
+                       if c and re.match(r"^[A-Z]", c)
+                       and re.search(rf"\b{re.escape(c)}\b", texto, re.IGNORECASE)]
     return sorted(set(encontrados))
 
 
