@@ -164,7 +164,13 @@ export default function Lightbox({ entries, index, onClose, onNavigate }: Props)
 
       {/* Contenido */}
       <div
-        className="relative flex flex-1 items-center justify-center overflow-hidden p-4"
+        // `min-h-0` no es decorativo: un ítem flex tiene `min-height: auto`, así
+        // que este contenedor no baja de la altura natural de la imagen. Sin él
+        // crecía más que el viewport, el `max-h-full` del `img` resolvía contra
+        // esa altura inflada en vez de contra el espacio real, y `overflow-hidden`
+        // recortaba la foto por arriba. Se veía solo en imágenes más altas que
+        // anchas, con barras blancas a los costados y el borde superior cortado.
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4"
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}
