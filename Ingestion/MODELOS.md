@@ -625,6 +625,53 @@ que vale para lo que venga: el problema no era que el índice no supiera que
 `PowerFlex 4M` es `VFD01` —ahora lo sabe— sino que el código ARGEE no se parece
 a las preguntas que la gente hace sobre él. **Etiquetar no acerca un vector.**
 
+### El volumen de preguntas sintéticas: medido por fin
+
+Este documento decía desde hace tiempo que el volumen de preguntas sintéticas
+era **lo único que no se podía medir sin reindexar**. Con `--reusar-chunks` cada
+corrida cuesta unos USD 0,40, así que se midió: tres índices con 2, 4 y 8
+preguntas por chunk.
+
+| Por chunk | Vectores | % sintéticas | Respuesta presente | recall@10 | MRR |
+|---|---|---|---|---|---|
+| 0 (excluidas en consulta) | — | — | 86,0% | — | — |
+| 2 | 3.868 | 65% | 88,4% | 27/54 | 0,386 |
+| **4** | **5.862** | **77%** | **93,0%** | 28/54 | 0,396 |
+| 8 (producción) | 10.459 | 87% | **93,0%** | 29/54 | 0,425 |
+
+**La mitad de las preguntas sintéticas son redundantes.** Con 4 se obtiene el
+mismo 93,0% que con 8, con un índice 44% más chico y una ingesta más barata.
+Con 2 ya se pierden casi 5 puntos, así que el piso está entre 2 y 4.
+
+Sobre los sets dirigidos, con 4: idéntico en las preguntas que cruzan documentos
+(6/8) y **mejor** en los recorridos del grafo (12/12 contra 11/12).
+
+Lo que se paga son las dos métricas que este documento desconfía: recall@10 baja
+de 29 a 28 y MRR de 0,425 a 0,396. La respuesta llega igual de seguido, un poco
+más abajo en la lista.
+
+### Una corrección: el volumen no causa la monopolización
+
+Este documento afirmaba que lo que había que corregir era el **volumen y la
+distribución** de las preguntas sintéticas, porque eran la causa de que un
+documento grande acapare el top-k. **La parte del volumen es falsa.**
+
+Medido sobre las 43 preguntas, con 8 y con 4 por chunk:
+
+| Por chunk | Dominancia mediana | Consultas con >70% de un documento |
+|---|---|---|
+| 8 | 92% | 27/43 |
+| 4 | 92% | 28/43 |
+
+Halvar las preguntas no cambia nada, y en retrospectiva es obvio: si todos los
+documentos pierden la mitad, las proporciones quedan iguales. **La monopolización
+viene del tamaño del documento**, no de cuántas preguntas sintéticas se generen.
+El manual PowerFlex acapara porque tiene 126 páginas, no porque tenga 3.173
+preguntas.
+
+Eso deja al cupo de asientos (más arriba) como el único mecanismo que ataca esa
+causa, y descarta reducir las preguntas como vía para resolverla.
+
 ### Por qué el reranking está apagado
 
 El pipeline arma un pool y después corta en 10 chunks. Con reranking, ese corte
