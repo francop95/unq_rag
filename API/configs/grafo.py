@@ -153,21 +153,43 @@ def bloque_para_prompt(pregunta: str, contexto: str = "") -> str:
         # persona; una extraída la leyó un modelo de visión de un plano, y
         # presentarlas igual haría que el modelo afirme con la misma seguridad
         # un dato verificado y uno inferido de una imagen.
+        # Las extraídas ya no van todas juntas: se revisaron una por una contra
+        # su cita literal. Una que el plano dibuja con una flecha entre esos dos
+        # componentes no vale lo mismo que una que el modelo dedujo de una frase
+        # genérica, y decir "sin verificar" de las dos le quitaba peso a la
+        # primera y se lo daba de más a la segunda.
+        #
+        # Las de `evidencia_no_corresponde` no se muestran: su cita describe otra
+        # relación, así que no hay nada que respalde lo que afirman.
+        ETIQUETA = {
+            "directa": " [leído de un plano]",
+            "inferida": " [deducido, no está escrito en ninguna fuente]",
+        }
+
         def _listar(aristas, campo):
             doc = [a for a in aristas if a.get("origen_dato") != "extraido"]
-            ext = [a for a in aristas if a.get("origen_dato") == "extraido"]
             txt = []
             if doc:
                 txt.append(", ".join(_describir(a[campo]) for a in doc))
-            if ext:
-                txt.append(", ".join(_describir(a[campo]) for a in ext)
-                           + " [leído de un plano, sin verificar]")
+            for estado, etiqueta in ETIQUETA.items():
+                grupo = [a for a in aristas
+                         if a.get("origen_dato") == "extraido"
+                         and a.get("validacion") == estado]
+                if grupo:
+                    txt.append(", ".join(_describir(a[campo]) for a in grupo) + etiqueta)
             return "; ".join(txt)
 
-        if v["entra"]:
-            partes.append("  lo alimenta/controla: " + _listar(v["entra"], "origen"))
-        if v["sale"]:
-            partes.append("  alimenta/controla a: " + _listar(v["sale"], "destino"))
+        # Se consulta el texto ya armado y no la lista cruda: una arista cuya
+        # cita no corresponde se descarta dentro de `_listar`, así que la lista
+        # puede tener elementos y el texto salir vacío. Sin esto quedaba
+        # "alimenta/controla a:" sin nada detrás, que se lee como un dato que
+        # falta en vez de como una relación descartada.
+        entra = _listar(v["entra"], "origen") if v["entra"] else ""
+        sale = _listar(v["sale"], "destino") if v["sale"] else ""
+        if entra:
+            partes.append("  lo alimenta/controla: " + entra)
+        if sale:
+            partes.append("  alimenta/controla a: " + sale)
         if v["bidireccional"]:
             otros = [a["destino"] if a["origen"] == c else a["origen"] for a in v["bidireccional"]]
             partes.append("  conectado con: " + ", ".join(_describir(o) for o in otros))
@@ -201,9 +223,10 @@ def bloque_para_prompt(pregunta: str, contexto: str = "") -> str:
         + "\n".join(lineas)
         + bloque_rutas
         + "\n\nLas conexiones sin aclaración vienen del inventario revisado por una\n"
-          "persona. Las marcadas [leído de un plano, sin verificar] las extrajo un\n"
-          "modelo de visión de un plano: usalas, pero decí que están pendientes de\n"
-          "verificación cuando la respuesta dependa de ellas.\n"
+          "persona. Las marcadas [leído de un plano] las extrajo un modelo de\n"
+          "visión, y se verificó que el plano dibuja esa conexión entre esos dos\n"
+          "componentes. Las marcadas [deducido, no está escrito en ninguna fuente]\n"
+          "no las afirma ningún documento: si la respuesta depende de una, decilo.\n"
           "\nEsta lista de conexiones es COMPLETA para los componentes nombrados: lo que\n"
           "no figura acá no está documentado. Si te preguntan qué depende de un\n"
           "componente, respondé con lo que figura y decí explícitamente que es lo\n"

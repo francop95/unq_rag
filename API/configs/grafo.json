@@ -508,10 +508,11 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "QD01 → QF01",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "QF01",
@@ -519,10 +520,11 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "QF01 → QF02",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "QF02",
@@ -530,10 +532,12 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "QF02 → SSR01-SSR03",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la cita nombra el rango SSR01-SSR03"
     },
     {
       "origen": "QF03",
@@ -541,10 +545,11 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "QF03 → IF01",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "VFD01",
@@ -552,10 +557,11 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "VFD01 → QM01",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "QM01",
@@ -563,10 +569,12 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "QM01 → M1",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la cita dice M1; se resolvió al código M01 del inventario"
     },
     {
       "origen": "PS01",
@@ -574,10 +582,11 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "PS01 → MCU01",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "PS02",
@@ -585,10 +594,11 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "PS02 → MCU01",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "MCU01",
@@ -596,10 +606,11 @@
       "tipo": "controla",
       "funcion": "controla",
       "evidencia": "MCU01 → SV01",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "MCU01",
@@ -607,10 +618,11 @@
       "tipo": "controla",
       "funcion": "controla",
       "evidencia": "MCU01 → SV02",
-      "confianza": "alta",
       "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "SSR01",
@@ -618,10 +630,12 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "Los relés conmutan energía hacia las resistencias.",
-      "confianza": "alta",
       "fuente": "Poster_didactico_secadero_componentes_y_planos p1 chunk_8_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "inferida",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la frase citada es genérica y plural; el emparejamiento 1 a 1 no está documentado"
     },
     {
       "origen": "SSR02",
@@ -629,10 +643,12 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "Los relés conmutan energía hacia las resistencias.",
-      "confianza": "alta",
       "fuente": "Poster_didactico_secadero_componentes_y_planos p1 chunk_8_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "inferida",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la frase citada es genérica y plural; el emparejamiento 1 a 1 no está documentado"
     },
     {
       "origen": "SSR03",
@@ -640,10 +656,12 @@
       "tipo": "alimenta",
       "funcion": "alimenta",
       "evidencia": "Los relés conmutan energía hacia las resistencias.",
-      "confianza": "alta",
       "fuente": "Poster_didactico_secadero_componentes_y_planos p1 chunk_8_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "inferida",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la frase citada es genérica y plural; el emparejamiento 1 a 1 no está documentado"
     },
     {
       "origen": "VFD01",
@@ -651,10 +669,11 @@
       "tipo": "controla",
       "funcion": "controla",
       "evidencia": "El variador regula el motor del forzador.",
-      "confianza": "alta",
       "fuente": "Poster_didactico_secadero_componentes_y_planos p1 chunk_8_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19"
     },
     {
       "origen": "VFD01",
@@ -662,10 +681,12 @@
       "tipo": "controla",
       "funcion": "controla",
       "evidencia": "El variador regula el motor del forzador.",
-      "confianza": "alta",
       "fuente": "Poster_didactico_secadero_componentes_y_planos p1 chunk_8_visual",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "inferida",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la cita nombra el motor, no el conjunto; la relación es transitiva vía M01"
     },
     {
       "origen": "SV01",
@@ -673,10 +694,12 @@
       "tipo": "controla",
       "funcion": "controla",
       "evidencia": "Arduino acciona los servos de las compuertas.",
-      "confianza": "alta",
       "fuente": "Poster_didactico_secadero_componentes_y_planos p1 chunk_9",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "evidencia_no_corresponde",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la cita describe MCU01 → SV01, no SV01 → CMP01"
     },
     {
       "origen": "SV02",
@@ -684,10 +707,38 @@
       "tipo": "controla",
       "funcion": "controla",
       "evidencia": "Arduino acciona los servos de las compuertas.",
-      "confianza": "alta",
       "fuente": "Poster_didactico_secadero_componentes_y_planos p1 chunk_9",
       "bidireccional": false,
-      "origen_dato": "extraido"
+      "origen_dato": "extraido",
+      "validacion": "evidencia_no_corresponde",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la cita describe MCU01 → SV02, no SV02 → CMP02"
+    },
+    {
+      "origen": "QF02",
+      "destino": "SSR02",
+      "tipo": "alimenta",
+      "funcion": "alimenta",
+      "evidencia": "QF02 → SSR01-SSR03",
+      "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
+      "bidireccional": false,
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la cita nombra el rango SSR01-SSR03; faltaba expandirlo"
+    },
+    {
+      "origen": "QF02",
+      "destino": "SSR03",
+      "tipo": "alimenta",
+      "funcion": "alimenta",
+      "evidencia": "QF02 → SSR01-SSR03",
+      "fuente": "2_Planos_secadero_codificados_propuesta p1 chunk_2_visual",
+      "bidireccional": false,
+      "origen_dato": "extraido",
+      "validacion": "directa",
+      "revisada_en": "2026-10-19",
+      "nota_validacion": "la cita nombra el rango SSR01-SSR03; faltaba expandirlo"
     }
   ],
   "discrepancias": [
