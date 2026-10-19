@@ -98,6 +98,29 @@ El harness embebe la consulta con el proveedor configurado, el mismo que usa la
 API. Antes llamaba a OpenAI directo, lo que con el índice en Bedrock hacía que
 midiera un sistema que no era el de producción.
 
+### Cuánto ruido tiene la métrica de respuesta
+
+La respuesta la escribe un modelo, así que el mismo sistema no da el mismo
+resultado dos veces. Medido: **dos corridas del código idéntico sobre las mismas
+43 preguntas dieron 35 y 36**.
+
+Las corridas de este documento, todas sobre las 43:
+
+| Configuración | Correctas |
+|---|---|
+| Sin grafo | 38 |
+| Con grafo | 36 |
+| Con grafo + datos del inventario | 35 |
+| Con grafo + datos del inventario (repetición) | 36 |
+
+**Una diferencia de una a tres preguntas no se distingue del ruido.** Esto acota
+lo que cualquier comparación A/B sobre este set puede afirmar, incluidas las de
+las secciones del grafo y del inventario: miden "no empeora", no "no aporta".
+
+Para resolver efectos chicos haría falta un set más grande o varias corridas por
+configuración. La métrica de recuperación (respuesta presente en el contexto) no
+tiene este problema: no interviene el modelo y da 93,0% de forma estable.
+
 ### Con qué modelo se midió, y por qué importa decirlo
 
 Todo lo de este documento se midió con **`gpt-4.1`** redactando la respuesta,
@@ -497,9 +520,10 @@ contexto recuperado trae un chunk de plano que lista todos los códigos.
 | Con grafo | 36/43 (83,7%) |
 | Sin grafo | 38/43 (88,4%) |
 
-Esa diferencia de dos preguntas es ruido: **tres de las cuatro que cambian son
-preguntas donde el grafo ni siquiera dispara**, y la cuarta cambia por un falso
-positivo del verificador, no por una mejora real.
+Esa diferencia de dos preguntas es ruido, y ahora con un número detrás: dos
+corridas del código idéntico dan 35 y 36 (ver §1). Además **tres de las cuatro
+preguntas que cambian son preguntas donde el grafo ni siquiera dispara**, y la
+cuarta cambia por un falso positivo del verificador, no por una mejora real.
 
 **El set no contiene las preguntas para las que el grafo existe**, así que se
 escribieron: `eval/eval_grafo.jsonl`, 12 preguntas de recorrido —*"si se dispara
