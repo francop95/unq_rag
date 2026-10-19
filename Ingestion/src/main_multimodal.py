@@ -156,6 +156,54 @@ CHUNKERS = {
 }
 
 
+# Marcas de revisión en el nombre: "_v1", " v2", "rev3", "_r2".
+_REVISION = re.compile(r"[ _-]*(?:v|rev|r)\s*(\d+)\s*$", re.IGNORECASE)
+# Prefijo de orden que se le puso al corpus: "0_", "1_", "2_".
+_PREFIJO_ORDEN = re.compile(r"^\d+[_ -]+")
+
+
+def documento_logico(file_stem: str):
+    """(nombre lógico, revisión) de un documento, leídos de su nombre.
+
+    "1_Plano distribucion electrica_v1" y "Plano distribucion electrica" son el
+    MISMO documento en dos revisiones, y hasta ahora el sistema no tenía forma
+    de saberlo: el manifiesto los trataba como dos documentos sin relación.
+
+    Eso no es teórico. Al renombrar el corpus, la copia vieja quedó en el
+    servidor, la configuración seguía apuntándole, y el sistema adjuntaba una
+    revisión anterior del plano sin que nada avisara. El hash detecta que un
+    archivo cambió; no detecta que otro archivo lo reemplaza.
+
+    Se lee del nombre y no del contenido a propósito: es una heurística
+    declarada, revisable de un vistazo, y no una inferencia sobre el PDF.
+    """
+    base = _PREFIJO_ORDEN.sub("", file_stem).strip()
+    m = _REVISION.search(base)
+    revision = int(m.group(1)) if m else None
+    logico = _REVISION.sub("", base).strip() if m else base
+    return logico.casefold(), revision
+
+
+def revisiones_superadas(manifest: dict, file_stem: str):
+    """Entradas del manifiesto que este documento reemplaza.
+
+    Mismo documento lógico y revisión menor (o ninguna, que se trata como la
+    más vieja). Devuelve los nombres, para que el que ingesta sepa qué quedó
+    obsoleto en vez de enterarse cuando una respuesta cite un plano viejo.
+    """
+    logico, rev = documento_logico(file_stem)
+    if rev is None:
+        return []
+    superadas = []
+    for otro, entrada in manifest.items():
+        if otro == file_stem:
+            continue
+        otro_logico, otro_rev = documento_logico(otro)
+        if otro_logico == logico and (otro_rev is None or otro_rev < rev):
+            superadas.append(otro)
+    return sorted(superadas)
+
+
 def iter_documentos(root: str):
     """
     Documentos ingestables bajo raw_data, incluidas las subcarpetas.
@@ -664,11 +712,22 @@ if __name__ == "__main__":
             processed_docs += 1
             print(f"\n✅ DOCUMENTO COMPLETADO: {file_stem}\n")
 
+            _logico, _rev = documento_logico(file_stem)
             manifest[file_stem] = {
                 "sha256": pdf_hash,
                 "last_processed_at": datetime.now(timezone.utc).isoformat(),
                 "status": "success",
+                # El hash dice si ESTE archivo cambió; la revisión dice si OTRO
+                # archivo lo reemplaza. Son preguntas distintas y hasta ahora
+                # solo se respondía la primera.
+                "documento_logico": _logico,
+                "revision": _rev,
+                "vigente": True,
             }
+            for _superada in revisiones_superadas(manifest, file_stem):
+                manifest[_superada]["vigente"] = False
+                manifest[_superada]["superada_por"] = file_stem
+                print(f"   ⚠️  {_superada} queda marcado como revisión superada por {file_stem}")
             _save_manifest(manifest)
 
         except QuotaExhaustedError as e:
