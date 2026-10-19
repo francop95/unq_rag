@@ -1,5 +1,6 @@
 # chroma_connection.py
 import logging
+import re
 from collections import Counter
 from typing import Any, Dict, List, Optional
 import os
@@ -83,6 +84,9 @@ class ChromaConnection:
         self.cross_doc_gate_margin: float = float(data.get("cross_doc_gate_margin", 0.10))
         # Asientos del top_k reservados para documentos distintos al dominante.
         self.other_docs_quota: int = int(data.get("other_docs_quota", 0))
+        # Candidatos extra por entidad mencionada en la consulta (0 = apagado).
+        self.entity_fetch_k: int = int(data.get("entity_fetch_k", 0))
+        self.entity_fetch_max_codes: int = int(data.get("entity_fetch_max_codes", 2))
 
         # retrieval avanzado (todos opcionales vía config, degradan a solo-dense si fallan)
         # Ver el comentario del gate de relevancia y FUSION_* en Configuration: sin
@@ -616,6 +620,52 @@ class ChromaConnection:
             self._traza_candidatos(candidates)
             self._traza_etapa("búsqueda densa", 0, len(candidates),
                               f"pedidos {dense_fetch} (top_k {top_k} x{self.DENSE_OVERFETCH_FACTOR})")
+
+            # 1.b) BÚSQUEDA POR ENTIDAD.
+            #
+            # El mismo variador es VFD01 en el inventario, INV1 en la tesis y
+            # PowerFlex 4M en el manual del fabricante, que son 3.626 vectores y
+            # no dice VFD01 ni una vez. El denso recupera lo que se PARECE a la
+            # consulta, no lo que habla del MISMO equipo, así que un documento
+            # grande sobre ese equipo se lleva los primeros puestos y el
+            # fragmento específico de otro documento no llega.
+            #
+            # Medido antes de esto, con "¿cómo se calcula la salida hacia el
+            # variador en el programa?": los 12 primeros candidatos eran del
+            # manual del fabricante y el programa instalado no aparecía.
+            #
+            # Se hace una consulta extra ACOTADA a los chunks etiquetados con la
+            # entidad, para que compitan entre ellos en vez de contra el volumen
+            # del manual. Es una llamada más al índice y ninguna a un modelo.
+            if self.entity_fetch_k > 0 and query_text:
+                try:
+                    from configs.entidades import etiquetas as _entidades_de
+
+                    codigos = _entidades_de(query_text)[:self.entity_fetch_max_codes]
+                    for codigo in codigos:
+                        clave = "ent_" + re.sub(r"\W", "", codigo)
+                        res_ent = self.collection.query(
+                            query_embeddings=[query_vector],
+                            n_results=self.entity_fetch_k,
+                            where={clave: True},
+                            include=["documents", "metadatas", "distances"],
+                        )
+                        nuevos = self._chroma_res_to_candidates(res_ent)
+                        ya = {c["doc_id"] for c in candidates}
+                        agregados = [c for c in nuevos if c["doc_id"] not in ya]
+                        for c in agregados:
+                            c["via_entidad"] = codigo
+                        candidates.extend(agregados)
+                        if agregados:
+                            logger.info(
+                                f"[{qid}][Chroma] Entidad {codigo}: +{len(agregados)} "
+                                f"candidatos que el denso no trajo"
+                            )
+                    if codigos:
+                        self._traza_etapa("búsqueda por entidad", 0, len(candidates),
+                                          f"entidades en la consulta: {', '.join(codigos)}")
+                except Exception as e:
+                    logger.warning(f"[{qid}][Chroma] Error en búsqueda por entidad: {e}")
 
             # 2) BM25 (sparse) — se fusiona por doc_id
             if self.use_bm25 and self.bm25_index is not None and query_text:

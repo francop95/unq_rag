@@ -163,6 +163,7 @@ class ReadConfig:
             cross_doc_gate_enabled = bool(config.get("CROSS_DOC_GATE_ENABLED", True))
             cross_doc_gate_margin = float(config.get("CROSS_DOC_GATE_MARGIN", 0.10))
             other_docs_quota = int(config.get("OTHER_DOCS_QUOTA", 0))
+            entity_fetch_k = int(config.get("ENTITY_FETCH_K", 0))
             exclude_synthetic_questions = bool(config.get("EXCLUDE_SYNTHETIC_QUESTIONS", False))
 
             # Retrieval avanzado
@@ -269,6 +270,7 @@ class ReadConfig:
                 "cross_doc_gate_enabled": cross_doc_gate_enabled,
                 "cross_doc_gate_margin": cross_doc_gate_margin,
                 "other_docs_quota": other_docs_quota,
+                "entity_fetch_k": entity_fetch_k,
                 "exclude_synthetic_questions": exclude_synthetic_questions,
                 "use_visual_retrieval": use_visual_retrieval,
                 "visual_index_name": visual_index_name,

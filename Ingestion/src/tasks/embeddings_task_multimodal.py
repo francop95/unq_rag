@@ -4,6 +4,12 @@ from typing import List, Dict, Any, Tuple, Optional
 
 import pandas as pd
 
+_API_DIR = __import__("os").path.abspath(__import__("os").path.join(
+    __import__("os").path.dirname(__import__("os").path.abspath(__file__)),
+    "..", "..", "..", "API"))
+if _API_DIR not in __import__("sys").path:
+    __import__("sys").path.insert(0, _API_DIR)
+
 from task import (Task, TaskReturnData)
 from logger import Logger
 from task_utils.chunk_text import readable_chunk_text
@@ -19,6 +25,32 @@ logger = Logger.get_logger(__name__)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "../../../"))
 sys.path.append(project_root)
+
+
+def _prefijo_entidades(row) -> str:
+    """`[VFD01 Variador de frecuencia]` para el texto que el chunk menciona.
+
+    Se arma desde la nomenclatura, que es la misma fuente que usa la API para
+    el glosario, así que el vocabulario del índice y el de la respuesta no se
+    separan. Si la nomenclatura no está disponible, devuelve cadena vacía y el
+    texto se embebe como antes.
+    """
+    try:
+        from configs.entidades import resolver, _tabla  # noqa: F401
+        import json as _json
+        import os as _os
+        texto = " ".join(str(row.get(c, "") or "") for c in
+                         ("original_chunk", "embed_text", "heading", "sub_heading"))
+        codigos = sorted(set(resolver(texto)["codigo"]) | set(resolver(texto)["especifico"]))
+        if not codigos:
+            return ""
+        ruta = _os.path.join(_API_DIR, "configs", "nomenclatura.json")
+        with open(ruta, encoding="utf-8") as f:
+            nombres = {c["codigo"]: c.get("nombre", "") for c in _json.load(f)["componentes"]}
+        partes = [f"{c} {nombres.get(c, '')}".strip() for c in codigos]
+        return "[" + " · ".join(partes) + "]"
+    except Exception:
+        return ""
 
 
 class ChunksEmbeddings(Task):
@@ -167,8 +199,23 @@ class ChunksEmbeddings(Task):
             context_summary = ""
         context_summary = context_summary.strip()
 
+        # Prefijo de ENTIDAD: los códigos y nombres de los componentes que el
+        # chunk menciona, antepuestos al texto que se embebe.
+        #
+        # El mismo variador es VFD01 en el inventario, INV1 en la tesis y
+        # PowerFlex 4M en el manual, y el programa de control lo escribe como
+        # `Variador * 160`. Sin esto, el vector del chunk que calcula su salida
+        # queda lejos de "¿cómo se comanda el variador?" simplemente porque el
+        # código fuente no usa ese vocabulario.
+        #
+        # Medido sobre ese chunk y tres preguntas reales, la similitud sube de
+        # 0,463 a 0,529 en la peor, y sube en las tres. No es cosmético: en el
+        # ranking eso es la diferencia entre entrar al contexto y no entrar.
+        entidad_prefijo = _prefijo_entidades(row)
+
         def add_context(txt: str) -> str:
-            parts = [p for p in [context_summary, page_meta, heading, sub_heading, txt] if p]
+            parts = [p for p in [entidad_prefijo, context_summary, page_meta,
+                                 heading, sub_heading, txt] if p]
             return "\n".join(parts)
 
         # `embed_text` gana sobre todo: lo usan los chunks-pregunta sintéticos,

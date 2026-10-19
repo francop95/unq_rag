@@ -570,6 +570,61 @@ el retrieval **no** traiga ese chunk, y eso este set no lo prueba.
 Vale leerlo junto al ruido de la métrica (§1): dos corridas idénticas dan 35 y
 36 sobre 43, así que un empate 11/11 dice "no empeora", no "no aporta".
 
+### Resolución de entidades: el índice ahora sabe que son el mismo equipo
+
+El mismo variador es `VFD01` en el inventario, `INV1` en la tesis y
+`PowerFlex 4M` en el manual del fabricante, que son 3.626 vectores y **no dice
+`VFD01` ni una vez**. Nada en el índice los vinculaba.
+
+Se construyó el resolutor (`API/configs/entidades.py`) y se etiquetó el índice
+(`scripts/etiquetar_entidades.py`), sin recalcular embeddings porque las
+etiquetas son metadatos:
+
+| Documento | Vínculo |
+|---|---|
+| `manual powerflex 4m.pdf` | 562 chunks mencionan `VFD01` + 3.064 por ser su manual |
+| `ARGEE_Reference_Manual.pdf` | 625 mencionan `IO01` |
+| El chunk que calcula la salida del variador | `VFD01` |
+
+Dos cosas que el etiquetado destapó. La regla de límite de palabra excluía el
+guion y dejaba el manual `TBEN-L4-8IOL` **entero sin etiquetar**. Y el programa
+de control escribe `Variador * 160` a secas, sin código ni marca, así que hizo
+falta declarar los nombres comunes que en esta instalación identifican sin
+ambigüedad — con el riesgo escrito: deja de ser cierto si hay un segundo
+variador.
+
+**Se probaron dos mecanismos para aprovecharlas, y ninguno mejoró nada.**
+
+*Búsqueda acotada a la entidad*: una consulta extra filtrada por el componente
+que nombra la pregunta. Cuatro configuraciones sobre `eval_set` dan resultados
+**idénticos dígito por dígito** (93,0%, recall@10 29/54, MRR 0,425), y 6/8 con y
+sin sobre las preguntas que cruzan documentos.
+
+*Prefijo de entidad en el texto embebido*: anteponer `[VFD01 Variador de
+frecuencia]` antes de embeber. La hipótesis se midió primero y daba bien —sobre
+el chunk de la fórmula, la similitud subía de 0,463 a 0,529—, así que se
+reindexó a una colección aparte (USD 0,46, reusando chunks).
+
+| | Respuesta presente | recall@10 | MRR |
+|---|---|---|---|
+| Índice actual | 93,0% | 29/54 | 0,425 |
+| Con prefijo de entidad | 93,0% | 30/54 | 0,474 |
+
+Y sin embargo, **para la pregunta que motivó todo esto el prefijo lo empeora**:
+el chunk de la fórmula pasa de la posición 75 a la 118.
+
+La explicación es la que faltaba en la hipótesis: el prefijo se agrega a **todos**
+los chunks de esa entidad, incluidos los 562 del manual. Sube a todo el grupo por
+igual, así que no cambia el orden *dentro* del grupo, que era lo único que
+importaba. La prueba aislada comparaba texto crudo contra texto con prefijo; en
+el índice real compite contra otros que también lo llevan.
+
+**Conclusión.** Las etiquetas quedan: son correctas, cuestan cero y habilitan
+otros mecanismos. Los dos mecanismos probados quedan apagados. Y el diagnóstico
+que vale para lo que venga: el problema no era que el índice no supiera que
+`PowerFlex 4M` es `VFD01` —ahora lo sabe— sino que el código ARGEE no se parece
+a las preguntas que la gente hace sobre él. **Etiquetar no acerca un vector.**
+
 ### Por qué el reranking está apagado
 
 El pipeline arma un pool y después corta en 10 chunks. Con reranking, ese corte

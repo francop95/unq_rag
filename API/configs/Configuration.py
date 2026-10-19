@@ -181,6 +181,30 @@ class Configuration:
     # del programa instalado (4000 + Variador * 160).
     OTHER_DOCS_QUOTA = 2
 
+    # Candidatos extra traídos por ENTIDAD, además de los del denso.
+    #
+    # DESACTIVADO por medición. La idea era buena: el denso recupera lo que se
+    # PARECE a la consulta, no lo que habla del MISMO equipo, y el etiquetado de
+    # entidades le da al índice esa información que antes no tenía.
+    #
+    # Pero no mueve nada. Cuatro configuraciones sobre eval_set dan resultados
+    # idénticos dígito por dígito (93,0%, recall@10 29/54, MRR 0,425), y sobre
+    # las 8 preguntas que cruzan documentos da 6/8 con y sin.
+    #
+    # El diagnóstico es lo que importa: para "¿cómo se comanda desde el programa
+    # el mismo variador que aparece en el plano como INV1?", el chunk de la
+    # fórmula no está entre los 60 mejores NI SIQUIERA filtrando solo por VFD01.
+    # Su similitud con la pregunta es genuinamente baja —es código ARGEE crudo—,
+    # así que el problema no era el vínculo de entidad sino el vocabulario del
+    # embedding. Etiquetar no acerca un vector.
+    #
+    # Las etiquetas quedan igual (`entidades`, `entidades_doc`, `ent_<CODIGO>`):
+    # son correctas, cuestan cero y habilitan otros mecanismos. Lo que se apaga
+    # es esta consulta extra, que cuesta una llamada al índice por entidad.
+    #
+    #   python eval/run_eval.py --variant entity_fetch_k=8
+    ENTITY_FETCH_K = 0
+
     RELATIVE_GATE_ENABLED = False
     RELATIVE_GATE_MARGIN = 0.15
 

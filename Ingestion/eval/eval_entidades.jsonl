@@ -1,0 +1,8 @@
+{"question":"¿Qué dice el manual del fabricante sobre resetear a fábrica el variador que está instalado en el secadero?","answer_key":"P112","category":"entidad_cruzada","cruce":"manual PowerFlex + inventario VFD01"}
+{"question":"El variador del secadero, ¿de qué familia es y qué corriente tiene su protección?","answer_key":"PowerFlex 4M y 10 A","category":"entidad_cruzada","cruce":"inventario + plano"}
+{"question":"¿Cómo se comanda desde el programa el mismo variador que aparece en el plano como INV1?","answer_key":"4000 + (Variador * 160)","category":"entidad_cruzada","cruce":"programa + plano"}
+{"question":"¿Qué módulo de entradas y salidas usa el secadero y qué puertos IO-Link tiene ocupados?","answer_key":"TBEN-L4-8IOL, puertos 5 y 6","category":"entidad_cruzada","cruce":"inventario + programa"}
+{"question":"El guardamotor del forzador, ¿a qué valor está ajustado y qué motor protege?","answer_key":"1,6 A y el motor M01","category":"entidad_cruzada","cruce":"inventario + grafo"}
+{"question":"¿Qué sensores de temperatura usa el secadero y en qué puerto del TBEN están?","answer_key":"TH01 y TH02, en los puertos 5 y 6","category":"entidad_cruzada","cruce":"inventario + programa"}
+{"question":"¿Cuál es la potencia del motor que acciona el variador del secadero?","answer_key":"1 HP","category":"entidad_cruzada","cruce":"inventario + grafo"}
+{"question":"El Arduino del secadero, ¿qué acciona y con qué se alimenta?","answer_key":"los servomotores, alimentado por PS01 y PS02","category":"entidad_cruzada","cruce":"plano + inventario"}
