@@ -470,6 +470,54 @@ Dos trampas que la medición destapó y quedaron corregidas: el default de
 `get_or_create_collection`, que ante un nombre inexistente devuelve una colección
 **vacía** en vez de fallar. Encender el visual consultaba la nada en silencio.
 
+### El grafo de componentes: medido con y sin
+
+El grafo estaba activo sin haber demostrado que mejora nada, que es el mismo
+pecado que se le critica al reranking. Se midió.
+
+**Primero hubo que revisar lo que afirma.** Las 17 relaciones extraídas por un
+modelo llevaban todas `confianza: alta`, asignada por el mismo modelo que las
+extrajo, y ninguna había sido verificada. Leídas una por una contra su cita:
+
+| Veredicto | Cuántas | Qué significa |
+|---|---|---|
+| `directa` | 13 | el plano dibuja esa flecha entre esos dos componentes |
+| `inferida` | 4 | una frase genérica convertida en emparejamientos 1 a 1 que no dice |
+| `evidencia_no_corresponde` | 2 | la cita describe otra relación; se dejan fuera del prompt |
+
+Ninguna cita era inventada. Y apareció una arista faltante: una cita nombra el
+rango `SSR01-SSR03` y solo se había expandido `SSR01`.
+
+**Después se midió el aporte.** Sobre `eval_set`, el grafo dispara en **4 de 43**
+preguntas, y cuando dispara mete 23 a 27 componentes en el prompt, porque el
+contexto recuperado trae un chunk de plano que lista todos los códigos.
+
+| | Respuesta correcta en la salida |
+|---|---|
+| Con grafo | 36/43 (83,7%) |
+| Sin grafo | 38/43 (88,4%) |
+
+Esa diferencia de dos preguntas es ruido: **tres de las cuatro que cambian son
+preguntas donde el grafo ni siquiera dispara**, y la cuarta cambia por un falso
+positivo del verificador, no por una mejora real.
+
+**El set no contiene las preguntas para las que el grafo existe**, así que se
+escribieron: `eval/eval_grafo.jsonl`, 12 preguntas de recorrido —*"si se dispara
+QF02, ¿qué deja de funcionar?"*, *"¿cuál es el camino desde el diferencial hasta
+una resistencia?"*—. Resultado: **12/12 con grafo y 12/12 sin él**, y las
+respuestas son equivalentes leídas una al lado de la otra.
+
+**Por qué.** El grafo se construyó desde los mismos chunks que el retrieval
+recupera: el chunk del plano contiene literalmente `Conexiones: QD01 → QF01,
+QF01 → QF02…`. Es una **re-codificación de contenido recuperable**, no
+conocimiento nuevo. Ganaría su lugar si tuviera aristas que ningún chunk
+contiene —cruces entre dos documentos, un historial de mantenimiento, datos de
+un CMMS—, y hoy las 30 salen de un chunk indexado.
+
+Queda activo porque no resta y porque hace algo que el retrieval no puede:
+afirmar que una lista de conexiones es **completa**, lo que habilita responder
+"no hay otra conexión documentada". Ese uso no está medido.
+
 ### Por qué el reranking está apagado
 
 El pipeline arma un pool y después corta en 10 chunks. Con reranking, ese corte

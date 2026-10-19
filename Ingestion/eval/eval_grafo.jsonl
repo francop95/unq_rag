@@ -1,0 +1,12 @@
+{"question":"Si se dispara el interruptor QF02, ¿qué deja de funcionar?","answer_key":"los relés SSR01, SSR02 y SSR03 y por lo tanto las resistencias R01, R02 y R03","category":"grafo","salto":"QF02 → SSR → R"}
+{"question":"¿Qué protección alimenta a las resistencias calefactoras?","answer_key":"QF02, a través de los relés de estado sólido","category":"grafo","salto":"R ← SSR ← QF02"}
+{"question":"¿Qué componente hay entre el variador y el motor del forzador?","answer_key":"el guardamotor QM01","category":"grafo","salto":"VFD01 → QM01 → M01"}
+{"question":"¿Qué alimenta al Arduino Uno?","answer_key":"las fuentes PS01 y PS02","category":"grafo","salto":"PS01/PS02 → MCU01"}
+{"question":"¿Qué componentes dependen del módulo de entradas y salidas TBEN?","answer_key":"VFD01, SSR01, SSR02, SSR03 e IF01","category":"grafo","salto":"IO01 → varios"}
+{"question":"Si falla el módulo IO01, ¿se puede seguir comandando el variador?","answer_key":"no, porque IO01 llega al variador a través de IF01","category":"grafo","salto":"IO01 → IF01 → VFD01"}
+{"question":"¿Qué sensores entran al módulo TBEN?","answer_key":"TH01 y TH02","category":"grafo","salto":"TH01/TH02 → IO01"}
+{"question":"¿Cuál es el camino eléctrico desde el diferencial general hasta una resistencia calefactora?","answer_key":"QD01 → QF01 → QF02 → SSR01 → R01","category":"grafo","salto":"cadena de 4 saltos"}
+{"question":"¿Qué acciona las compuertas de intercambio de aire?","answer_key":"los servomotores SV01 y SV02, comandados por el Arduino MCU01","category":"grafo","salto":"MCU01 → SV → CMP"}
+{"question":"¿Qué protege al motor del forzador?","answer_key":"el guardamotor QM01","category":"grafo","salto":"QM01 → M01"}
+{"question":"¿Qué alimenta a la interfaz IF01?","answer_key":"el interruptor QF03 y el módulo IO01","category":"grafo","salto":"QF03/IO01 → IF01"}
+{"question":"Si corto el diferencial QD01, ¿qué queda sin alimentación?","answer_key":"toda la línea aguas abajo: QF01, QF02 y las resistencias","category":"grafo","salto":"QD01 → todo"}
