@@ -145,12 +145,16 @@ Cada chunk recibe:
   documento, generadas por `gpt-4o-mini`. Se anteponen al texto antes de
   embeberlo, para que un fragmento que dice "el valor máximo es 99,9" sepa de
   qué parámetro habla.
-- **Hasta 8 preguntas sintéticas** (`max_synthetic_questions = 8`), cada una
+- **Hasta 8 preguntas sintéticas** (`max_synthetic_questions = 4`), cada una
   indexada **como vector propio** con `parent_chunk_id` apuntando al original.
 
-Esa segunda parte es la que define la forma del índice: **el 87,2% de los
+Esa segunda parte es la que define la forma del índice: **el 76,8% de los
 vectores son preguntas sintéticas**. Cuando una consulta encuentra una de ellas,
 el retrieval recupera el chunk padre.
+
+Fueron 8 por chunk hasta que se midió el volumen. Con 4 el índice da el mismo
+93,0% de respuesta presente con 44% menos vectores, así que la mitad eran
+redundantes.
 
 ---
 
@@ -318,47 +322,50 @@ de las etapas no sabe ni necesita saber que el origen era código.
 
 ### Composición
 
-Colección `multimodal_documents_v4_4o`, **10.459 vectores**:
+Colección `multimodal_documents_v4_4o`, **5.864 vectores**:
 
 | Tipo | Vectores | % |
 |---|---|---|
-| `synthetic_question` | 9.124 | **87,2%** |
-| `text` | 678 | 6,5% |
-| `diagram_visual` | 306 | 2,9% |
-| `table` | 244 | 2,3% |
-| `superchunk` | 55 | 0,5% |
-| `diagram_text` | 45 | 0,4% |
+| `synthetic_question` | 4.506 | **76,8%** |
+| `text` | 701 | 12,0% |
+| `diagram_visual` | 306 | 5,2% |
+| `table` | 244 | 4,2% |
+| `superchunk` | 55 | 0,9% |
+| `diagram_text` | 45 | 0,8% |
 | `image` | 7 | 0,1% |
 
 Colecciones visuales, 313 vectores cada una: `visual_docs_v4_4o` (CLIP, 512
 dimensiones) y `visual_docs_v4_4o_mm` (`cohere.embed-v4`, 1536). Las dos
 contienen lo mismo: 306 `diagram_visual` y 7 `image`.
 
-Ese 87,2% no es un detalle: explica por qué el reranking empeora el resultado
-(el cross-encoder puntúa el contenido padre, no la pregunta que lo encontró) y
-por qué un documento grande puede acaparar el top-k. Los dos están medidos en
-`MODELOS.md` §7.
+Ese 76,8% explica por qué el reranking empeora el resultado: el cross-encoder
+puntúa el contenido padre, no la pregunta que lo encontró.
+
+Lo que **no** explica es que un documento grande acapare el top-k. Eso viene de
+su tamaño: bajar las preguntas de 8 a 4 deja la dominancia mediana en 92%, igual
+que antes, porque todos los documentos pierden la mitad y las proporciones no
+cambian. Los dos resultados están medidos en `MODELOS.md` §7.
 
 ### Listado final de documentos indexados
 
 **14 documentos**, ordenados por peso en el índice:
 
-| Vectores | Documento | Composición |
-|---:|---|---|
-| 3.626 | `manual powerflex 4m.pdf` | 3.173 preguntas · 208 texto · 169 tablas · 49 diagramas · 25 super · 1 imagen · 1 OCR |
-| 3.607 | `ARGEE_Reference_Manual.pdf` | 3.130 preguntas · 224 texto · 180 diagramas · 30 OCR · 29 tablas · 11 super · 3 imágenes |
-| 1.692 | `0_Construcción y automatización de un secadero…pdf` | 1.474 preguntas · 134 texto · 57 diagramas · 10 super · 9 OCR · 6 tablas · 2 imágenes |
-| 363 | `Inventario_secadero_revision_Pablo_v2.xlsx` | 321 preguntas · 28 tablas · 10 texto · 4 diagramas |
-| 301 | `tben-L4-8ioL.pdf` | 264 preguntas · 17 texto · 10 tablas · 5 diagramas · 4 super · 1 imagen |
-| 221 | `Propuesta de Trabajo Final — Sistema RAG Multimodal…pdf` | 195 preguntas · 24 texto · 2 super |
-| 207 | `control_secadero_251124.py` | 183 preguntas · 24 texto |
-| 134 | `Poster_didactico_secadero_componentes_y_planos.pdf` | 117 preguntas · 8 texto · 7 diagramas · 1 super · 1 OCR |
-| 121 | `osciloscopio_secadero_251023_1.py` | 106 preguntas · 14 texto · 1 super |
-| 83 | `Secadero v01 On TBEN-L4-8IOL.pdf` | 73 preguntas · 7 texto · 2 tablas · 1 super |
-| 67 | `2_Planos_secadero_codificados_propuesta.pdf` | 57 preguntas · 6 texto · 2 OCR · 2 diagramas |
-| 17 | `servosyrele300924.py` | 15 preguntas · 2 texto |
-| 10 | `1_Plano distribucion electrica_v1.pdf` | 8 preguntas · 1 OCR · 1 diagrama |
-| 10 | `conexionadoTben.pdf` | 8 preguntas · 1 OCR · 1 diagrama |
+| Vectores | Documento |
+|---:|---|
+| 2.064 | `manual powerflex 4m.pdf` |
+| 2.010 | `ARGEE_Reference_Manual.pdf` |
+| 936 | `0_Construcción y automatización de un secadero…pdf` |
+| 201 | `Inventario_secadero_revision_Pablo_v2.xlsx` |
+| 168 | `tben-L4-8ioL.pdf` |
+| 126 | `Propuesta de Trabajo Final…pdf` |
+| 117 | `control_secadero_251124.py` |
+| 69 | `Poster_didactico_secadero_componentes_y_planos.pdf` |
+| 66 | `osciloscopio_secadero_251023_1.py` |
+| 48 | `Secadero v01 On TBEN-L4-8IOL.pdf` |
+| 37 | `2_Planos_secadero_codificados_propuesta.pdf` |
+| 10 | `servosyrele300924.py` |
+| 6 | `1_Plano distribucion electrica_v1.pdf` |
+| 6 | `conexionadoTben.pdf` |
 
 **La asimetría es enorme y tiene consecuencias.** Los dos manuales de fabricante
 son el 70% del índice entre los dos; el programa de control que efectivamente
@@ -379,6 +386,11 @@ ingesta limpia produce los bounding boxes que dio el modelo de visión; hay que
 correr ese script después para re-recortar desde los bbox guardados, sin volver
 a llamar al modelo.
 
+**El etiquetado de entidades es otro paso aparte.** El índice recién construido
+no sabe que `PowerFlex 4M`, `INV1` y `VFD01` son el mismo equipo: eso lo escribe
+`scripts/etiquetar_entidades.py`, que el pipeline **no invoca**. Hay que correrlo
+después de cada ingesta o las etiquetas quedan en el índice anterior.
+
 **Un formato desconocido se ignora sin error.** Ver la sección 2.
 
 **Una copia vieja fuera del corpus no la ve el manifiesto.** El manifiesto solo
@@ -390,7 +402,7 @@ la configuración de la API nombra.
 
 **El índice visual se construye siempre, aunque esté apagado en la consulta.**
 Es barato y deliberado, pero significa que el conteo de vectores del archivo
-(11.085) no es el de la colección que sirve la API (10.459).
+(6.177) no es el de la colección que sirve la API (5.864).
 
 ---
 

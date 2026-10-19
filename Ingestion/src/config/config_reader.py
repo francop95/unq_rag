@@ -158,7 +158,7 @@ class ConfigReader:
         enrichment = EnrichmentConfig(
             use_contextual_retrieval=self.get_bool("use_contextual_retrieval", True),
             use_synthetic_questions=self.get_bool("use_synthetic_questions", True),
-            max_synthetic_questions=self.get_int("max_synthetic_questions", 8),
+            max_synthetic_questions=self.get_int("max_synthetic_questions", 4),
             enrichment_model=self.get("enrichment_model", "gpt-4o-mini"),
             enrichment_concurrency=self.get_int("enrichment_concurrency", 4),
             use_dedicated_figure_pass=self.get_bool("use_dedicated_figure_pass", True),
