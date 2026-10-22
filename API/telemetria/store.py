@@ -244,6 +244,12 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
 
     # Qué fuentes terminó mostrando la respuesta, para poder distinguir
     # "no se recuperó" de "se recuperó y no se mostró".
+    #
+    # `citado` es el subconjunto que el modelo declaró haber usado
+    # (RetrieverQna lo marca desde referred_contexts). La diferencia entre las
+    # dos columnas es la medida de cuánto del contexto recuperado sobra: un
+    # chunk mostrado y nunca citado, consulta tras consulta, es ruido que el
+    # retrieval trae de más.
     mostrados = set()
     citados = set()
     if isinstance(respuesta, list) and respuesta:
@@ -251,6 +257,8 @@ def _registrar(data, respuesta, tiempos, desde_cache) -> None:
         for s in (r0.get("sources") or []):
             clave = (str(s.get("file_name") or ""), str(s.get("page") or ""))
             mostrados.add(clave)
+            if s.get("citado"):
+                citados.add(clave)
 
     if df is not None and getattr(df, "empty", True) is False:
         for pos, (_, row) in enumerate(df.iterrows(), start=1):

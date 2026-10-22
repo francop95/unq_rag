@@ -11,6 +11,15 @@ export interface Source {
   media: MediaItem[];
   text?: string;
   /**
+   * El modelo declaró haber usado esta fuente para responder (`referred_contexts`).
+   * Lo que no está citado se recuperó y se le entregó al modelo, pero no es
+   * respaldo de lo que dijo: va plegado detrás de "ver todo el contexto".
+   *
+   * Opcional porque una respuesta servida del caché puede venir de antes de que
+   * el campo existiera; `splitSources` trata esa ausencia como "no declaró nada".
+   */
+  citado?: boolean;
+  /**
    * Plano adjuntado siempre al LLM (no recuperado del índice por similitud), así
    * que no tiene score ni chunk asociado: se muestra solo como referencia abrible.
    */

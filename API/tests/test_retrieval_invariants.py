@@ -304,3 +304,83 @@ def test_el_cupo_no_inventa_candidatos():
     cands = [cand(f"a{i}", dense=0.9 - i * 0.01, file_name="a.pdf") for i in range(15)]
     sel, entraron = ChromaConnection._aplicar_cupo_otros_documentos(cands, top_k=10, cupo=2)
     assert len(sel) == 10 and entraron == set()
+
+
+# ────────────────────────────────────────── citas: qué declaró el modelo vs qué se le dio
+
+def _retriever(context_rows):
+    """RetrieverQna con lo mínimo para ejercitar parse_response, sin tocar la red."""
+    import pandas as pd
+    from qnas.RetrieverQna_multimodal import RetrieverQna
+
+    r = object.__new__(RetrieverQna)
+    r.query_id = "t"
+    r.completion_success = "Success"
+    r.text_column = "Text"
+    r.filename_column = "File Name"
+    r.similarity_column = "Similarity Score"
+    r.page_number_column = "Page Number"
+    r.default_response_dict = {"question": "q", "answer": "", "file_name": [""],
+                               "page": [0], "global": [False], "similarity_score": 0,
+                               "ans_type": "gpt", "sources": []}
+    r.context_df = pd.DataFrame(context_rows)
+    return r
+
+
+def _fila(nombre, pagina, score, media=None):
+    return {"File Name": nombre, "Page Number": pagina, "Similarity Score": score,
+            "Text": f"texto de {nombre}", "content_type": "diagram_visual" if media else "text",
+            "media_path": media, "image_path": None}
+
+
+def _respuesta(referred, contexto):
+    """Corre parse_response con la respuesta cruda que habría devuelto el LLM."""
+    r = _retriever(contexto)
+    data = {"gpt_response_raw": [{"res_status": "Success", "response": json.dumps(
+        {"output": {"answer": "x", "referred_contexts": referred, "used_plans": False}})}],
+        "attach_electric_diagrams": False}
+    return r.parse_response(data)["gpt_response"][0]["sources"]
+
+
+def test_solo_se_marca_citado_lo_que_el_modelo_declaro():
+    """La figura del motor se citó; las tres del manual del variador no.
+
+    Sin esta distinción, preguntar "¿el motor está en estrella o triángulo?"
+    mostraba, al mismo nivel que la foto de la chapa del motor, la tabla de
+    fallos del PowerFlex y dos diagramas de conexión a tierra: contexto
+    recuperado, no respaldo de lo que se respondió.
+    """
+    ctx = [_fila("tesis.pdf", 16, 58.5, media="img/motor.png"),
+           _fila("powerflex.pdf", 18, 55.1, media="img/tierra.png"),
+           _fila("powerflex.pdf", 80, 54.9, media="tab/fallos.json")]
+    srcs = _respuesta([1], ctx)
+    citadas = [s for s in srcs if s["citado"]]
+    assert [s["page"] for s in citadas] == [16]
+    assert {s["page"] for s in srcs if not s["citado"]} == {18, 80}
+
+
+def test_lo_no_citado_igual_viaja():
+    """Se pliega, no se tira: el modelo a veces omite citar la figura de la que
+    sacó el dato, y descartarla dejaría la respuesta sin nada verificable."""
+    ctx = [_fila("a.pdf", 1, 60.0, media="img/a.png"),
+           _fila("b.pdf", 2, 55.0, media="img/b.png")]
+    assert len(_respuesta([1], ctx)) == 2
+
+
+def test_el_respaldo_sin_citas_no_se_hace_pasar_por_citado():
+    """Cuando el modelo no cita nada se muestran los contextos más relevantes,
+    pero `citado` queda en False: lo que sabemos es qué tuvo a la vista, no qué
+    usó, y el frontend lo rotula distinto."""
+    ctx = [_fila(f"d{i}.pdf", i, 70.0 - i) for i in range(5)]
+    srcs = _respuesta([], ctx)
+    assert len(srcs) == 3, "el respaldo muestra los 3 más relevantes"
+    assert all(s["citado"] is False for s in srcs)
+
+
+def test_las_citadas_van_antes_que_las_demas_aunque_puntuen_menos():
+    """`sources` se consume también sin mirar `citado` (telemetría, API): el
+    orden tiene que poner primero lo que el modelo dijo haber usado."""
+    ctx = [_fila("ruido.pdf", 1, 72.0, media="img/ruido.png"),
+           _fila("usado.pdf", 2, 51.0, media="img/usado.png")]
+    srcs = _respuesta([2], ctx)
+    assert [s["file_name"] for s in srcs] == ["usado.pdf", "ruido.pdf"]

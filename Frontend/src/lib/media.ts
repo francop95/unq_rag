@@ -9,6 +9,13 @@ export interface MediaEntry {
   /** Número que muestra el panel de fuentes (1-based), para poder referenciarla. */
   sourceNumber: number;
   kind: "image" | "table";
+  /**
+   * Posición en la lista completa. La galería muestra un subconjunto, así que
+   * su índice local no sirve para abrir el visor en la pieza correcta.
+   */
+  index: number;
+  /** Su fuente está entre las que el modelo declaró haber usado. */
+  citada: boolean;
 }
 
 export const CONTENT_TYPE_LABEL: Record<string, string> = {
@@ -42,8 +49,12 @@ export function kindOf(media: MediaItem): "image" | "table" | null {
  * que se muestran las fuentes. Es lo que alimenta la galería y el visor: sin esto
  * cada imagen queda escondida detrás de su propia fila colapsada del panel y el
  * usuario no se entera de que la respuesta trae diagramas.
+ *
+ * `citadas` marca cuáles entran en la galería. El visor igual recorre la lista
+ * completa: una vez abierto, poder pasar a la figura de al lado es parte de
+ * revisar el contexto, no de la afirmación sobre de dónde salió la respuesta.
  */
-export function collectMedia(sources: Source[]): MediaEntry[] {
+export function collectMedia(sources: Source[], citadas?: Set<Source>): MediaEntry[] {
   const entries: MediaEntry[] = [];
   const seen = new Set<string>();
 
@@ -60,6 +71,8 @@ export function collectMedia(sources: Source[]): MediaEntry[] {
         fileName: source.file_name,
         page: source.page,
         sourceNumber: i + 1,
+        index: entries.length,
+        citada: citadas ? citadas.has(source) : true,
       });
     });
   });

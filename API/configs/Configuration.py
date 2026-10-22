@@ -692,8 +692,12 @@ class Configuration:
         7) IDIOMA
         La respuesta debe estar en el mismo idioma que la pregunta.
 
-        8) REFERENCIAS A CONTEXTOS USADOS
+        8) REFERENCIAS A CONTEXTOS USADOS (CRÍTICO)
         "referred_contexts": devuelve una lista con los números "context_id" de los CONTEXTOS que utilizaste.
+        - Es lo único que decide qué fuentes ve el usuario junto a tu respuesta: lo que no listes acá queda plegado detrás de "ver todo el contexto".
+        - Incluí TODOS los contextos que aportaron algo a la respuesta, no solo el principal.
+        - Si un contexto viene marcado "[IMAGEN DISPONIBLE...]" y su información respalda lo que decís, incluilo igual que cualquier otro: es lo que hace que esa imagen se le muestre al usuario. Omitirlo esconde la única evidencia que podría verificar tu respuesta.
+        - NO incluyas contextos que leíste y descartaste por no venir al caso. Listarlos de más le muestra al usuario material que no tiene que ver con lo que preguntó.
         - Si no usaste ningún contexto o no hay info suficiente, devuelve [].
         - Asegúrate de que "referred_contexts" sea siempre una lista de enteros.
 

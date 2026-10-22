@@ -2,8 +2,11 @@ import { mediaUrl } from "../api/client";
 import { CONTENT_TYPE_LABEL, summarizeMedia, type MediaEntry } from "../lib/media";
 
 interface Props {
+  /** Solo las piezas citadas; el índice de cada una apunta a la lista completa. */
   entries: MediaEntry[];
   onOpen: (index: number) => void;
+  /** El modelo no declaró fuentes: esto es lo recuperado, no lo que dijo usar. */
+  sinDeclarar?: boolean;
 }
 
 function TableThumb() {
@@ -29,8 +32,13 @@ function TableThumb() {
  * antes cada uno vivía escondido detrás de su fila colapsada del panel, todas
  * idénticas entre sí. El usuario no tenía forma de saber que la respuesta traía
  * diagramas, y en un asistente de mantenimiento el diagrama suele ser LA respuesta.
+ *
+ * Muestra solo lo que el modelo citó. Con los 5-7 recuperados sin filtrar, la tira
+ * contradecía a la respuesta: una pregunta sobre la conexión del motor aparecía
+ * ilustrada con la tabla de inventario y dos figuras del variador, y el usuario
+ * tenía que adivinar cuál de las cinco era la que importaba.
  */
-export default function MediaGallery({ entries, onOpen }: Props) {
+export default function MediaGallery({ entries, onOpen, sinDeclarar }: Props) {
   if (entries.length === 0) return null;
 
   return (
@@ -42,7 +50,7 @@ export default function MediaGallery({ entries, onOpen }: Props) {
           <path d="M2 11.5l3.2-2.8 2.4 2.1 2.6-2.6L14 11.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <p className="font-mono text-[0.7rem] uppercase tracking-wide text-muted">
-          Material visual
+          {sinDeclarar ? "Material visual recuperado" : "Material visual citado"}
         </p>
         <span className="font-mono text-[0.7rem] text-muted-2">{summarizeMedia(entries)}</span>
       </div>
@@ -51,11 +59,11 @@ export default function MediaGallery({ entries, onOpen }: Props) {
           avisa que hay más material más allá del corte. */}
       <div className="relative">
         <div className="flex gap-2.5 overflow-x-auto pb-2 pr-6">
-        {entries.map((entry, i) => (
+        {entries.map((entry) => (
           <button
             key={entry.path}
             type="button"
-            onClick={() => onOpen(i)}
+            onClick={() => onOpen(entry.index)}
             title={`${CONTENT_TYPE_LABEL[entry.media.content_type || ""] || "Adjunto"} — ${entry.fileName}, pág. ${entry.page}`}
             className="group relative w-36 shrink-0 overflow-hidden rounded-xl border border-border bg-surface-2 text-left transition duration-200 hover:-translate-y-0.5 hover:border-accent-2/60 hover:shadow-lg hover:shadow-accent-2/10"
           >

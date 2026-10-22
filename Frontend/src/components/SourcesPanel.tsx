@@ -2,11 +2,12 @@ import { useState } from "react";
 import type { Source } from "../types/api";
 import { sourceDocumentUrl, mediaUrl } from "../api/client";
 import { CONTENT_TYPE_LABEL, kindOf, mediaPathOf, type MediaEntry } from "../lib/media";
+import type { SourceSplit } from "../lib/sources";
 import ChunkText from "./ChunkText";
 import TableBlock from "./TableBlock";
 
 interface Props {
-  sources: Source[];
+  split: SourceSplit;
   mediaEntries: MediaEntry[];
   onOpenMedia: (index: number) => void;
 }
@@ -202,15 +203,14 @@ function SectionLabel({ children, count }: { children: React.ReactNode; count: n
   );
 }
 
-export default function SourcesPanel({ sources, mediaEntries, onOpenMedia }: Props) {
+export default function SourcesPanel({ split, mediaEntries, onOpenMedia }: Props) {
   const [collapsed, setCollapsed] = useState(false);
-  if (!sources || sources.length === 0) return null;
+  // El contexto no citado arranca plegado: está para poder auditarlo, no para
+  // competir por atención con las fuentes de las que salió la respuesta.
+  const [verResto, setVerResto] = useState(false);
 
-  // Los planos se separan de los chunks recuperados: no compiten por relevancia (se
-  // adjuntan siempre) y mezclarlos hacía que un plano con 0% se leyera como la peor
-  // fuente de la lista, cuando muchas veces es de donde sale la respuesta.
-  const chunks = sources.filter((s) => !s.is_attached_plan);
-  const plans = sources.filter((s) => s.is_attached_plan);
+  const { citadas, resto, planos, declaradas } = split;
+  if (citadas.length + resto.length + planos.length === 0) return null;
 
   return (
     <div className="mt-3 rounded-xl border border-border/70 bg-surface/40 p-3">
@@ -226,9 +226,10 @@ export default function SourcesPanel({ sources, mediaEntries, onOpenMedia }: Pro
           De dónde salió esta respuesta
         </span>
         <span className="font-mono text-[0.68rem] text-muted-2">
-          {chunks.length > 0 && `${chunks.length} ${chunks.length === 1 ? "fragmento" : "fragmentos"}`}
-          {chunks.length > 0 && plans.length > 0 && " · "}
-          {plans.length > 0 && `${plans.length} ${plans.length === 1 ? "plano" : "planos"}`}
+          {citadas.length > 0 && `${citadas.length} ${citadas.length === 1 ? "fragmento" : "fragmentos"}`}
+          {citadas.length > 0 && planos.length > 0 && " · "}
+          {planos.length > 0 && `${planos.length} ${planos.length === 1 ? "plano" : "planos"}`}
+          {resto.length > 0 && ` · +${resto.length} de contexto`}
         </span>
         <svg
           viewBox="0 0 12 12"
@@ -241,10 +242,21 @@ export default function SourcesPanel({ sources, mediaEntries, onOpenMedia }: Pro
 
       {!collapsed && (
         <div className="mt-3 space-y-3">
-          {chunks.length > 0 && (
+          {citadas.length > 0 && (
             <div className="space-y-1.5">
-              <SectionLabel count={chunks.length}>Fragmentos del manual</SectionLabel>
-              {chunks.map((source, i) => (
+              <SectionLabel count={citadas.length}>
+                {declaradas ? "Fragmentos citados en la respuesta" : "Contexto recuperado"}
+              </SectionLabel>
+              {/* Sin declaración del modelo no se puede afirmar de dónde salió la
+                  respuesta, solo qué tuvo a la vista. Decirlo es más útil que
+                  presentar lo recuperado como si fuera la cita. */}
+              {!declaradas && (
+                <p className="text-[0.68rem] leading-snug text-muted-2">
+                  El modelo no declaró qué fragmentos usó; estos son los más relevantes
+                  de los que recibió.
+                </p>
+              )}
+              {citadas.map((source, i) => (
                 <SourceCard
                   key={i}
                   source={source}
@@ -256,12 +268,52 @@ export default function SourcesPanel({ sources, mediaEntries, onOpenMedia }: Pro
             </div>
           )}
 
-          {plans.length > 0 && (
+          {planos.length > 0 && (
             <div className="space-y-1.5">
-              <SectionLabel count={plans.length}>Planos de referencia</SectionLabel>
-              {plans.map((source, i) => (
+              <SectionLabel count={planos.length}>Planos de referencia</SectionLabel>
+              {planos.map((source, i) => (
                 <PlanCard key={i} source={source} />
               ))}
+            </div>
+          )}
+
+          {resto.length > 0 && (
+            <div className="space-y-1.5 border-t border-border/50 pt-3">
+              <button
+                type="button"
+                onClick={() => setVerResto((v) => !v)}
+                className="flex w-full items-center gap-2 text-left font-mono text-[0.68rem] text-muted-2 transition hover:text-text"
+              >
+                <svg
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  className={`h-3 w-3 transition-transform duration-200 ${verResto ? "rotate-180" : ""}`}
+                >
+                  <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="flex-1">
+                  Ver todo el contexto recuperado ({resto.length}{" "}
+                  {resto.length === 1 ? "fragmento más" : "fragmentos más"})
+                </span>
+              </button>
+
+              {verResto && (
+                <div className="animate-fade-in-up space-y-1.5 opacity-80">
+                  <p className="text-[0.68rem] leading-snug text-muted-2">
+                    Se recuperaron del índice y se le entregaron al modelo, pero no los
+                    citó como respaldo de esta respuesta.
+                  </p>
+                  {resto.map((source, i) => (
+                    <SourceCard
+                      key={i}
+                      source={source}
+                      number={citadas.length + i + 1}
+                      mediaEntries={mediaEntries}
+                      onOpenMedia={onOpenMedia}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

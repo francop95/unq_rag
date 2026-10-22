@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage as ChatMessageT } from "../types/chat";
 import { collectMedia } from "../lib/media";
+import { splitSources } from "../lib/sources";
 import SourcesPanel from "./SourcesPanel";
 import { FeedbackWidget } from "./FeedbackWidget";
 import MediaGallery from "./MediaGallery";
@@ -71,7 +72,18 @@ function CopyButton({ text }: { text: string }) {
 export default function ChatMessage({ message }: { message: ChatMessageT }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  const mediaEntries = useMemo(() => collectMedia(message.sources || []), [message.sources]);
+  const split = useMemo(() => splitSources(message.sources || []), [message.sources]);
+
+  // El orden de `mediaEntries` tiene que ser el mismo en que el panel numera las
+  // tarjetas, porque la miniatura muestra ese número para que se pueda ir de la
+  // galería a la fuente. Por eso se arma sobre citadas → resto → planos, que es
+  // exactamente como los renderiza SourcesPanel.
+  const mediaEntries = useMemo(() => {
+    const ordenadas = [...split.citadas, ...split.resto, ...split.planos];
+    return collectMedia(ordenadas, new Set(split.citadas));
+  }, [split]);
+
+  const galeria = useMemo(() => mediaEntries.filter((e) => e.citada), [mediaEntries]);
 
   if (message.role === "user") {
     return (
@@ -105,11 +117,15 @@ export default function ChatMessage({ message }: { message: ChatMessageT }) {
           )}
         </div>
 
-        <MediaGallery entries={mediaEntries} onOpen={setLightboxIndex} />
+        <MediaGallery
+          entries={galeria}
+          onOpen={setLightboxIndex}
+          sinDeclarar={!split.declaradas}
+        />
 
         {message.sources && (
           <SourcesPanel
-            sources={message.sources}
+            split={split}
             mediaEntries={mediaEntries}
             onOpenMedia={setLightboxIndex}
           />

@@ -106,14 +106,20 @@ class RetrieverQna:
             for i, chunk in enumerate(self.context_df.to_dict(orient='records')):
                 content = chunk.get(self.text_column, "")
                 # Si este chunk tiene imagen/diagrama/tabla asociada, el usuario SÍ
-                # va a poder verla (se muestra aparte, en "Fuentes citadas"), aunque
+                # va a poder verla (se muestra aparte, en el panel de fuentes), aunque
                 # el modelo no pueda incluirla en el texto de la respuesta. Sin esta
                 # marca el modelo asume que no hay fotos disponibles y se lo dice mal
                 # al usuario, incluso citando este mismo context_id.
+                #
+                # La nota además le avisa que citar el context_id es lo que hace
+                # aparecer la imagen: desde que la galería muestra solo lo citado,
+                # no citar una figura que usó equivale a esconderla.
                 media_note = (
-                    "[IMAGEN DISPONIBLE para el usuario en la interfaz — no digas que "
-                    "no hay fotos/imágenes de esto, decí que está disponible para ver "
-                    "junto con la respuesta]\n" if self._row_has_media(chunk) else ""
+                    "[IMAGEN DISPONIBLE: existe una foto/figura real de esto que el "
+                    "usuario puede ver. Se le muestra SOLO si incluís este context_id "
+                    "en referred_contexts. No digas que no hay fotos/imágenes de esto: "
+                    "decí que está disponible para ver junto con la respuesta]\n"
+                    if self._row_has_media(chunk) else ""
                 )
                 context_blocks.append(
                     f"""
@@ -255,11 +261,15 @@ class RetrieverQna:
     def _context_media_indices(self, exclude: set) -> List[int]:
         """
         Índices (0-based) de self.context_df cuyos chunks tienen media (imagen/
-        diagrama/tabla) asociada, excluyendo los que ya están en `exclude`. Se usa
-        para mostrar imágenes/planos aunque el modelo no los haya citado por texto
-        en "referred_contexts" (algo habitual: el modelo interpreta imágenes/planos
-        visualmente, no como texto citable, así que sin esto casi nunca llegarían al
-        frontend pese a haber sido parte del contexto real usado para responder).
+        diagrama/tabla) asociada, excluyendo los que ya están en `exclude`.
+
+        Son el contexto visual que se recuperó y el modelo NO citó. Viajan igual,
+        marcados `citado: False`, porque el modelo a veces omite citar la figura de
+        la que sacó el dato y perderla sería perder la única evidencia verificable
+        de esa respuesta. Pero van detrás de "ver todo el contexto": antes se
+        mezclaban con las citadas y una pregunta sobre la conexión del motor
+        aparecía ilustrada con la tabla de inventario y dos figuras del manual del
+        variador, que es contexto recuperado, no respaldo de lo que se respondió.
         """
         if self.context_df is None or self.context_df.empty:
             return []
@@ -296,18 +306,26 @@ class RetrieverQna:
                 "media": [],
                 "text": "",
                 "is_attached_plan": True,
+                # Solo se emiten cuando el modelo declaró `used_plans`, así que
+                # llegar hasta acá ya es la declaración de que los usó.
+                "citado": True,
             }
             for path in paths
             if path and os.path.exists(path)
         ]
 
-    def _build_sources(self, subset) -> List[Dict[str, Any]]:
+    def _build_sources(self, subset, citado: bool) -> List[Dict[str, Any]]:
         """
         Arma la lista de fuentes (citadas por texto y/o con media asociada) con
         su media, para que el frontend pueda mostrar imágenes/tablas/planos junto
         con la respuesta. `subset` es un slice de self.context_df.
         Soporta tanto el modo "chunk" (columnas content_type/media_path/image_path)
         como el modo "page" (columnas *_types/*_paths, listas por página).
+
+        `citado` dice si el modelo declaró haber usado estas fuentes
+        (referred_contexts) o si solo se le entregaron. Es la distinción que
+        separa "de acá salió la respuesta" de "esto se recuperó", y el frontend
+        la usa para decidir qué mostrar arriba y qué dejar plegado.
         """
         sources = []
         records = subset.to_dict(orient="records")
@@ -348,6 +366,7 @@ class RetrieverQna:
                 "similarity_score": similarity,
                 "media": media,
                 "text": row.get(self.text_column, "") or "",
+                "citado": citado,
             })
         return sources
 
@@ -414,7 +433,9 @@ class RetrieverQna:
                     # Se muestran los contextos MÁS RELEVANTES de los que se le
                     # entregaron. No son los que declaró haber usado —eso no lo
                     # sabemos— sino los que tuvo a la vista: una afirmación más
-                    # débil, pero cierta.
+                    # débil, pero cierta. Por eso viajan con `citado: False` y el
+                    # frontend los rotula distinto.
+                    cito_el_modelo = bool(idxs)
                     if not idxs and self.context_df is not None and len(self.context_df) > 0:
                         idxs = list(range(min(UNCITED_FALLBACK_TOP_N, len(self.context_df))))
                         logger.info(
@@ -460,7 +481,10 @@ class RetrieverQna:
                         res_dict["global"] = [False]
 
                     # Fuentes citadas explícitamente por el modelo (texto)
-                    cited_sources = self._build_sources(self.context_df.iloc[idxs]) if idxs else []
+                    cited_sources = (
+                        self._build_sources(self.context_df.iloc[idxs], citado=cito_el_modelo)
+                        if idxs else []
+                    )
 
                     # + fuentes con media (imágenes/diagramas/tablas) del contexto
                     # recuperado que el modelo no citó por texto (ver _context_media_indices).
@@ -471,21 +495,28 @@ class RetrieverQna:
                     }
                     media_idxs = self._context_media_indices(exclude=set(idxs))
                     media_sources = []
-                    for s in (self._build_sources(self.context_df.iloc[media_idxs]) if media_idxs else []):
+                    for s in (self._build_sources(self.context_df.iloc[media_idxs], citado=False)
+                              if media_idxs else []):
                         media_keys = {m.get("media_path") or m.get("image_path") for m in s.get("media", [])}
                         if media_keys & already_seen:
                             continue
                         already_seen |= media_keys
                         media_sources.append(s)
 
-                    # Orden final por relevancia real: sin esto, el orden queda
-                    # determinado por cómo el LLM citó los context_id (no por score),
-                    # y las fuentes con media no citadas por texto siempre quedan al
-                    # final aunque tengan mejor score que alguna citada.
+                    # Citadas primero, y dentro de cada grupo por relevancia real.
+                    #
+                    # El score ordena dentro del grupo porque sin eso el orden lo
+                    # fija cómo el LLM enumeró los context_id, que no tiene nada que
+                    # ver con qué tan cerca está cada fuente de la pregunta. Y el
+                    # grupo va antes que el score porque un chunk no citado con 72%
+                    # sigue siendo contexto recuperado, no respaldo de la respuesta:
+                    # quien consuma `sources` sin mirar `citado` igual recibe
+                    # primero lo que el modelo dijo haber usado. (Los planos se
+                    # agregan después, aparte: no se recuperaron por similitud y el
+                    # frontend los muestra en su propia sección.)
                     res_dict["sources"] = sorted(
                         cited_sources + media_sources,
-                        key=lambda s: s.get("similarity_score", 0),
-                        reverse=True,
+                        key=lambda s: (not s.get("citado"), -float(s.get("similarity_score") or 0)),
                     )
 
                     # Si el modelo no devolvió "used_plans" (p. ej. porque el JSON
