@@ -53,6 +53,7 @@ ingesta, que ya no manda al modelo de visión un recorte en blanco.
 """
 
 import argparse
+import json
 import os
 import sys
 from collections import defaultdict
@@ -101,6 +102,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--escribir", action="store_true", help="borra de verdad")
     ap.add_argument("--coleccion", default=None)
+    # Además de los recortes vacíos, se pueden purgar las figuras que la
+    # auditoría marcó como descritas con algo que no está en la imagen. Van por
+    # el mismo camino porque el daño es el mismo —evidencia falsa indexada— y
+    # porque el arrastre de preguntas sintéticas hay que hacerlo igual.
+    ap.add_argument("--desde-auditoria", metavar="RUTA", default=None,
+                    help="JSON de auditar_descripciones_visuales.py; purga los no_coincide")
+    ap.add_argument("--conservar", nargs="*", default=[], metavar="RUTA_MEDIA",
+                    help="media_path a NO purgar aunque la auditoría los marque")
     args = ap.parse_args()
 
     from configs.Configuration import Configuration as C
@@ -116,6 +125,24 @@ def main() -> int:
 
     total = col.count()
     print(f"Colección {coleccion}: {total} vectores\n")
+
+    # Rutas que la auditoría marcó como descritas con algo que no está en la
+    # imagen. Se comparan por el final de la ruta porque el índice guarda
+    # `media/images/...` y la auditoría la ruta absoluta.
+    marcadas_auditoria = set()
+    if args.desde_auditoria:
+        with open(args.desde_auditoria, encoding="utf-8") as f:
+            for r in json.load(f):
+                if r.get("veredicto") == "no_coincide":
+                    marcadas_auditoria.add(os.path.normpath(r["ruta"]))
+        conservar = {os.path.normpath(c) for c in args.conservar}
+        marcadas_auditoria = {
+            r for r in marcadas_auditoria
+            if not any(r.endswith(c) or c.endswith(r) for c in conservar)
+        }
+        print(f"Auditoría: {len(marcadas_auditoria)} figuras con descripción "
+              f"que no coincide" + (f" ({len(conservar)} conservadas a mano)"
+                                    if conservar else "") + "\n")
 
     # Primera pasada: qué chunks tienen la imagen en blanco.
     en_blanco = {}          # (file_name, page_num, chunk_id) -> (id, media_path)
@@ -139,30 +166,37 @@ def main() -> int:
             if meta.get("media_path") and not ruta:
                 sin_archivo.append(meta["media_path"])
                 continue
-            if ruta and _fraccion_con_tinta(ruta) < MINIMO_TINTA:
-                en_blanco[(fn, pag, meta.get("chunk_id"))] = (cid, meta["media_path"])
+            if not ruta:
+                continue
+            motivo = None
+            if _fraccion_con_tinta(ruta) < MINIMO_TINTA:
+                motivo = "recorte en blanco"
+            elif os.path.normpath(ruta) in marcadas_auditoria:
+                motivo = "descripción no coincide con la imagen"
+            if motivo:
+                en_blanco[(fn, pag, meta.get("chunk_id"))] = (cid, meta["media_path"], motivo)
         desplazamiento += len(ids)
         print(f"  revisados {desplazamiento}/{total}...", end="\r", flush=True)
     print(" " * 46, end="\r")
 
     if not en_blanco:
-        print("No hay imágenes en blanco en el índice. Nada que hacer.")
+        print("Nada que purgar.")
         return 0
 
     a_borrar, detalle = [], []
-    for clave, (cid, mp) in sorted(en_blanco.items(), key=lambda x: str(x[0])):
+    for clave, (cid, mp, motivo) in sorted(en_blanco.items(), key=lambda x: str(x[0])):
         fn, pag, chunk_id = clave
         preguntas = hijos.get(clave, [])
         a_borrar.append(cid)
         a_borrar.extend(c for c, _ in preguntas)
-        detalle.append((fn, pag, chunk_id, mp, preguntas))
+        detalle.append((fn, pag, chunk_id, mp, motivo, preguntas))
 
-    print(f"Chunks con imagen en blanco: {len(en_blanco)}")
+    print(f"Chunks a purgar: {len(en_blanco)}")
     print(f"Preguntas sintéticas colgando de ellos: {len(a_borrar) - len(en_blanco)}")
     print(f"Total de vectores a borrar: {len(a_borrar)}\n")
 
-    for fn, pag, chunk_id, mp, preguntas in detalle:
-        print(f"  {fn}  pág.{pag}  [{chunk_id}]")
+    for fn, pag, chunk_id, mp, motivo, preguntas in detalle:
+        print(f"  {fn}  pág.{pag}  [{chunk_id}]  — {motivo}")
         print(f"      {mp}")
         for _, q in preguntas:
             print(f"      · {q}")
