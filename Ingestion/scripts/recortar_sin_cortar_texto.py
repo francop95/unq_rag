@@ -66,6 +66,56 @@ def bloques_de_texto(page):
     return salida
 
 
+def imagenes_de_la_pagina(page):
+    """Rectángulos de las imágenes incrustadas, en coordenadas normalizadas.
+
+    El bbox que devuelve el modelo de visión es una estimación mirando la página
+    renderizada, y no siempre cae donde está la imagen. En la página 18 de la
+    tesis el bbox iba de y=0,40 a y=0,65 mientras la foto ocupaba 0,448 a 0,683:
+    el recorte empezaba 40 pt por encima —metiendo el párrafo anterior— y
+    terminaba 27 pt antes del borde inferior de la figura, que es exactamente el
+    corte que se ve al ampliarla.
+
+    El PDF sabe dónde están sus imágenes al punto, así que no hace falta
+    adivinar: se leen y se usan para corregir el encuadre.
+    """
+    w, h = page.rect.width, page.rect.height
+    salida = []
+    for info in page.get_images(full=True):
+        for r in page.get_image_rects(info[0]):
+            if r.width <= 1 or r.height <= 1:
+                continue
+            salida.append((r.x0 / w, r.y0 / h, r.x1 / w, r.y1 / h))
+    return salida
+
+
+def encuadrar_imagenes(bbox, imagenes):
+    """Expande el bbox para contener entera cualquier imagen que toque.
+
+    Solo se consideran las que el recorte ya intersecta de verdad: una figura
+    vecina que apenas roza el borde no debe arrastrar el encuadre hasta ella.
+    Devuelve (bbox_nuevo, cuántas imágenes estaba partiendo).
+    """
+    x0, y0, x1, y1 = bbox
+    partidas = 0
+    for ix0, iy0, ix1, iy1 in imagenes:
+        if _solapamiento(bbox, (ix0, iy0, ix1, iy1)) < FRACCION_IMAGEN:
+            continue
+        if ix0 >= x0 and iy0 >= y0 and ix1 <= x1 and iy1 <= y1:
+            continue  # ya entra entera
+        partidas += 1
+        x0, y0 = min(x0, ix0), min(y0, iy0)
+        x1, y1 = max(x1, ix1), max(y1, iy1)
+    return (x0, y0, x1, y1), partidas
+
+
+# Cuánto de una imagen incrustada tiene que caer dentro del recorte para que se
+# la considere parte de ESTA figura y se la incluya entera. Alto a propósito: el
+# objetivo es completar la figura que el recorte ya está mostrando, no absorber
+# la de al lado.
+FRACCION_IMAGEN = 0.25
+
+
 # Qué fracción de un bloque de texto tiene que caer dentro del recorte para
 # considerarlo parte de esta figura. Por encima, el recorte se expande hasta
 # contenerlo entero; por debajo, es un vecino y el recorte se achica para
@@ -286,7 +336,13 @@ def main():
         except Exception:
             continue
 
+        # Primero se completa la figura, después se evita partir texto: al revés,
+        # el ajuste de texto trabajaría sobre un encuadre que todavía corta la
+        # imagen y podría darlo por bueno.
+        bbox, imagenes_partidas = encuadrar_imagenes(tuple(bbox),
+                                                     imagenes_de_la_pagina(page))
         nuevo, partidos = expandir(tuple(bbox), bloques_de_texto(page), args.tope)
+        partidos += imagenes_partidas
         if partidos == 0:
             ok += 1
             continue
