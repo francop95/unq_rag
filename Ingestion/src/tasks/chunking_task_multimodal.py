@@ -1141,6 +1141,18 @@ class ChunkingTask(Task):
                 crop_path = None
                 if self._is_valid_bbox(bbox):
                     crop_img = self._crop_bbox(page_img, bbox)
+                    # Un recorte de imagen vacío se descarta entero, con su
+                    # descripción: el modelo no dice "no hay nada" cuando el
+                    # bbox cae en un hueco, inventa una figura. Ver
+                    # `_recorte_en_blanco`. Las tablas no se filtran acá porque
+                    # su texto sale del markdown extraído, no de mirar el PNG.
+                    if ctype == "image" and self._recorte_en_blanco(crop_img):
+                        logger.warning(
+                            f"  ⚠️  p{page_no}: recorte de imagen en blanco "
+                            f"(bbox {bbox}) → se descarta junto con su descripción"
+                        )
+                        counter -= 1
+                        continue
                     crop_path = os.path.join(
                         crops_dir,
                         f"{base_name}_p{page_no}_{ctype}_{counter}.png"
@@ -1267,6 +1279,34 @@ class ChunkingTask(Task):
         py0 = max(0, min(h, y0 * h))
         py1 = max(0, min(h, y1 * h))
         return img.crop((px0, py0, px1, py1))
+
+    # Un recorte con menos de esta fracción de píxeles con tinta es papel vacío.
+    # Medido sobre las 313 imágenes del índice: las seis en blanco daban 0,00% y
+    # la siguiente más vacía quedaba muy por encima, así que el umbral no está
+    # cerca de ningún caso legítimo.
+    FRACCION_TINTA_MINIMA = 0.02
+    UMBRAL_PAPEL = 244
+
+    @classmethod
+    def _recorte_en_blanco(cls, img: Image.Image) -> bool:
+        """True si el recorte no tiene nada: es papel.
+
+        Hace falta porque cuando el bbox del modelo cae sobre un espacio vacío,
+        el recorte sale blanco y la descripción que el propio modelo adjunta NO
+        dice "no hay nada": inventa una figura verosímil. En el ARGEE —que es el
+        manual de un entorno de programación y no tiene un solo diagrama de
+        motores— cuatro recortes vacíos quedaron descritos como circuitos de
+        arranque con contactor K1, relé térmico F1 y 380V, y de ahí se generaron
+        19 preguntas sintéticas igual de falsas. Una de ellas, "¿Cómo se conecta
+        el motor trifásico M1 en el circuito?", le ganaba por similitud a toda la
+        documentación auténtica ante una pregunta real sobre el motor.
+
+        O sea que esto no filtra ruido estético: corta evidencia fabricada antes
+        de que entre al índice, que es donde ya no se distingue de la verdadera.
+        """
+        gris = img.convert("L").resize((80, 80))
+        con_tinta = sum(1 for p in gris.getdata() if p < cls.UMBRAL_PAPEL)
+        return con_tinta / 6400.0 < cls.FRACCION_TINTA_MINIMA
 
     # ===============================
     # Utilidades
