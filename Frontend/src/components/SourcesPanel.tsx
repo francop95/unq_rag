@@ -171,35 +171,59 @@ function SourceCard({
 
 /** Plano adjuntado siempre al modelo: no tiene score ni chunk, solo se abre. */
 function PlanCard({ source }: { source: Source }) {
+  const rotulada = source.labeled_version;
   return (
-    <a
-      href={sourceDocumentUrl(source.file_name, source.page)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex items-center gap-2.5 rounded-xl border border-accent/25 bg-accent-soft/40 px-3 py-2.5 transition hover:border-accent/50 hover:bg-accent-soft"
-    >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-accent/30 bg-accent-soft text-accent">
-        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5">
-          <path d="M2 3.5h12v9H2z" stroke="currentColor" strokeWidth="1.2" />
-          <path d="M2 6.5h12M5.5 3.5v9M10.5 6.5v6" stroke="currentColor" strokeWidth="1.2" />
-        </svg>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-xs text-text">{source.file_name}</span>
-        {/* Qué dijo haber leído ahí. Es lo que convierte la cita en algo
-            comprobable: sin esto, un plano listado solo afirma "lo usé". */}
-        <span className="block font-mono text-[0.68rem] text-muted-2">
-          {source.text?.trim()
-            ? source.text.trim()
-            : source.citado
-              ? "plano completo · adjuntado al modelo"
-              : "adjuntado al modelo · no declaró haberlo usado"}
+    <div className="rounded-xl border border-accent/25 bg-accent-soft/40 px-3 py-2.5 transition hover:border-accent/50 hover:bg-accent-soft">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-accent/30 bg-accent-soft text-accent">
+          <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5">
+            <path d="M2 3.5h12v9H2z" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M2 6.5h12M5.5 3.5v9M10.5 6.5v6" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
         </span>
-      </span>
-      <span className="shrink-0 font-mono text-[0.62rem] uppercase tracking-wide text-accent opacity-60 transition group-hover:opacity-100">
-        abrir ↗
-      </span>
-    </a>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-mono text-xs text-text">{source.file_name}</span>
+          {/* Qué dijo haber leído ahí. Es lo que convierte la cita en algo
+              comprobable: sin esto, un plano listado solo afirma "lo usé". */}
+          <span className="block font-mono text-[0.68rem] text-muted-2">
+            {source.text?.trim()
+              ? source.text.trim()
+              : source.citado
+                ? "plano completo · adjuntado al modelo"
+                : "adjuntado al modelo · no declaró haberlo usado"}
+          </span>
+        </span>
+      </div>
+      {/* El original es el que leyó el modelo y el que respalda la respuesta,
+          así que es el que nombra la tarjeta. Pero está rotado 90° y no tiene
+          un solo código, así que para MIRARLO sirve más la hoja rotulada: va
+          primero, y dice que es una propuesta para no pasar por el as-built. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.375rem]">
+        {rotulada && (
+          <a
+            href={sourceDocumentUrl(rotulada.file_name, rotulada.page)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[0.62rem] uppercase tracking-wide text-accent opacity-80 transition hover:opacity-100"
+          >
+            ver con códigos ↗
+          </a>
+        )}
+        <a
+          href={sourceDocumentUrl(source.file_name, source.page)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[0.62rem] uppercase tracking-wide text-muted-2 transition hover:text-text"
+        >
+          {rotulada ? "original ↗" : "abrir ↗"}
+        </a>
+        {rotulada && (
+          <span className="font-mono text-[0.6rem] text-muted-2">
+            códigos: propuesta, correspondencias pendientes
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

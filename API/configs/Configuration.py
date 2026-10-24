@@ -433,6 +433,35 @@ class Configuration:
     # Pasó al renombrar el corpus con prefijos: "Plano distribucion electrica.pdf"
     # pasó a "1_Plano distribucion electrica_v1.pdf" y "variadorPowerFlex4M.pdf"
     # a "manual powerflex 4m.pdf", y la lista quedó atrás.
+    # Qué hoja rotulada le corresponde a cada plano adjunto, SOLO para
+    # mostrársela al usuario. Al modelo se le sigue mandando el original.
+    #
+    # Los dos canales quieren cosas opuestas, y está medido sobre ocho preguntas
+    # eléctricas. Al modelo le conviene el original: acierta 8 de 8 contra 6 de 8
+    # de la versión codificada, cuyas líneas de llamada lo llevan a meter IF01
+    # —que es la interfaz de control— dentro de la línea de potencia del motor.
+    # Y además se ancla en la imagen: con la codificada adjunta pasa de citar 28
+    # fragmentos de texto a 10, y así se perdió la chapa del motor en una
+    # pregunta que la necesitaba.
+    #
+    # Para una persona la relación se invierte. El original está rotado 90° y no
+    # tiene un solo código; la hoja codificada está derecha, rotula cada
+    # componente con el código que la respuesta usa ("el variador VFD01") y trae
+    # impresa la leyenda de cómo leerla.
+    #
+    # Es una propuesta con correspondencias pendientes, así que la interfaz la
+    # ofrece como eso y no como el as-built: el plano que respalda la respuesta
+    # sigue siendo el original, y este es una lectura más cómoda del mismo
+    # dibujo. Si algún día son 200 hojas, esta tabla no escala y el camino es
+    # indexar cada hoja por separado; con dos, escribirla es más honesto que
+    # inferirla.
+    PLANOS_ROTULADOS = {
+        "1_Plano distribucion electrica_v1.pdf":
+            ("2_Planos_secadero_codificados_propuesta.pdf", 1),
+        "conexionadoTben.pdf":
+            ("2_Planos_secadero_codificados_propuesta.pdf", 2),
+    }
+
     ELECTRIC_DIAGRAM_RELATED_FILES = [
         "1_Plano distribucion electrica_v1.pdf",
         "2_Planos_secadero_codificados_propuesta.pdf",

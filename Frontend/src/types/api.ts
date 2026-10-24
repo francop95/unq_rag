@@ -25,6 +25,14 @@ export interface Source {
    */
   is_attached_plan?: boolean;
   /**
+   * La misma hoja que `file_name`, rotulada con los códigos del inventario.
+   * Al modelo se le manda el original —mide mejor— pero el original está
+   * rotado 90° y no tiene un solo código, así que para abrirlo y leerlo sirve
+   * más esta. Es una propuesta con correspondencias pendientes: se ofrece
+   * como lectura del mismo dibujo, nunca como el plano que respalda.
+   */
+  labeled_version?: { file_name: string; page: number } | null;
+  /**
    * El glosario de nomenclatura e inventario que se le pasa al modelo en todas
    * las consultas. Sale de la misma planilla que algunos chunks indexados, así
    * que necesita rótulo propio para no leerse como un duplicado de ellos.

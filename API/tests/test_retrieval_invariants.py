@@ -460,6 +460,56 @@ def test_un_plano_sin_declarar_viaja_pero_no_citado():
     assert not any(p["citado"] for p in planos)
 
 
+def test_el_plano_ofrece_su_hoja_rotulada_para_mirar():
+    """El original es el que lee el modelo, pero está rotado 90° y no tiene un
+    solo código: para abrirlo y entenderlo sirve la hoja codificada. Son dos
+    canales distintos y cada uno se queda con el archivo que le conviene."""
+    from configs.Configuration import Configuration as C
+    real = next(iter(C.PLANOS_ROTULADOS))
+    r = _retriever([_fila("a.pdf", 1, 60.0)])
+    data = {"gpt_response_raw": [{"res_status": "Success", "response": json.dumps(
+                {"output": {"answer": "x", "referred_contexts": [], "planos_usados": []}})}],
+            "attach_electric_diagrams": True,
+            "electric_diagram_path": os.path.join(
+                os.path.dirname(C.electric_diagram_path), real),
+            "tben_diagram_path": None}
+    plano = [s for s in r.parse_response(data)["gpt_response"][0]["sources"]
+             if s.get("is_attached_plan")][0]
+    assert plano["file_name"] == real, "la tarjeta sigue nombrando lo que leyó el modelo"
+    assert plano["labeled_version"]["file_name"] == C.PLANOS_ROTULADOS[real][0]
+    assert plano["labeled_version"]["page"] == C.PLANOS_ROTULADOS[real][1]
+
+
+def test_un_plano_sin_hoja_rotulada_no_inventa_una():
+    """Sin entrada en el mapa el campo va en None, y el panel muestra el
+    enlace de siempre en vez de un "ver con códigos" que no lleva a nada."""
+    _, srcs = _con_planos([], [_fila("a.pdf", 1, 60.0)], planos_usados=[])
+    planos = [s for s in srcs if s.get("is_attached_plan")]
+    assert planos and all(p["labeled_version"] is None for p in planos)
+
+
+def test_la_hoja_rotulada_tiene_que_existir_en_disco():
+    """El corpus ya se renombró una vez sin que nada avisara. Un enlace a un
+    archivo que no está es peor que no ofrecer el enlace."""
+    from configs.Configuration import Configuration as C
+    from qnas.RetrieverQna_multimodal import RetrieverQna
+    original = dict(C.PLANOS_ROTULADOS)
+    try:
+        C.PLANOS_ROTULADOS = {"x.pdf": ("no_existe_este_plano.pdf", 1)}
+        assert RetrieverQna._version_rotulada("x.pdf") is None
+    finally:
+        C.PLANOS_ROTULADOS = original
+
+
+def test_las_hojas_rotuladas_configuradas_existen():
+    """Y las que están configuradas hoy tienen que estar, o el panel ofrece un
+    enlace muerto en producción sin que ninguna prueba se entere."""
+    from configs.Configuration import Configuration as C
+    from qnas.RetrieverQna_multimodal import RetrieverQna
+    for nombre in C.PLANOS_ROTULADOS:
+        assert RetrieverQna._version_rotulada(nombre) is not None, nombre
+
+
 def test_sin_contexto_y_sin_declaracion_los_planos_siguen_siendo_la_fuente(tmp_path):
     """Si no hubo contexto textual, los planos son lo único de donde pudo salir
     la respuesta: no marcarlos la dejaría sin ninguna referencia."""

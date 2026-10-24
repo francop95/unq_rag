@@ -389,8 +389,29 @@ class RetrieverQna:
                 "text": dato if dato is not None else "",
                 "is_attached_plan": True,
                 "citado": dato is not None,
+                # La misma hoja, rotulada con los códigos del inventario, para
+                # que el usuario abra esa en vez del original rotado y sin
+                # etiquetas. No cambia qué leyó el modelo: eso sigue siendo
+                # `file_name`, y es lo que la tarjeta nombra.
+                "labeled_version": RetrieverQna._version_rotulada(nombre),
             })
         return salida
+
+    @staticmethod
+    def _version_rotulada(nombre: str):
+        """La hoja rotulada equivalente a un plano, si existe en disco."""
+        from configs.Configuration import Configuration as C
+
+        par = (getattr(C, "PLANOS_ROTULADOS", None) or {}).get(nombre)
+        if not par:
+            return None
+        archivo, pagina = par
+        # Que el mapa la nombre no significa que esté: el corpus ya se renombró
+        # una vez y un enlace a un archivo inexistente es peor que no ofrecerlo.
+        if not os.path.exists(os.path.join(
+                os.path.dirname(C.electric_diagram_path), archivo)):
+            return None
+        return {"file_name": archivo, "page": pagina}
 
     # Un nombre parecido alcanza: el modelo escribe el del prompt, no el del
     # disco, y "conexionTben.pdf" contra "conexionadoTben.pdf" no es un error
