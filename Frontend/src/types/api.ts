@@ -24,6 +24,12 @@ export interface Source {
    * que no tiene score ni chunk asociado: se muestra solo como referencia abrible.
    */
   is_attached_plan?: boolean;
+  /**
+   * El glosario de nomenclatura e inventario que se le pasa al modelo en todas
+   * las consultas. Sale de la misma planilla que algunos chunks indexados, así
+   * que necesita rótulo propio para no leerse como un duplicado de ellos.
+   */
+  is_glossary?: boolean;
 }
 
 export interface ApiResult {

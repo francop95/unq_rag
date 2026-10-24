@@ -97,7 +97,10 @@ function SourceCard({
               {source.file_name || "Documento"}
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[0.68rem] text-muted-2">
-              <span>pág. {String(source.page)}</span>
+              {/* El glosario no es una página de la planilla sino su resumen
+                  completo, y se pasa en todas las consultas: decir "pág. 1"
+                  mandaría a buscar algo que no está ahí. */}
+              <span>{source.is_glossary ? "nomenclatura del equipo" : `pág. ${String(source.page)}`}</span>
               {typeLabels.map((label) => (
                 <span
                   key={label}
@@ -183,8 +186,14 @@ function PlanCard({ source }: { source: Source }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-mono text-xs text-text">{source.file_name}</span>
+        {/* Qué dijo haber leído ahí. Es lo que convierte la cita en algo
+            comprobable: sin esto, un plano listado solo afirma "lo usé". */}
         <span className="block font-mono text-[0.68rem] text-muted-2">
-          plano completo · adjuntado al modelo
+          {source.text?.trim()
+            ? source.text.trim()
+            : source.citado
+              ? "plano completo · adjuntado al modelo"
+              : "adjuntado al modelo · no declaró haberlo usado"}
         </span>
       </span>
       <span className="shrink-0 font-mono text-[0.62rem] uppercase tracking-wide text-accent opacity-60 transition group-hover:opacity-100">
@@ -303,15 +312,19 @@ export default function SourcesPanel({ split, mediaEntries, onOpenMedia }: Props
                     Se recuperaron del índice y se le entregaron al modelo, pero no los
                     citó como respaldo de esta respuesta.
                   </p>
-                  {resto.map((source, i) => (
-                    <SourceCard
-                      key={i}
-                      source={source}
-                      number={citadas.length + i + 1}
-                      mediaEntries={mediaEntries}
-                      onOpenMedia={onOpenMedia}
-                    />
-                  ))}
+                  {resto.map((source, i) =>
+                    source.is_attached_plan ? (
+                      <PlanCard key={i} source={source} />
+                    ) : (
+                      <SourceCard
+                        key={i}
+                        source={source}
+                        number={citadas.length + i + 1}
+                        mediaEntries={mediaEntries}
+                        onOpenMedia={onOpenMedia}
+                      />
+                    ),
+                  )}
                 </div>
               )}
             </div>

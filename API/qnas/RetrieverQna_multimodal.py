@@ -22,6 +22,11 @@ logger = logging.getLogger('app.RetrieverQna')
 # no sugerir una precisión de atribución que no tenemos.
 UNCITED_FALLBACK_TOP_N = 3
 
+# La planilla de la que se generan `nomenclatura.json` e `inventario.json`
+# (ver Ingestion/scripts/generar_nomenclatura.py y generar_inventario.py).
+# Es a dónde mandar al usuario cuando la respuesta se apoya en el glosario.
+INVENTARIO_FUENTE = "Inventario_secadero_revision_Pablo_v2.xlsx"
+
 
 class RetrieverQna:
     def __init__(self, data: Dict[str, Any]):
@@ -82,6 +87,10 @@ class RetrieverQna:
         self.chat_obj = None
         self.context_df = None
         self.message_prompt = []
+        # context_id del bloque de inventario/nomenclatura, que no sale del
+        # índice y por lo tanto no tiene fila en context_df (ver get_message_prompt).
+        self.glosario_ctx_id = None
+        self.glosario_texto = ""
 
     # -------- Prompt ----------
     def get_message_prompt(self, data: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -145,28 +154,55 @@ class RetrieverQna:
                 "la falla; si tampoco alcanza, indicalo explícitamente.]"
             )
 
+        # Nomenclatura: que la respuesta diga "el variador (VFD01)" y no "el
+        # variador". En un tablero con cuatro interruptores termomagnéticos,
+        # "el interruptor" no alcanza para ir a buscarlo. Y las conexiones
+        # documentadas de los componentes que aparecen en la pregunta: uno dice
+        # qué es cada código, el otro con qué se conecta.
+        #
+        # Los dos salen del inventario, así que los dos van como UN contexto más,
+        # numerado. Antes se pegaban al final del prompt ya formateado, sin
+        # context_id, y eso los volvía una fuente real pero inatribuible: a la
+        # pregunta por la conexión del motor el modelo respondía citando "el
+        # inventario de componentes", correctamente —el glosario dice "conexión
+        # estrella según tesis"—, y el usuario no encontraba ningún inventario
+        # entre las fuentes porque no había forma de que apareciera.
+        self.glosario_ctx_id = None
+        extra = [b for b in (bloque_para_prompt(),
+                             relaciones_para_prompt(data.get("query", ""), context)) if b]
+        if extra:
+            self.glosario_ctx_id = (len(self.context_df) if self.context_df is not None else 0) + 1
+            self.glosario_texto = "\n".join(extra).strip()
+            context = context + f"""
+
+                context_id: {self.glosario_ctx_id}
+                [Inventario y nomenclatura del secadero. Es documentación del equipo
+                como cualquier otro contexto: si la usás, citá este context_id.]
+                content:
+                {self.glosario_texto}
+                """.rstrip()
+
+        # Los nombres EXACTOS de los planos adjuntos.
+        #
+        # El prompt de Configuration los llama "plano_distribucion_electrica.pdf"
+        # y "conexionTben.pdf", y los archivos reales son "1_Plano distribucion
+        # electrica_v1.pdf" y "conexionadoTben.pdf". Mientras el campo era un
+        # booleano daba igual; desde que el modelo tiene que NOMBRAR el plano que
+        # usó, el nombre inventado no coincide con ninguno y la declaración se
+        # pierde: decía haber leído el diferencial de 40A/30mA en el plano y el
+        # plano salía igual como no citado.
+        adjuntos = [os.path.basename(p) for p in
+                    (data.get("electric_diagram_path"), data.get("tben_diagram_path"))
+                    if p and os.path.exists(p)] if data.get("attach_electric_diagrams", True) else []
+        if adjuntos:
+            context += ("\n\nPLANOS ADJUNTOS (nombres exactos; usá estas cadenas tal cual "
+                        "en \"planos_usados\"):\n" + "\n".join(f"- {a}" for a in adjuntos))
+
         prompt = data["retriever_gpt_qna_prompt"].format(
             context,
             data["query"],
         )
 
-        # Nomenclatura: que la respuesta diga "el variador (VFD01)" y no "el
-        # variador". En un tablero con cuatro interruptores termomagnéticos,
-        # "el interruptor" no alcanza para ir a buscarlo.
-        #
-        # Va después del .format y no dentro de la plantilla porque el glosario
-        # se genera desde el inventario: embebido en Configuration quedaría
-        # congelado, y habría que tocar código cada vez que cambie un código.
-        glosario = bloque_para_prompt()
-        if glosario:
-            prompt = f"{prompt}\n{glosario}"
-
-        # Conexiones documentadas de los componentes que aparecen en la pregunta
-        # o en el contexto. Va después del glosario porque lo complementa: uno
-        # dice qué es cada código, el otro con qué se conecta.
-        relaciones = relaciones_para_prompt(data.get("query", ""), context)
-        if relaciones:
-            prompt = f"{prompt}\n{relaciones}"
         message_prompt = [
             {"role": "system", "content": data["gpt_sys_msg_content"]},
             {"role": "user", "content": prompt},
@@ -277,8 +313,30 @@ class RetrieverQna:
             return []
         return [i for i in range(len(self.context_df)) if i not in exclude]
 
+    def _inventario_source(self) -> Dict[str, Any]:
+        """
+        El bloque de inventario/nomenclatura como fuente consultable.
+
+        Va sin score porque no se recuperó por similitud: se incluye en todas
+        las consultas. Apunta a la planilla de la que se generó, que es donde
+        alguien puede ir a comprobar el dato o corregirlo.
+        """
+        return {
+            "file_name": INVENTARIO_FUENTE,
+            "page": 1,
+            "similarity_score": 0.0,
+            "media": [],
+            "text": self.glosario_texto,
+            "citado": True,
+            # Lo distingue de un chunk recuperado de la MISMA planilla, que
+            # también puede estar en la lista: dos filas con el mismo nombre de
+            # archivo y la misma página se leen como un duplicado, cuando una es
+            # un fragmento indexado y la otra el glosario completo.
+            "is_glossary": True,
+        }
+
     @staticmethod
-    def _attached_plan_sources(data: Dict[str, Any], used_plans: bool) -> List[Dict[str, Any]]:
+    def _attached_plan_sources(data: Dict[str, Any], planos_usados) -> List[Dict[str, Any]]:
         """
         Los planos que se adjuntaron al LLM, como fuentes consultables.
 
@@ -289,31 +347,73 @@ class RetrieverQna:
         forma de abrir el plano. Van sin score porque no se recuperaron por
         similitud: se adjuntan siempre (ver Configuration.ELECTRIC_DIAGRAM_RELATED_FILES).
 
-        `used_plans` viene del propio modelo (campo del mismo JSON de respuesta, sin
-        llamada extra). Se listan solo si dice que los usó: en una pregunta no
-        técnica los planos igual viajan adjuntos, y mostrarlos como fuente de una
-        respuesta que arranca con "esto no está relacionado con los planos" es
-        contradictorio.
+        Qué plano queda marcado como citado sale de `planos_usados`, donde el
+        modelo nombra el archivo Y dice qué leyó en él. Antes era un booleano
+        `used_plans`, y un booleano sobre algo que viaja adjunto en todas las
+        consultas no distingue "lo usé" de "estaba ahí": medido sobre la misma
+        pregunta cuatro veces, `referred_contexts` dio [9] las cuatro y
+        `used_plans` dio True, False, True, True. Tener que escribir qué leyó es
+        lo que hace que la declaración cueste algo.
+
+        Los que no nombró igual se devuelven, marcados `citado: False`: se le
+        entregaron al modelo y el usuario puede querer abrirlos, pero no son
+        respaldo de lo que respondió.
         """
-        if not used_plans or not data.get("attach_electric_diagrams", True):
+        if not data.get("attach_electric_diagrams", True):
             return []
 
-        paths = [data.get("electric_diagram_path"), data.get("tben_diagram_path")]
-        return [
-            {
-                "file_name": os.path.basename(path),
+        declarados = []
+        for p in (planos_usados or []):
+            if isinstance(p, dict) and p.get("archivo"):
+                declarados.append((str(p["archivo"]), str(p.get("dato") or "")))
+            elif isinstance(p, str):
+                declarados.append((p, ""))
+
+        paths = [p for p in (data.get("electric_diagram_path"), data.get("tben_diagram_path"))
+                 if p and os.path.exists(p)]
+        salida = []
+        for path in paths:
+            nombre = os.path.basename(path)
+            dato = RetrieverQna._dato_declarado(nombre, declarados)
+            salida.append({
+                "file_name": nombre,
                 "page": 1,
                 "similarity_score": 0.0,
                 "media": [],
-                "text": "",
+                # Qué dijo haber leído ahí. Es lo que permite verificar la cita
+                # en vez de creerle, y lo que el panel muestra bajo el plano.
+                "text": dato if dato is not None else "",
                 "is_attached_plan": True,
-                # Solo se emiten cuando el modelo declaró `used_plans`, así que
-                # llegar hasta acá ya es la declaración de que los usó.
-                "citado": True,
-            }
-            for path in paths
-            if path and os.path.exists(path)
-        ]
+                "citado": dato is not None,
+            })
+        return salida
+
+    # Un nombre parecido alcanza: el modelo escribe el del prompt, no el del
+    # disco, y "conexionTben.pdf" contra "conexionadoTben.pdf" no es un error
+    # que deba costar la cita. Exacto primero, aproximado después.
+    _PARECIDO_MINIMO = 0.7
+
+    @staticmethod
+    def _dato_declarado(nombre: str, declarados) -> Any:
+        """Qué dijo el modelo haber leído en `nombre`, o None si no lo declaró."""
+        from difflib import SequenceMatcher
+
+        def norm(s: str) -> str:
+            s = os.path.splitext(os.path.basename(str(s)))[0].lower()
+            return "".join(c for c in s if c.isalnum())
+
+        objetivo = norm(nombre)
+        mejor, puntaje = None, 0.0
+        for archivo, dato in declarados:
+            n = norm(archivo)
+            if not n:
+                continue
+            if n == objetivo:
+                return dato
+            r = SequenceMatcher(None, n, objetivo).ratio()
+            if r > puntaje:
+                mejor, puntaje = dato, r
+        return mejor if puntaje >= RetrieverQna._PARECIDO_MINIMO else None
 
     def _build_sources(self, subset, citado: bool) -> List[Dict[str, Any]]:
         """
@@ -412,6 +512,12 @@ class RetrieverQna:
 
                     # referred_contexts (1-based en el prompt)
                     referred_context_ids = response_dict.get("referred_contexts") or []
+                    # El inventario es un context_id más, pero no tiene fila en
+                    # context_df: se saca de la lista antes de usarla como índice,
+                    # o el filtro de rango lo descartaría como si fuera inválido.
+                    cito_inventario = self.glosario_ctx_id is not None and any(
+                        str(i).isdigit() and int(i) == self.glosario_ctx_id
+                        for i in referred_context_ids if isinstance(i, (int, str)))
                     file_names, pages, globals_col = [], [], []
 
                     idxs: List[int] = []
@@ -486,6 +592,8 @@ class RetrieverQna:
                         self._build_sources(self.context_df.iloc[idxs], citado=cito_el_modelo)
                         if idxs else []
                     )
+                    if cito_inventario:
+                        cited_sources.append(self._inventario_source())
 
                     # + el resto del contexto recuperado, que el modelo no citó
                     # (ver _context_no_citado). La deduplicación es solo por media:
@@ -524,15 +632,24 @@ class RetrieverQna:
                         key=lambda s: (not s.get("citado"), -float(s.get("similarity_score") or 0)),
                     )
 
-                    # Si el modelo no devolvió "used_plans" (p. ej. porque el JSON
-                    # se recuperó por el fallback de regex), se asume que sí los usó
-                    # cuando no hubo contexto textual: en ese caso los planos son la
-                    # única fuente posible de la respuesta y ocultarlos dejaría a la
-                    # respuesta sin ninguna referencia.
-                    used_plans = response_dict.get("used_plans")
-                    if used_plans is None:
-                        used_plans = self.context_df is None or self.context_df.empty
-                    res_dict["sources"] += self._attached_plan_sources(data, bool(used_plans))
+                    # Si el modelo no devolvió "planos_usados" (p. ej. porque el
+                    # JSON se recuperó por el fallback de regex), se asume que sí
+                    # los usó cuando no hubo contexto textual: en ese caso los
+                    # planos son la única fuente posible de la respuesta y no
+                    # marcarlos dejaría a la respuesta sin ninguna referencia.
+                    planos_usados = response_dict.get("planos_usados")
+                    if planos_usados is None:
+                        # `used_plans` es el campo viejo; se sigue leyendo para no
+                        # romper una respuesta cacheada ni el parseo por regex.
+                        viejo = response_dict.get("used_plans")
+                        sin_contexto = self.context_df is None or self.context_df.empty
+                        if viejo or (viejo is None and sin_contexto):
+                            planos_usados = [
+                                {"archivo": os.path.basename(p), "dato": ""}
+                                for p in (data.get("electric_diagram_path"),
+                                          data.get("tben_diagram_path")) if p
+                            ]
+                    res_dict["sources"] += self._attached_plan_sources(data, planos_usados)
 
                     parsed_responses.append(res_dict)
                     data["gpt_ans_found"] = True

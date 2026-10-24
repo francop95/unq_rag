@@ -41,16 +41,26 @@ const SIN_DECLARAR_ARRIBA = 3;
  * "los más relevantes" son los primeros.
  */
 export function splitSources(sources: Source[]): SourceSplit {
-  const planos = sources.filter((s) => s.is_attached_plan);
+  // Los planos se adjuntan a TODA consulta, también a las que no tienen nada
+  // que ver con ellos. El que el modelo no declaró haber leído no va a la
+  // sección de planos: baja al pliegue con el resto del contexto, porque
+  // mostrarlo arriba afirma que de ahí salió algo.
+  const planos = sources.filter((s) => s.is_attached_plan && s.citado);
+  const planosSinUsar = sources.filter((s) => s.is_attached_plan && !s.citado);
   const chunks = sources.filter((s) => !s.is_attached_plan);
   const citadas = chunks.filter((s) => s.citado);
 
   if (citadas.length > 0) {
-    return { citadas, resto: chunks.filter((s) => !s.citado), planos, declaradas: true };
+    return {
+      citadas,
+      resto: [...chunks.filter((s) => !s.citado), ...planosSinUsar],
+      planos,
+      declaradas: true,
+    };
   }
   return {
     citadas: chunks.slice(0, SIN_DECLARAR_ARRIBA),
-    resto: chunks.slice(SIN_DECLARAR_ARRIBA),
+    resto: [...chunks.slice(SIN_DECLARAR_ARRIBA), ...planosSinUsar],
     planos,
     declaradas: false,
   };

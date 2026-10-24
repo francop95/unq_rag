@@ -702,11 +702,19 @@ class Configuration:
         - Si no usaste ningún contexto o no hay info suficiente, devuelve [].
         - Asegúrate de que "referred_contexts" sea siempre una lista de enteros.
 
-        "used_plans": true si para responder te apoyaste en alguno de los planos PDF
-        adjuntos, false si no. Poné false cuando la pregunta no sea técnica o cuando
-        respondas que no hay información suficiente: sirve para decidir si al usuario
-        se le muestran los planos como fuente consultable, y listarlos cuando no los
-        usaste lo confunde.
+        "planos_usados": lista de los planos PDF adjuntos de los que SACASTE un dato
+        concreto, con el dato. Formato: [{{"archivo": "plano_distribucion_electrica.pdf",
+        "dato": "qué leíste ahí"}}].
+        - El campo va SIEMPRE, aunque esté vacío: "planos_usados": []. Omitirlo no es
+          lo mismo que dejarlo vacío.
+        - Un plano entra solo si podés decir qué leíste en él. Si no podés completar
+          "dato", dejalo afuera de la lista.
+        - Los dos planos se adjuntan a TODAS las consultas, también a las que no
+          tienen nada que ver con ellos. Que estén adjuntos no significa que los
+          hayas usado, y listarlos igual le muestra al usuario como fuente de la
+          respuesta algo de donde no salió nada.
+        - Si mirando el plano concluiste que NO contiene el dato, eso tampoco es
+          usarlo como fuente: no lo listes, decilo en la respuesta.
 
         9) FORMATO DE SALIDA (ESTRICTO)
         Devuelve la respuesta estrictamente en el siguiente FORMATO JSON:
@@ -715,7 +723,7 @@ class Configuration:
         "output": {{
             "answer": <respuesta>,
             "referred_contexts": <lista_de_ids>,
-            "used_plans": <true|false>
+            "planos_usados": [{{"archivo": <nombre.pdf>, "dato": <qué leíste ahí>}}]
         }}
         }}
 

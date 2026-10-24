@@ -323,6 +323,11 @@ def _retriever(context_rows):
     r.default_response_dict = {"question": "q", "answer": "", "file_name": [""],
                                "page": [0], "global": [False], "similarity_score": 0,
                                "ans_type": "gpt", "sources": []}
+    # Los pone __init__ y los llena get_message_prompt; acá no corre ninguno
+    # de los dos, así que van explícitos en vez de con getattr defensivo en
+    # producción: que parse_response dependa de ellos es parte del contrato.
+    r.glosario_ctx_id = None
+    r.glosario_texto = ""
     r.context_df = pd.DataFrame(context_rows)
     return r
 
@@ -416,3 +421,111 @@ def test_no_muestra_dos_veces_la_misma_figura():
     ctx = [_fila("a.pdf", 1, 60.0, media="img/misma.png"),
            _fila("b.pdf", 2, 55.0, media="img/misma.png")]
     assert len(_respuesta([1], ctx)) == 1
+
+
+# ─────────────────────────────── planos adjuntos: declarar cuesta algo
+
+def _con_planos(referred, contexto, planos_usados=None, extra=None):
+    r = _retriever(contexto)
+    salida = {"answer": "x", "referred_contexts": referred}
+    if planos_usados is not None:
+        salida["planos_usados"] = planos_usados
+    salida.update(extra or {})
+    data = {"gpt_response_raw": [{"res_status": "Success",
+                                  "response": json.dumps({"output": salida})}],
+            "attach_electric_diagrams": True,
+            "electric_diagram_path": __file__,          # cualquier archivo que exista
+            "tben_diagram_path": __file__}
+    return r, r.parse_response(data)["gpt_response"][0]["sources"]
+
+
+def test_un_plano_solo_queda_citado_si_el_modelo_dice_que_leyo_en_el():
+    """`used_plans` era un booleano sobre algo que viaja adjunto SIEMPRE, y no
+    distinguía "lo usé" de "estaba ahí": sobre la misma pregunta dio True,
+    False, True, True mientras referred_contexts daba [9] las cuatro veces."""
+    _, srcs = _con_planos([], [_fila("a.pdf", 1, 60.0)],
+                          planos_usados=[{"archivo": os.path.basename(__file__),
+                                          "dato": "el diferencial es de 40A 30mA"}])
+    planos = [s for s in srcs if s.get("is_attached_plan")]
+    assert len(planos) == 2, "los dos planos viajan"
+    assert sum(1 for p in planos if p["citado"]) == 2, "mismo basename: los dos citados"
+    assert all(p["text"] for p in planos), "y con el dato que dijo haber leído"
+
+
+def test_un_plano_sin_declarar_viaja_pero_no_citado():
+    """No se esconde —el usuario puede querer abrirlo— pero no es respaldo."""
+    _, srcs = _con_planos([], [_fila("a.pdf", 1, 60.0)], planos_usados=[])
+    planos = [s for s in srcs if s.get("is_attached_plan")]
+    assert len(planos) == 2
+    assert not any(p["citado"] for p in planos)
+
+
+def test_sin_contexto_y_sin_declaracion_los_planos_siguen_siendo_la_fuente(tmp_path):
+    """Si no hubo contexto textual, los planos son lo único de donde pudo salir
+    la respuesta: no marcarlos la dejaría sin ninguna referencia."""
+    _, srcs = _con_planos([], [])
+    planos = [s for s in srcs if s.get("is_attached_plan")]
+    assert planos and all(p["citado"] for p in planos)
+
+
+# ─────────────────────────────── el inventario, que no sale del índice
+
+def test_el_inventario_citado_aparece_como_fuente():
+    """El glosario se pegaba al final del prompt sin context_id, así que era una
+    fuente real e inatribuible: el modelo respondía citando "el inventario de
+    componentes" y el usuario no lo encontraba entre las fuentes."""
+    from qnas.RetrieverQna_multimodal import INVENTARIO_FUENTE
+    ctx = [_fila("a.pdf", 1, 60.0), _fila("b.pdf", 2, 55.0)]
+    r = _retriever(ctx)
+    r.glosario_ctx_id = 3                 # va después de los 2 chunks
+    r.glosario_texto = "M01 = Motor del forzador [conexión estrella según tesis]"
+    data = {"gpt_response_raw": [{"res_status": "Success", "response": json.dumps(
+        {"output": {"answer": "x", "referred_contexts": [1, 3]}})}],
+        "attach_electric_diagrams": False}
+    srcs = r.parse_response(data)["gpt_response"][0]["sources"]
+    inv = [s for s in srcs if s["file_name"] == INVENTARIO_FUENTE]
+    assert len(inv) == 1 and inv[0]["citado"]
+    assert "estrella según tesis" in inv[0]["text"]
+
+
+def test_el_id_del_inventario_no_se_toma_como_indice_del_dataframe():
+    """Es un context_id sin fila en context_df: si no se saca antes, el filtro
+    de rango lo descarta como inválido y la cita se pierde en silencio."""
+    ctx = [_fila("a.pdf", 1, 60.0)]
+    r = _retriever(ctx)
+    r.glosario_ctx_id = 2
+    r.glosario_texto = "glosario"
+    data = {"gpt_response_raw": [{"res_status": "Success", "response": json.dumps(
+        {"output": {"answer": "x", "referred_contexts": [2]}})}],
+        "attach_electric_diagrams": False}
+    srcs = r.parse_response(data)["gpt_response"][0]["sources"]
+    assert any(s["citado"] for s in srcs), "la cita al inventario no se pierde"
+    assert not any(s["file_name"] == "a.pdf" and s["citado"] for s in srcs)
+
+
+def test_los_prompts_se_pueden_formatear():
+    """Una llave sin escapar en el prompt lo rompe entero, y en silencio.
+
+    `RETRIEVER_GPT_QNA_PROMPT` pasa por .format(contexto, pregunta), así que un
+    ejemplo de JSON escrito con llaves simples se interpreta como campo: el
+    .format tira KeyError, QuestionAnswer se lo come y el usuario recibe
+    "I don't know" sin nada en la interfaz que diga que hubo un error. Pasó con
+    el ejemplo de "planos_usados".
+    """
+    from configs.Configuration import Configuration as C
+    assert C.RETRIEVER_GPT_QNA_PROMPT.format("CONTEXTO", "PREGUNTA")
+
+
+@pytest.mark.parametrize("real,declarado,esperado", [
+    # El prompt de Configuration llama al plano "plano_distribucion_electrica.pdf"
+    # y el archivo es "1_Plano distribucion electrica_v1.pdf". El modelo escribe
+    # el del prompt, y con cotejo exacto la declaración se perdía entera: decía
+    # haber leído ahí el diferencial de 40A/30mA y el plano salía como no citado.
+    ("1_Plano distribucion electrica_v1.pdf", "plano_distribucion_electrica.pdf", "sí"),
+    ("conexionadoTben.pdf", "conexionTben.pdf", "sí"),
+    # Pero parecido no es cualquier cosa: un plano distinto no hereda la cita.
+    ("conexionadoTben.pdf", "plano_distribucion_electrica.pdf", None),
+])
+def test_un_nombre_de_plano_aproximado_no_cuesta_la_cita(real, declarado, esperado):
+    from qnas.RetrieverQna_multimodal import RetrieverQna
+    assert RetrieverQna._dato_declarado(real, [(declarado, "sí")]) == esperado
