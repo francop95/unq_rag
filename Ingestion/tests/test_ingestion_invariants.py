@@ -13,7 +13,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "eval")))
 
-from task_utils.chunk_text import readable_chunk_text
+from task_utils.chunk_text import ROTULO_CONEXIONES, readable_chunk_text
 from task_utils.contextual_enricher import build_question_chunks
 from task_utils.diagram_processor import ElectricalDiagramProcessor
 from task_utils.llm_json import (
@@ -510,6 +510,141 @@ def test_lo_ilegible_de_una_figura_llega_al_texto_del_chunk():
     texto = readable_chunk_text(chunk)
     assert "No legible en la figura: segunda fila de la chapa" in texto
     assert "Conexión Δ/Y" in texto
+
+
+# ───────────────────────────── conexiones: lo que se mira no es lo que se copia
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
+
+from aplicar_planos_redescritos import texto_del_chunk  # noqa: E402
+from marcar_conexiones_interpretadas import migrar_texto  # noqa: E402
+from redescribir_figuras_con_valores import (  # noqa: E402
+    _declara_conexiones, solo_conexiones_nuevas,
+)
+
+
+def test_las_conexiones_se_rotulan_como_interpretadas():
+    """La lista de recorridos la deduce el modelo mirando el dibujo, pero se
+    guardaba con el mismo tono que una etiqueta copiada. La descripción del
+    plano codificado llegó a afirmar "QF03 → IF01 → VFD01", metiendo una
+    interfaz de control en la línea de potencia del motor."""
+    chunk = {"content_type": "diagram_visual", "original_chunk": json.dumps({"notes": {
+        "description": "Distribución eléctrica.", "diagram_type": "wiring_diagram",
+        "connections": ["QF03 → VFD01", "VFD01 → QM01 → M01"],
+        "labels": ["QF03", "VFD01"], "ratings": {"voltage": "220 VCA"}}})}
+    texto = readable_chunk_text(chunk)
+    assert f"{ROTULO_CONEXIONES}: QF03 → VFD01" in texto
+    # Lo transcripto no lleva la reserva: es copia literal, no lectura.
+    assert "Textos en la figura: QF03, VFD01" in texto
+    assert "Valores nominales:" in texto
+
+
+def test_el_rotulo_de_conexiones_dice_que_es_interpretacion():
+    """El rótulo es el único lugar donde el modelo de respuesta se entera. Si
+    deja de decirlo, la regla del prompt queda sin nada que enganchar."""
+    assert "interpretación" in ROTULO_CONEXIONES
+    assert "no transcripción" in ROTULO_CONEXIONES
+
+
+def test_migrar_conexiones_solo_toca_el_rotulo_al_inicio_de_linea():
+    """"Conexiones:" también aparece dentro de la prosa y de los textos
+    transcriptos de la figura; ahí es contenido del documento, no rótulo."""
+    viejo = ("El plano detalla las Conexiones: ver hoja 2.\n"
+             "Conexiones: L1 → K1 → M01\n"
+             "Textos en la figura: Conexiones: 3~")
+    nuevo = migrar_texto(viejo, ROTULO_CONEXIONES)
+    assert nuevo.split("\n")[0] == "El plano detalla las Conexiones: ver hoja 2."
+    assert nuevo.split("\n")[1] == f"{ROTULO_CONEXIONES}: L1 → K1 → M01"
+    assert nuevo.split("\n")[2] == "Textos en la figura: Conexiones: 3~"
+
+
+def test_migrar_conexiones_es_idempotente():
+    """El script se puede correr dos veces sin encadenar rótulos."""
+    una = migrar_texto("Conexiones: L1 → K1", ROTULO_CONEXIONES)
+    assert migrar_texto(una, ROTULO_CONEXIONES) == una
+
+
+def test_un_chunk_sin_conexiones_no_se_migra():
+    """Si no cambia nada, el script no lo re-embebe: `migrar_texto` devuelve
+    el texto idéntico y el llamador lo usa para decidir."""
+    texto = "Componentes: motor M01\nTextos en la figura: M01"
+    assert migrar_texto(texto, ROTULO_CONEXIONES) == texto
+
+
+def test_una_pasada_de_conexiones_solo_cambia_las_conexiones():
+    """Releer el dibujo reescribía todo lo demás peor: los valores se perdían
+    enteros y la lista de componentes del plano codificado caía de 1857 a 152
+    caracteres, cambiando los códigos (QD01, SSR01-SSR03) por sustantivos
+    genéricos. Esos códigos son el puente entre el inventario y el dibujo."""
+    vieja = ('Distribución eléctrica del tablero.\n'
+             'Tipo: wiring_diagram\n'
+             'Componentes: QD01 (interruptor diferencial), SSR01-SSR03 (relés)\n'
+             'Conexiones: N -> Inter. dif.\n'
+             'Textos en la figura: Inter. dif., QF03, 3 x 2kW\n'
+             'Valores nominales: {"Inter. dif.": "40A / 30mA", "-F 1": "1.1-1.6A"}\n'
+             'No legible en la figura: segunda fila; rótulo inferior')
+    nueva = {"resumen": "Un tablero.", "tipo": "photo",
+             "conexiones": ["R, S, T, N → QD01 → M01"],
+             "dispositivos": ["interruptor", "relés"],
+             "textos_en_la_figura": [], "valores_nominales": {}, "dudas": ["40A"]}
+    r = solo_conexiones_nuevas(nueva, vieja)
+    assert r["conexiones"] == ["R, S, T, N → QD01 → M01"]
+    # Todo lo demás es lo que ya estaba.
+    assert r["resumen"] == "Distribución eléctrica del tablero."
+    assert r["tipo"] == "wiring_diagram"
+    assert r["dispositivos"] == ["QD01 (interruptor diferencial)",
+                                 "SSR01-SSR03 (relés)"]
+    assert r["valores_nominales"] == {"Inter. dif.": "40A / 30mA", "-F 1": "1.1-1.6A"}
+    assert r["textos_en_la_figura"] == ["Inter. dif.", "QF03", "3 x 2kW"]
+    assert r["dudas"] == ["segunda fila", "rótulo inferior"]
+
+
+def test_la_coma_dentro_del_parentesis_no_parte_un_componente():
+    """"Inter. T In: 2 (termomagnético, no legible)" es UN componente."""
+    r = solo_conexiones_nuevas(
+        {"conexiones": []},
+        "Resumen.\nComponentes: Inter. T In: 2 (termomagnético, no legible), QF03")
+    assert r["dispositivos"] == ["Inter. T In: 2 (termomagnético, no legible)", "QF03"]
+
+
+def test_una_pasada_de_conexiones_no_inventa_lo_que_la_vieja_no_tenia():
+    """Si la descripción previa no declaraba valores, la nueva no se queda con
+    los suyos: en este modo esos campos salen de la vieja o no salen."""
+    nueva = {"resumen": "x", "conexiones": ["a → b"],
+             "valores_nominales": {"inventado": "7A"},
+             "textos_en_la_figura": ["inventado"], "dudas": ["inventado"]}
+    r = solo_conexiones_nuevas(nueva, "Resumen viejo.\nConexiones: a -> b")
+    assert "valores_nominales" not in r
+    assert "textos_en_la_figura" not in r
+    assert "dudas" not in r
+    assert r["conexiones"] == ["a → b"]
+    assert r["resumen"] == "Resumen viejo."
+
+
+def test_el_rotulo_viejo_de_ilegible_tambien_se_conserva():
+    """La ingesta vieja escribía "No legible en el plano"; los dos conviven en
+    el índice y perder uno borra justamente lo que no se pudo leer."""
+    r = solo_conexiones_nuevas({"conexiones": []},
+                               "Resumen.\nNo legible en el plano: segunda fila")
+    assert r["dudas"] == ["segunda fila"]
+
+
+def test_el_selector_de_conexiones_acepta_los_dos_rotulos():
+    """El índice puede estar a medio migrar: no encontrar una figura acá
+    significa no volver a mirarla nunca."""
+    assert _declara_conexiones("Conexiones: L1 → K1")
+    assert _declara_conexiones(f"{ROTULO_CONEXIONES}: L1 → K1")
+    assert not _declara_conexiones("Componentes: motor M01")
+    # En prosa no es un rótulo.
+    assert not _declara_conexiones("El plano detalla las Conexiones: ver hoja 2.")
+
+
+def test_los_dos_renderizadores_usan_el_mismo_rotulo():
+    """`chunk_text` lo arma en la ingesta y `aplicar_planos_redescritos` al
+    reescribir una figura. Si se separan, el índice queda con dos formatos y la
+    regla del prompt solo engancha con la mitad."""
+    descripcion = {"resumen": "Plano.", "conexiones": ["L1 → K1"]}
+    assert f"{ROTULO_CONEXIONES}: L1 → K1" in texto_del_chunk(descripcion)
 
 
 # ──────────────────────────────── transcripción de figuras: la chapa del motor

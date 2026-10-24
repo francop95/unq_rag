@@ -221,6 +221,16 @@ Dos campos se COPIAN y el resto se MIRA:
   transcripta lo diga. Describir de menos acá no es ser prudente, es perder el
   dibujo.
 
+En "conexiones" van solo recorridos por los que circula corriente o una señal.
+Un plano tiene además líneas que NO son conductores: las de llamada o
+referencia, que unen una etiqueta, un código o una nota con el componente que
+nombran, y suelen ir punteadas, en otro color o terminar en un texto suelto.
+Una etiqueta no se conecta con lo que nombra: lo identifica. No encadenes un
+elemento solo porque una línea lo toca, y si no distinguís si una línea es
+conductor o llamada, omitila. Esto no contradice lo anterior: seguí describiendo
+los recorridos que ves, pero intercalar una referencia documental o un elemento
+de señal en una cadena de potencia la vuelve falsa entera.
+
 Los fragmentos vienen de recortes solapados leídos DOS VECES con encuadres
 distintos, así que el mismo texto aparece repetido, a veces cortado y a veces
 leído distinto. Tu trabajo con ellos es reconciliarlos:
@@ -271,12 +281,141 @@ def _ids_de_planos() -> set:
         return set()
 
 
-def figuras_con_magnitudes(filtro_archivo: str = ""):
-    """Figuras indexadas cuyo texto declara magnitudes con unidad."""
+def _declara_magnitudes(doc: str) -> bool:
+    """Su texto declara al menos un valor con unidad."""
+    interes = "\n".join(l for l in doc.split("\n")
+                        if l.startswith(("Textos en la figura:", "Valores nominales:")))
+    return bool(magnitudes(interes))
+
+
+def _declara_conexiones(doc: str) -> bool:
+    """Su texto afirma una lista de recorridos.
+
+    El rótulo cambió al marcarse como interpretación (ver
+    `marcar_conexiones_interpretadas.py`), así que se aceptan los dos: el
+    índice puede estar a medio migrar, y no encontrar una figura acá significa
+    no volver a mirarla nunca.
+    """
+    from task_utils.chunk_text import ROTULO_CONEXIONES
+    return any(l.startswith((f"{ROTULO_CONEXIONES}: ", "Conexiones: "))
+               for l in doc.split("\n"))
+
+
+def _partir_fuera_de_parentesis(crudo: str, sep: str) -> list:
+    """Parte por `sep` ignorando los que están dentro de paréntesis.
+
+    Las listas de componentes vienen con la explicación entre paréntesis y esa
+    explicación tiene comas propias: "Inter. T In: 2 (termomagnético, no
+    legible)" es UN componente, no dos.
+    """
+    partes, actual, hondo = [], [], 0
+    for ch in crudo:
+        if ch == "(":
+            hondo += 1
+        elif ch == ")":
+            hondo = max(0, hondo - 1)
+        if ch == sep and hondo == 0:
+            partes.append("".join(actual).strip())
+            actual = []
+        else:
+            actual.append(ch)
+    partes.append("".join(actual).strip())
+    return [p for p in partes if p]
+
+
+# Cómo se lee de vuelta el texto ya renderizado de un chunk. Los dos últimos
+# rótulos conviven en el índice: la ingesta vieja escribía "en el plano".
+_CAMPOS_RENDERIZADOS = (
+    ("Tipo: ", "tipo", None),
+    ("Componentes: ", "dispositivos", ","),
+    ("Textos en la figura: ", "textos_en_la_figura", ","),
+    ("Valores nominales: ", "valores_nominales", "json"),
+    ("No legible en la figura: ", "dudas", ";"),
+    ("No legible en el plano: ", "dudas", ";"),
+)
+
+
+def solo_conexiones_nuevas(nueva: dict, descripcion_vieja: str) -> dict:
+    """La descripción vieja con los recorridos de la nueva, y nada más.
+
+    Una pasada de conexiones vuelve a mirar el dibujo, y de paso reescribe todo
+    lo demás peor. Medido sobre las 22 figuras del secadero: los valores se
+    perdían enteros —el plano principal quedaba con tres mal formados en lugar
+    de seis, el codificado con ninguno en lugar de siete— porque dos lecturas
+    nuevas que no coinciden mandan el dato a "dudas"; y la lista de componentes
+    del plano codificado caía de 1857 a 152 caracteres, cambiando los códigos
+    (QD01, QF01, SSR01-SSR03, VENT01) por sustantivos genéricos. Esos códigos
+    son el puente entre el inventario y el dibujo: es lo único que ese documento
+    aporta y que no está en ningún otro lado.
+
+    Así que el nombre de la pasada se vuelve literal: cambia las conexiones.
+    Todo lo demás se lee de vuelta del texto que ya estaba y viaja igual.
+    """
+    salida = {"conexiones": nueva.get("conexiones") or []}
+
+    cuerpo = descripcion_vieja.split("\n")
+    rotulos = tuple(r for r, _, _ in _CAMPOS_RENDERIZADOS) + (
+        "Conexiones: ", "Zonas: ", "Piezas: ", "Dimensiones: ", "Ubicaciones: ")
+    from task_utils.chunk_text import ROTULO_CONEXIONES
+    rotulos += (f"{ROTULO_CONEXIONES}: ",)
+
+    # El resumen es lo que va antes del primer rótulo.
+    resumen = []
+    for linea in cuerpo:
+        if linea.startswith(rotulos):
+            break
+        resumen.append(linea)
+    if any(r.strip() for r in resumen):
+        salida["resumen"] = "\n".join(resumen).strip()
+
+    for rotulo, clave, sep in _CAMPOS_RENDERIZADOS:
+        if clave in salida:
+            continue
+        for i, linea in enumerate(cuerpo):
+            if not linea.startswith(rotulo):
+                continue
+            # El bloque sigue hasta el próximo rótulo: una etiqueta transcripta
+            # puede traer saltos de línea y el renderizador las une sin tocarlas,
+            # así que "Textos en la figura" ocupa varias líneas. Leyendo solo la
+            # primera se perdían 1478 caracteres de 1878 en el plano codificado.
+            bloque = [linea[len(rotulo):]]
+            for siguiente in cuerpo[i + 1:]:
+                if siguiente.startswith(rotulos):
+                    break
+                bloque.append(siguiente)
+            crudo = "\n".join(bloque).strip()
+            if sep is None:
+                if crudo:
+                    salida[clave] = crudo
+            elif sep == "json":
+                try:
+                    valor = json.loads(crudo)
+                except ValueError:
+                    valor = None
+                if isinstance(valor, dict) and valor:
+                    salida[clave] = valor
+            else:
+                partes = _partir_fuera_de_parentesis(crudo, sep)
+                if partes:
+                    salida[clave] = partes
+            break
+    return salida
+
+
+def figuras_indexadas(filtro_archivo: str = "", criterio=None, saltar_planos: bool = True):
+    """Figuras indexadas que cumplen `criterio` sobre su texto actual.
+
+    `saltar_planos` existe porque la pasada de valores degradaba los 19 planos
+    ya corregidos a mano. Para la pasada de conexiones hay que apagarlo: esos
+    planos son justamente los que tienen las cadenas mal —el codificado mete
+    IF01, una interfaz de control, en la línea de potencia del motor— y
+    saltearlos deja afuera el caso que motivó la corrida.
+    """
     from configs.Configuration import Configuration as C
     import chromadb
 
-    planos = _ids_de_planos()
+    criterio = criterio or _declara_magnitudes
+    planos = _ids_de_planos() if saltar_planos else set()
     col = chromadb.PersistentClient(path=C.chroma_local_path).get_collection(
         C.AppSettings__ChromaIndex)
     total, off, salida, saltados = col.count(), 0, [], 0
@@ -292,12 +431,15 @@ def figuras_con_magnitudes(filtro_archivo: str = ""):
             if cid in planos:
                 saltados += 1
                 continue
-            interes = "\n".join(l for l in doc.split("\n")
-                                if l.startswith(("Textos en la figura:", "Valores nominales:")))
-            if not magnitudes(interes):
+            if not criterio(doc):
                 continue
-            if filtro_archivo and filtro_archivo.lower() not in str(meta.get("file_name")).lower():
-                continue
+            # Varios nombres separados por coma: una corrida sola sobre los
+            # documentos del secadero, sin arrastrar los manuales de fabricante.
+            if filtro_archivo:
+                nombre = str(meta.get("file_name")).lower()
+                if not any(f.strip().lower() in nombre
+                           for f in filtro_archivo.split(",") if f.strip()):
+                    continue
             ruta = _resolver(meta.get("media_path") or "")
             if not ruta:
                 continue
@@ -306,6 +448,11 @@ def figuras_con_magnitudes(filtro_archivo: str = ""):
                            "descripcion_vieja": doc})
         off += len(ids)
     return salida, saltados
+
+
+def figuras_con_magnitudes(filtro_archivo: str = ""):
+    """Figuras indexadas cuyo texto declara magnitudes con unidad."""
+    return figuras_indexadas(filtro_archivo, _declara_magnitudes)
 
 
 def magnitudes(texto: str) -> set:
@@ -362,20 +509,32 @@ def valores_en_disputa(lectura_a: list, lectura_b: list) -> list:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limite", type=int, default=0)
-    ap.add_argument("--archivo", default="", help="filtrar por nombre de archivo")
+    ap.add_argument("--archivo", default="",
+                    help="filtrar por nombre de archivo; varios separados por coma")
     ap.add_argument("--hilos", type=int, default=6)
     ap.add_argument("--modelo", default=None)
+    ap.add_argument("--conexiones", action="store_true",
+                    help="elegir las figuras que afirman recorridos, en vez de "
+                         "las que declaran valores, y no saltear los planos ya "
+                         "reescritos (son los que tienen las cadenas mal)")
     args = ap.parse_args()
 
-    figuras, saltados = figuras_con_magnitudes(args.archivo)
+    if args.conexiones:
+        figuras, saltados = figuras_indexadas(
+            args.archivo, _declara_conexiones, saltar_planos=False)
+        que = "afirman recorridos"
+    else:
+        figuras, saltados = figuras_indexadas(args.archivo, _declara_magnitudes)
+        que = "declaran magnitudes"
     if args.limite:
         figuras = figuras[: args.limite]
-    print(f"Figuras que declaran magnitudes: {len(figuras)}"
+    print(f"Figuras que {que}: {len(figuras)}"
           + (f"   ({saltados} son planos ya reescritos, se saltean)" if saltados else ""))
     if not figuras:
         return 0
 
     from openai import OpenAI
+    from task_utils.chunk_text import ROTULO_CONEXIONES
     from task_utils.llm_json import LLMJsonClient, run_parallel
     from config.config_reader import ConfigReader
 
@@ -457,6 +616,11 @@ def main() -> int:
                              [str(y).strip() for y in (d.get("dudas") or [])] + ilegible
                              + [f"valor ilegible: {v}" for v in disputa]
                              if len(x) > 3 and _normal(x) not in leido})
+
+        # En modo conexiones lo transcripto no se pisa: se vino a corregir
+        # recorridos, no a releer valores que ya estaban corregidos.
+        if args.conexiones:
+            d = solo_conexiones_nuevas(d, fig["descripcion_vieja"])
         return {**fig, "descripcion_nueva": d, "mosaicos": len(trozos_a),
                 "en_disputa": disputa, "descartado": descartado}
 
@@ -470,6 +634,19 @@ def main() -> int:
             print(f"  ! {r['archivo'][:40]} p.{r['pagina']}: {r.get('motivo')}")
             continue
         n = r["descripcion_nueva"]
+        if args.conexiones:
+            # Lo transcripto se conservó, así que el único diff que dice algo
+            # acá es el de recorridos.
+            previa = next((l.split(": ", 1)[1] for l in r["descripcion_vieja"].split("\n")
+                           if l.startswith(("Conexiones: ", f"{ROTULO_CONEXIONES}: "))), "")
+            ahora = ", ".join(str(c) for c in (n.get("conexiones") or []))
+            if previa.strip() == ahora.strip():
+                continue
+            cambiadas += 1
+            print(f"\n  {r['archivo'][:46]:<48} p.{r['pagina']}")
+            print(f"      antes : {previa[:150] or '(sin lista)'}")
+            print(f"      ahora : {ahora[:150] or '(vacía)'}")
+            continue
         vieja = [l[len("Valores nominales:"):] for l in r["descripcion_vieja"].split("\n")
                  if l.startswith("Valores nominales:")]
         nueva = json.dumps(n.get("valores_nominales") or {}, ensure_ascii=False)

@@ -68,9 +68,11 @@ def texto_del_chunk(n: dict) -> str:
     """Arma el texto en el mismo formato que el resto de las figuras del índice.
 
     Se respeta el formato existente a propósito: los chunks visuales del índice
-    siguen todos este molde (`Tipo:`, `Componentes:`, `Conexiones:`), el prompt
-    de respuesta lo da por sentado, y cambiarlo solo para estos 19 los volvería
-    distintos de los otros 288 sin ninguna ventaja.
+    siguen todos este molde (`Tipo:`, `Componentes:`, el rótulo de conexiones),
+    el prompt de respuesta lo da por sentado, y cambiarlo solo para estos 19 los
+    volvería distintos de los otros 288 sin ninguna ventaja. Por lo mismo el
+    rótulo de las conexiones se importa de `chunk_text` en vez de escribirse
+    acá: son dos renderizadores del mismo formato y tienen que moverse juntos.
     """
     def rot(x):
         if isinstance(x, dict):
@@ -86,7 +88,9 @@ def texto_del_chunk(n: dict) -> str:
     if disp:
         partes.append("Componentes: " + ", ".join(disp))
     if n.get("conexiones"):
-        partes.append("Conexiones: " + ", ".join(str(c) for c in n["conexiones"]))
+        from task_utils.chunk_text import ROTULO_CONEXIONES
+        partes.append(f"{ROTULO_CONEXIONES}: "
+                      + ", ".join(str(c) for c in n["conexiones"]))
     if n.get("textos_en_la_figura"):
         partes.append("Textos en la figura: "
                       + ", ".join(str(t) for t in n["textos_en_la_figura"]))

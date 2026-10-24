@@ -502,7 +502,7 @@ class ChunkingTask(Task):
         '"connection_diagram", "circuit_diagram", "panel_layout", "photo", "chart", "other")\n'
         '- "description": 2-4 frases describiendo qué muestra y para qué sirve\n'
         '- "components": lista de componentes identificables con su etiqueta ("motor M1", "contactor K1", "borne X1:3")\n'
-        '- "connections": lista de conexiones o recorridos visibles ("L1 → K1 → motor M1")\n'
+        '- "connections": lista de recorridos ELÉCTRICOS visibles ("L1 → K1 → motor M1")\n'
         '- "ratings": objeto con los valores nominales que la figura DECLARA '
         '({"voltage": "220/380 V", "current": "3.51/2.03 A"})\n'
         '- "labels": lista de TODOS los textos/números legibles, TRANSCRITOS LITERALMENTE\n'
@@ -517,6 +517,15 @@ class ChunkingTask(Task):
         "- Si un carácter o un valor no se lee con seguridad, ponelo en `ilegible` y "
         "omitilo de `labels`. Un valor equivocado es peor que un valor ausente: el "
         "primero se usa para diagnosticar, el segundo solo falta.\n\n"
+        "QUÉ ES UN CONDUCTOR Y QUÉ NO: en `connections` van solo los recorridos por los "
+        "que circula corriente o una señal. Un plano tiene además líneas que NO son "
+        "conductores: las de llamada o referencia, que unen una etiqueta, un código o "
+        "una nota con el componente que nombran. Suelen ir punteadas, en otro color, o "
+        "terminar en un texto suelto. Una etiqueta no se conecta con lo que nombra: lo "
+        "identifica. No encadenes un elemento en un recorrido solo porque una línea lo "
+        "toca, y si no distinguís si una línea es conductor o llamada, omitila. "
+        "Intercalar una referencia documental o un elemento de señal en una cadena de "
+        "potencia la vuelve falsa entera.\n\n"
         "QUÉ AFIRMA UNA ESPECIFICACIÓN: una chapa de características, una placa de datos "
         "o una tabla de selección dicen lo que el equipo ADMITE, no cómo está instalado. "
         "\"Conexión Δ/Y\" significa que acepta las dos conexiones. En `description` no "

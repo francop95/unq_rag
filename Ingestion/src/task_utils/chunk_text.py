@@ -19,6 +19,21 @@ from typing import Any, Dict, List, Optional
 _MAX_LIST_ITEMS = 30
 _MAX_TABLE_ROWS = 400
 
+# Los recorridos de un diagrama no se transcriben: salen de mirar el dibujo y
+# decidir qué línea llega a dónde. Es la única parte de la figura que el modelo
+# de visión deduce y que, sin embargo, se guardaba con el mismo tono que una
+# etiqueta copiada. Lo que eso produce no es teórico: la descripción del plano
+# codificado afirma "QF03 → IF01 → VFD01", metiendo IF01 —que el inventario
+# define como la interfaz de control entre el TBEN y el variador— en la línea
+# de potencia del motor, porque su línea de llamada se parece a un conductor.
+# La del plano original hace llegar el motor por KM1 y saltea el variador.
+#
+# El rótulo viaja dentro del texto del chunk, no en los metadatos, porque lo
+# que tiene que cambiar de comportamiento es el modelo de respuesta y lo único
+# que él ve es este texto. Qué hacer con la marca está en
+# RETRIEVER_GPT_QNA_PROMPT, sección 4.
+ROTULO_CONEXIONES = "Conexiones (interpretación del dibujo, no transcripción)"
+
 
 def _parse_payload(original: Any) -> Optional[Dict[str, Any]]:
     """Intenta obtener el dict de `original_chunk` (viene serializado en JSON)."""
@@ -66,7 +81,7 @@ def _describe_figure(notes: Any) -> str:
 
     for key, label in (
         ("components", "Componentes"),
-        ("connections", "Conexiones"),
+        ("connections", ROTULO_CONEXIONES),
         ("labels", "Textos en la figura"),
         ("zones", "Zonas"),
         ("parts", "Piezas"),
