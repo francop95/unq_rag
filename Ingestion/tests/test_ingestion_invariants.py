@@ -498,3 +498,87 @@ def test_un_numero_poco_especifico_no_se_usa_como_ancla():
     """"2 A" no debe anclar en el "2" suelto: aparecería en cualquier texto."""
     assert "2" not in anclas("2 A")
     assert anclas("50") == []
+
+
+def test_lo_ilegible_de_una_figura_llega_al_texto_del_chunk():
+    """Si el modelo de respuesta no sabe que ahí había un dato que no se pudo
+    leer, lo completa solo: es la diferencia entre "no dice" y "dice otra cosa"."""
+    chunk = {"content_type": "diagram_visual", "original_chunk": json.dumps({"notes": {
+        "description": "Chapa de un motor trifásico.", "diagram_type": "photo",
+        "labels": ["V 220/380", "Conexión Δ/Y"], "ratings": {"voltage": "220/380 V"},
+        "ilegible": ["segunda fila de la chapa"]}})}
+    texto = readable_chunk_text(chunk)
+    assert "No legible en la figura: segunda fila de la chapa" in texto
+    assert "Conexión Δ/Y" in texto
+
+
+# ──────────────────────────────── transcripción de figuras: la chapa del motor
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
+
+from redescribir_figuras_con_valores import (  # noqa: E402
+    magnitudes, mosaicos, no_transcripto, valores_en_disputa, _normal,
+)
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    # La chapa escribe la unidad ADELANTE. Leyendo solo "número + unidad", esta
+    # línea no producía NINGUNA magnitud: el cotejo comparaba dos conjuntos
+    # vacíos y daba por bueno cualquier valor.
+    ("V 220/380 Hz 50 A 3.51/2.03", {"220V", "380V", "50Hz", "3.51A", "2.03A"}),
+    # Un catálogo la escribe atrás.
+    ("Inter. dif. 40A 30mA", {"40A", "30mA"}),
+    ("2 kW 220/380 Vca", {"2kW", "220Vca", "380Vca"}),
+])
+def test_lee_las_magnitudes_en_los_dos_ordenes(texto, esperado):
+    assert magnitudes(texto) == esperado
+
+
+def test_no_cruza_el_numero_de_un_campo_con_la_unidad_de_otro():
+    """Con dos barridos independientes, `Hz 50 A 3.51` producía además `50A`:
+    pares que no existen en la figura y que ensuciaban el cotejo."""
+    assert "220Hz" not in magnitudes("V 220/380 Hz 50")
+
+
+def test_un_valor_que_las_dos_lecturas_leyeron_distinto_queda_en_disputa():
+    """3.51/2.03 contra 3.51/2.09: el dígito dudoso no se puede elegir a cara o cruz."""
+    assert valores_en_disputa(["A 3.51/2.03"], ["A 3.51/2.09"]) == ["2.03A", "2.09A"]
+
+
+def test_lo_que_las_dos_leyeron_igual_no_queda_en_disputa():
+    assert valores_en_disputa(["V 220/380", "IP 55"], ["V 220/380", "IP 55"]) == []
+
+
+def test_un_valor_no_transcripto_no_entra():
+    """La pasada de reconciliación redacta, y redactando se arregla un valor."""
+    crudo = _normal("A 3.51/2.03")
+    assert no_transcripto("2.09 A", crudo)
+    assert not no_transcripto("2.03 A", crudo)
+
+
+def test_el_respaldo_no_depende_del_orden_de_la_unidad():
+    """Buscar `380V` dentro de `V 220/380` da negativo y tiraba valores buenos."""
+    assert not no_transcripto("220/380 V", _normal("V 220/380"))
+
+
+def test_los_mosaicos_son_todos_del_mismo_tamano():
+    """El último tramo se pega al borde en vez de recortarse: un mosaico de
+    100px junto a uno de 420 se amplía 8x y se manda una tira inútil."""
+    from PIL import Image
+    im = Image.new("RGB", (837, 554), "white")
+    cajas = mosaicos(im)
+    assert len(cajas) > 1
+    assert len({c.size for c in cajas}) == 1
+
+
+def test_los_dos_encuadres_no_son_el_mismo():
+    """Dos lecturas sobre los MISMOS píxeles no son dos observaciones: a
+    temperatura 0 el modelo repite su error y el cotejo lo da por bueno."""
+    from PIL import Image
+    # Con contenido, no en blanco: dos recortes de una imagen uniforme son
+    # iguales aunque la grilla se haya corrido, y el test no probaría nada.
+    im = Image.linear_gradient("L").resize((2000, 1400)).convert("RGB")
+    a = mosaicos(im, desfase=0.0)
+    b = mosaicos(im, desfase=0.5)
+    assert [x.size for x in a] == [x.size for x in b]
+    assert any(x.tobytes() != y.tobytes() for x, y in zip(a, b))

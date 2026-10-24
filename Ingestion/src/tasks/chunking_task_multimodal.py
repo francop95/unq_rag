@@ -479,6 +479,20 @@ class ChunkingTask(Task):
     # ===============================
     # Pasada dedicada por figura / tabla
     # ===============================
+    # `labels` y `ratings` NO se describen: se transcriben. La diferencia no es
+    # de estilo. Con la versión anterior, que solo pedía "lista de TODOS los
+    # textos legibles", la chapa de un motor cuyo original dice
+    #
+    #     MODELO: MT 802-4   V 220/380   A 3.51/2.03   Conexión Δ/Y
+    #
+    # quedó indexada como "MT 160-4, V 230/380, A 3.5/2.03, Conexión A/Y": la Δ
+    # se volvió una A y dos valores cambiaron. No fue falta de resolución —
+    # pidiéndole transcribir ESE MISMO recorte, sin ampliarlo, el modelo lee
+    # Δ/Y y 220/380 bien—: fue que "describí para que sea recuperable" invita a
+    # parafrasear, y un valor parafraseado es un valor inventado.
+    #
+    # El prompt de tablas ya tenía esta disciplina ("transcribí exactamente lo
+    # que se ve"). Las figuras no, y son las que llevan las chapas.
     _FIGURE_SYSTEM_PROMPT = (
         "Eres un especialista en documentación técnica industrial. Recibirás UNA "
         "figura recortada de un manual (diagrama eléctrico, esquema, plano o foto de "
@@ -489,8 +503,25 @@ class ChunkingTask(Task):
         '- "description": 2-4 frases describiendo qué muestra y para qué sirve\n'
         '- "components": lista de componentes identificables con su etiqueta ("motor M1", "contactor K1", "borne X1:3")\n'
         '- "connections": lista de conexiones o recorridos visibles ("L1 → K1 → motor M1")\n'
-        '- "ratings": objeto con valores nominales visibles ({"voltage": "480V AC", "current": "12A"})\n'
-        '- "labels": lista de TODOS los textos/números legibles en la figura\n\n'
+        '- "ratings": objeto con los valores nominales que la figura DECLARA '
+        '({"voltage": "220/380 V", "current": "3.51/2.03 A"})\n'
+        '- "labels": lista de TODOS los textos/números legibles, TRANSCRITOS LITERALMENTE\n'
+        '- "ilegible": lista de lo que hay texto pero no se puede leer ("segunda fila de la chapa")\n\n'
+        "TRANSCRIPCIÓN (lo más importante de esta tarea):\n"
+        "- `labels` y `ratings` se copian carácter por carácter. No parafrasees, no "
+        "redondees, no normalices, no completes: 220/380 no es 230/380, 3.51 no es 3.5, "
+        "MT 802-4 no es MT 160-4.\n"
+        "- Los símbolos no son letras. Δ (triángulo) no es una A; Y, Ω, °, ±, µ y ~ van "
+        "como están. \"Conexión Δ/Y\" se escribe Δ/Y.\n"
+        "- Las unidades cambian el significado: mA no es A, kW no es W, Vca no es Vcc.\n"
+        "- Si un carácter o un valor no se lee con seguridad, ponelo en `ilegible` y "
+        "omitilo de `labels`. Un valor equivocado es peor que un valor ausente: el "
+        "primero se usa para diagnosticar, el segundo solo falta.\n\n"
+        "QUÉ AFIRMA UNA ESPECIFICACIÓN: una chapa de características, una placa de datos "
+        "o una tabla de selección dicen lo que el equipo ADMITE, no cómo está instalado. "
+        "\"Conexión Δ/Y\" significa que acepta las dos conexiones. En `description` no "
+        "escribas que el equipo ESTÁ conectado, ajustado o configurado de una manera si "
+        "lo único que ves es la especificación.\n\n"
         "Usa listas vacías u objetos vacíos si algo no aplica. No inventes: describe "
         "únicamente lo que se ve. Responde en el idioma de la figura (español si está en español)."
     )

@@ -30,3 +30,6 @@ dist/
 deploy/*.pem
 deploy/.htpasswd
 deploy/.deploy-target
+
+# Subproducto de correr la API en local (RagWorkflow._log_timings)
+perf_timings.csv

@@ -43,6 +43,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(RAIZ, "..", "API")))
 
 ENTRADA = os.path.join(RAIZ, "data", "planos_redescritos.json")
 
+# También aplica lo de `redescribir_figuras_con_valores.py`: produce el mismo
+# JSON (id + descripcion_nueva con las mismas claves) a propósito, porque lo que
+# hay que hacer con una descripción nueva es idéntico venga de donde venga —
+# re-embeber, regenerar las preguntas sintéticas, recalcular entidades— y eso ya
+# estaba probado acá.
+
 # Las mismas que usa la ingesta hoy (config: max_synthetic_questions).
 N_PREGUNTAS = 4
 
@@ -90,7 +96,7 @@ def texto_del_chunk(n: dict) -> str:
     # Las dudas van dentro del texto a propósito: que el modelo de respuesta
     # sepa qué NO se pudo leer es justamente lo que evita que lo complete solo.
     if n.get("dudas"):
-        partes.append("No legible en el plano: " + "; ".join(str(d) for d in n["dudas"]))
+        partes.append("No legible en la figura: " + "; ".join(str(d) for d in n["dudas"]))
     return "\n".join(p for p in partes if p)
 
 
@@ -98,7 +104,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--escribir", action="store_true")
     ap.add_argument("--modelo-preguntas", default="gpt-4.1")
+    ap.add_argument("--entrada", default=ENTRADA,
+                    help="JSON de descripciones nuevas (por defecto, el de planos)")
     args = ap.parse_args()
+    # Se acepta tal como la escribe quien corre el script: relativa al repo o al
+    # directorio actual, las dos funcionan.
+    entrada = args.entrada
+    if not os.path.isabs(entrada) and not os.path.exists(entrada):
+        entrada = os.path.join(RAIZ, entrada)
 
     from configs.Configuration import Configuration as C
     from configs.entidades import etiquetas, componentes_del_documento
@@ -107,9 +120,9 @@ def main() -> int:
     from task_utils.embedding_provider import EmbeddingProvider
     import chromadb
 
-    with open(ENTRADA, encoding="utf-8") as f:
+    with open(entrada, encoding="utf-8") as f:
         planos = [p for p in json.load(f) if p.get("descripcion_nueva")]
-    print(f"Planos con descripción nueva: {len(planos)}\n")
+    print(f"{os.path.basename(entrada)}: {len(planos)} con descripción nueva\n")
 
     cliente = chromadb.PersistentClient(path=C.chroma_local_path)
     col = cliente.get_collection(C.AppSettings__ChromaIndex)

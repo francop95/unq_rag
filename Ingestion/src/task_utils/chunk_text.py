@@ -70,6 +70,10 @@ def _describe_figure(notes: Any) -> str:
         ("labels", "Textos en la figura"),
         ("zones", "Zonas"),
         ("parts", "Piezas"),
+        # Lo que la figura tiene escrito pero no se pudo leer. Va al texto a
+        # propósito: que el modelo de respuesta sepa que ahí hay un dato
+        # ilegible es lo que evita que lo complete solo.
+        ("ilegible", "No legible en la figura"),
     ):
         value = notes.get(key)
         if isinstance(value, list) and value:
