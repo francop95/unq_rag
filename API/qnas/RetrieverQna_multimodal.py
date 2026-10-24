@@ -258,23 +258,24 @@ class RetrieverQna:
             return self._is_present(row.get("media_path")) or self._is_present(row.get("image_path"))
         return self._is_present(row.get("media_paths")) or self._is_present(row.get("image_paths"))
 
-    def _context_media_indices(self, exclude: set) -> List[int]:
+    def _context_no_citado(self, exclude: set) -> List[int]:
         """
-        Índices (0-based) de self.context_df cuyos chunks tienen media (imagen/
-        diagrama/tabla) asociada, excluyendo los que ya están en `exclude`.
+        Índices (0-based) de self.context_df que el modelo NO citó.
 
-        Son el contexto visual que se recuperó y el modelo NO citó. Viajan igual,
-        marcados `citado: False`, porque el modelo a veces omite citar la figura de
-        la que sacó el dato y perderla sería perder la única evidencia verificable
-        de esa respuesta. Pero van detrás de "ver todo el contexto": antes se
-        mezclaban con las citadas y una pregunta sobre la conexión del motor
-        aparecía ilustrada con la tabla de inventario y dos figuras del manual del
-        variador, que es contexto recuperado, no respaldo de lo que se respondió.
+        Van todos, no solo los que tienen imagen. Antes esta función devolvía
+        únicamente los chunks con media, porque su único propósito era que las
+        figuras llegaran al frontend; con `citado` separando lo citado de lo
+        recuperado, esa restricción quedó como un agujero: de los 10 fragmentos
+        que se le entregaron al modelo para "¿el motor está en estrella o
+        triángulo?" llegaban 5, y los 5 que faltaban eran de texto. El panel
+        decía "ver todo el contexto recuperado" y mostraba la mitad.
+
+        Que un fragmento sea de texto no lo hace menos revisable: si el modelo
+        se apoyó en él sin citarlo, es justamente el que hay que poder leer.
         """
         if self.context_df is None or self.context_df.empty:
             return []
-        records = self.context_df.to_dict(orient="records")
-        return [i for i, row in enumerate(records) if i not in exclude and self._row_has_media(row)]
+        return [i for i in range(len(self.context_df)) if i not in exclude]
 
     @staticmethod
     def _attached_plan_sources(data: Dict[str, Any], used_plans: bool) -> List[Dict[str, Any]]:
@@ -486,19 +487,23 @@ class RetrieverQna:
                         if idxs else []
                     )
 
-                    # + fuentes con media (imágenes/diagramas/tablas) del contexto
-                    # recuperado que el modelo no citó por texto (ver _context_media_indices).
+                    # + el resto del contexto recuperado, que el modelo no citó
+                    # (ver _context_no_citado). La deduplicación es solo por media:
+                    # dos chunks pueden apuntar a la misma figura, y mostrarla dos
+                    # veces hace parecer que hay dos evidencias donde hay una.
                     already_seen = {
                         m.get("media_path") or m.get("image_path")
                         for s in cited_sources for m in s.get("media", [])
                         if m.get("media_path") or m.get("image_path")
                     }
-                    media_idxs = self._context_media_indices(exclude=set(idxs))
+                    resto_idxs = self._context_no_citado(exclude=set(idxs))
                     media_sources = []
-                    for s in (self._build_sources(self.context_df.iloc[media_idxs], citado=False)
-                              if media_idxs else []):
-                        media_keys = {m.get("media_path") or m.get("image_path") for m in s.get("media", [])}
-                        if media_keys & already_seen:
+                    for s in (self._build_sources(self.context_df.iloc[resto_idxs], citado=False)
+                              if resto_idxs else []):
+                        media_keys = {m.get("media_path") or m.get("image_path")
+                                      for m in s.get("media", [])
+                                      if m.get("media_path") or m.get("image_path")}
+                        if media_keys and media_keys & already_seen:
                             continue
                         already_seen |= media_keys
                         media_sources.append(s)

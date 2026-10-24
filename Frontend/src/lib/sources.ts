@@ -8,12 +8,22 @@ export interface SourceSplit {
   /** Planos adjuntados siempre: tienen su propia sección, sin score. */
   planos: Source[];
   /**
-   * `false` cuando el modelo no declaró ninguna fuente y `citadas` es, en
-   * realidad, todo lo recuperado. Sirve para rotularlo distinto: una cosa es
-   * "de acá salió la respuesta" y otra "esto es lo que tuvo a la vista".
+   * `false` cuando el modelo no declaró ninguna fuente y `citadas` son, en
+   * realidad, los fragmentos más relevantes de los que recibió. Sirve para
+   * rotularlo distinto: una cosa es "de acá salió la respuesta" y otra "esto
+   * es lo que tuvo a la vista".
    */
   declaradas: boolean;
 }
+
+/**
+ * Cuántos fragmentos mostrar arriba cuando el modelo no declaró ninguno.
+ *
+ * Tres: suficientes para poder verificar la respuesta, pocos como para no
+ * sugerir una precisión de atribución que no tenemos. El resto no se pierde,
+ * queda detrás de "ver todo el contexto recuperado".
+ */
+const SIN_DECLARAR_ARRIBA = 3;
 
 /**
  * Separa las fuentes en lo que el modelo citó y lo que solo se le entregó.
@@ -26,7 +36,9 @@ export interface SourceSplit {
  *
  * Cuando el modelo no cita nada no se esconde todo —eso dejaría la respuesta
  * sin ninguna referencia, que es justo cuando más falta hace— sino que se
- * muestra lo recuperado con `declaradas: false`.
+ * muestran los más relevantes con `declaradas: false`, y el resto se pliega
+ * igual que siempre. La API manda los no citados ordenados por score, así que
+ * "los más relevantes" son los primeros.
  */
 export function splitSources(sources: Source[]): SourceSplit {
   const planos = sources.filter((s) => s.is_attached_plan);
@@ -36,5 +48,10 @@ export function splitSources(sources: Source[]): SourceSplit {
   if (citadas.length > 0) {
     return { citadas, resto: chunks.filter((s) => !s.citado), planos, declaradas: true };
   }
-  return { citadas: chunks, resto: [], planos, declaradas: false };
+  return {
+    citadas: chunks.slice(0, SIN_DECLARAR_ARRIBA),
+    resto: chunks.slice(SIN_DECLARAR_ARRIBA),
+    planos,
+    declaradas: false,
+  };
 }

@@ -368,13 +368,18 @@ def test_lo_no_citado_igual_viaja():
 
 
 def test_el_respaldo_sin_citas_no_se_hace_pasar_por_citado():
-    """Cuando el modelo no cita nada se muestran los contextos más relevantes,
-    pero `citado` queda en False: lo que sabemos es qué tuvo a la vista, no qué
-    usó, y el frontend lo rotula distinto."""
+    """Cuando el modelo no cita nada, nada queda marcado como citado: lo que
+    sabemos es qué tuvo a la vista, no qué usó.
+
+    Viajan todos, ordenados por score, y es el frontend el que muestra arriba
+    los más relevantes (splitSources) porque es el que sabe que no hubo
+    declaración. Recortar acá a tres perdía los otros siete para siempre."""
     ctx = [_fila(f"d{i}.pdf", i, 70.0 - i) for i in range(5)]
     srcs = _respuesta([], ctx)
-    assert len(srcs) == 3, "el respaldo muestra los 3 más relevantes"
+    assert len(srcs) == 5
     assert all(s["citado"] is False for s in srcs)
+    assert [s["similarity_score"] for s in srcs] == sorted(
+        (s["similarity_score"] for s in srcs), reverse=True)
 
 
 def test_las_citadas_van_antes_que_las_demas_aunque_puntuen_menos():
@@ -384,3 +389,30 @@ def test_las_citadas_van_antes_que_las_demas_aunque_puntuen_menos():
            _fila("usado.pdf", 2, 51.0, media="img/usado.png")]
     srcs = _respuesta([2], ctx)
     assert [s["file_name"] for s in srcs] == ["usado.pdf", "ruido.pdf"]
+
+
+def test_el_contexto_no_citado_viaja_entero_no_solo_el_que_tiene_imagen():
+    """"Ver todo el contexto recuperado" mostraba la mitad.
+
+    La función que juntaba lo no citado solo miraba los chunks con media, que
+    era su propósito original. Con `citado` separando respaldo de contexto, eso
+    dejó invisibles los fragmentos de texto: de los 10 entregados para "¿el
+    motor está en estrella o triángulo?" llegaban 5, y los 5 que faltaban eran
+    justamente los que el usuario quería revisar.
+    """
+    ctx = [_fila("citado.pdf", 1, 60.0, media="img/a.png"),
+           _fila("con_imagen.pdf", 2, 58.0, media="img/b.png"),
+           _fila("solo_texto.pdf", 3, 57.0),
+           _fila("tambien_texto.pdf", 4, 56.0)]
+    srcs = _respuesta([1], ctx)
+    assert len(srcs) == 4, "no se pierde ningún fragmento entregado"
+    assert {s["file_name"] for s in srcs if not s["citado"]} == {
+        "con_imagen.pdf", "solo_texto.pdf", "tambien_texto.pdf"}
+
+
+def test_no_muestra_dos_veces_la_misma_figura():
+    """Dos chunks pueden apuntar al mismo png; mostrarlo dos veces simula que
+    hay dos evidencias donde hay una."""
+    ctx = [_fila("a.pdf", 1, 60.0, media="img/misma.png"),
+           _fila("b.pdf", 2, 55.0, media="img/misma.png")]
+    assert len(_respuesta([1], ctx)) == 1
