@@ -516,11 +516,75 @@ def test_los_prompts_se_pueden_formatear():
     assert C.RETRIEVER_GPT_QNA_PROMPT.format("CONTEXTO", "PREGUNTA")
 
 
+def test_los_prompts_no_nombran_archivos_de_plano_a_mano():
+    """El prompt nombraba los planos a mano, y con nombres inexistentes:
+    "plano_distribucion_electrica.pdf" y "conexionTben.pdf", cuando los archivos
+    son "1_Plano distribucion electrica_v1.pdf" y "conexionadoTben.pdf".
+
+    El modelo repetía el nombre que le enseñaban en vez del que recibía, así que
+    la declaración de `planos_usados` traía un archivo que no estaba adjunto.
+    Medido al probar otro plano: 0 de 8 preguntas citaban el plano; con la
+    sección generalizada, 8 de 8. El cotejo difuso lo tapaba mientras los dos
+    nombres se parecieran, que es una coincidencia, no un diseño.
+
+    Los nombres reales los inyecta RetrieverQna en el bloque PLANOS ADJUNTOS,
+    leídos del disco. Esa tiene que ser la única fuente.
+    """
+    from configs.Configuration import Configuration as C
+    # Se barren todos los textos largos de Configuration y no una lista fija:
+    # el prompt que lo tenía estaba en tres lugares distintos, y una lista a
+    # mano se olvida del cuarto.
+    import re
+    # Un marcador como <nombre.pdf> describe la forma del valor y es válido;
+    # lo que no vale es un nombre concreto. Se quitan los marcadores primero.
+    marcador = re.compile(r"<[^<>\n]*>")
+    culpables = []
+    for nombre in dir(C):
+        if nombre.startswith("__"):
+            continue
+        valor = getattr(C, nombre, None)
+        # Las rutas a los PDF son atributos cortos y SÍ deben nombrar archivos;
+        # lo que no puede nombrarlos es el texto que lee el modelo.
+        if not isinstance(valor, str) or len(valor) <= 200:
+            continue
+        if ".pdf" in marcador.sub("", valor).lower():
+            culpables.append(nombre)
+    assert not culpables, (
+        f"estos prompts nombran un archivo de plano a mano: {culpables}. "
+        "Los nombres van en el bloque PLANOS ADJUNTOS, que los lee del disco.")
+
+    # No todos los prompts viven en Configuration: el aviso de "no se encontró
+    # contexto" se arma en RetrieverQna, y nombraba los dos planos ahí mismo —
+    # en el único camino donde los planos son la ÚNICA fuente.
+    #
+    # Se mira con ast y no línea por línea para separar lo que el modelo LEE de
+    # lo que solo documenta el código: un docstring que explica qué planos se
+    # adjuntan es legítimo, un literal que termina dentro del prompt no.
+    import ast
+    import os
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for rel in ("qnas/RetrieverQna_multimodal.py", "models/ModelCompletion_multimodal.py",
+                "contexts/ChromaConnector.py"):
+        arbol = ast.parse(open(os.path.join(raiz, rel), encoding="utf-8").read())
+        docstrings = set()
+        for nodo in ast.walk(arbol):
+            if isinstance(nodo, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                 ast.AsyncFunctionDef)) and ast.get_docstring(nodo):
+                docstrings.add(id(nodo.body[0].value))
+        for nodo in ast.walk(arbol):
+            if (isinstance(nodo, ast.Constant) and isinstance(nodo.value, str)
+                    and id(nodo) not in docstrings and ".pdf" in nodo.value.lower()):
+                raise AssertionError(
+                    f"{rel}:{nodo.lineno} arma un texto que nombra un archivo de "
+                    f"plano; los nombres se leen del disco: "
+                    f"{nodo.value.strip()[:90]}")
+
+
 @pytest.mark.parametrize("real,declarado,esperado", [
-    # El prompt de Configuration llama al plano "plano_distribucion_electrica.pdf"
-    # y el archivo es "1_Plano distribucion electrica_v1.pdf". El modelo escribe
-    # el del prompt, y con cotejo exacto la declaración se perdía entera: decía
-    # haber leído ahí el diferencial de 40A/30mA y el plano salía como no citado.
+    # El modelo no siempre copia el nombre exacto aunque lo tenga delante:
+    # abrevia, le saca el prefijo numérico o le cambia la versión. Con cotejo
+    # exacto la declaración se perdía entera: decía haber leído ahí el
+    # diferencial de 40A/30mA y el plano salía como no citado.
     ("1_Plano distribucion electrica_v1.pdf", "plano_distribucion_electrica.pdf", "sí"),
     ("conexionadoTben.pdf", "conexionTben.pdf", "sí"),
     # Pero parecido no es cualquier cosa: un plano distinto no hereda la cita.

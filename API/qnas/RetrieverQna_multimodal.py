@@ -98,9 +98,12 @@ class RetrieverQna:
         Construye el prompt con los contextos seleccionados (data['context_dataframe'])
         en el formato esperado por retriever_gpt_qna_prompt.
 
-        Los planos (plano_distribucion_electrica.pdf, conexionadoTben.pdf) se adjuntan
-        SIEMPRE al LLM (ver ModelCompletion._call_openai_multimodal), sin importar si
-        hay contexto textual. Por eso acá NUNCA se corta el flujo por falta de contexto:
+        Los planos los adjunta ModelCompletion._call_openai_multimodal, con los
+        nombres que salen de Configuration y se leen del disco; acá no se nombra
+        ninguno. Van siempre que la consulta sea eléctrica y también cuando no
+        hay contexto relevante, que es el caso en que son la única fuente (la
+        decide ChromaConnector con `attach_electric_diagrams`). Por eso acá
+        NUNCA se corta el flujo por falta de contexto:
         si no hay chunks, o los que hay no superan el umbral de similitud
         (data['context_relevant']), se lo indica explícitamente en el prompt para que
         el modelo responda apoyándose únicamente en los planos.
@@ -149,9 +152,10 @@ class RetrieverQna:
         else:
             context = (
                 "[No se encontró contexto textual para esta consulta. Respondé "
-                "basándote ÚNICAMENTE en los planos adjuntos (plano_distribucion_electrica.pdf "
-                "y conexionadoTben.pdf) si contienen información suficiente para diagnosticar "
-                "la falla; si tampoco alcanza, indicalo explícitamente.]"
+                "basándote ÚNICAMENTE en los planos adjuntos, que se listan más "
+                "abajo con su nombre exacto, si contienen información suficiente "
+                "para diagnosticar la falla; si tampoco alcanza, indicalo "
+                "explícitamente.]"
             )
 
         # Nomenclatura: que la respuesta diga "el variador (VFD01)" y no "el

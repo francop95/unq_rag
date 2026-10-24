@@ -643,8 +643,9 @@ class Configuration:
         - Mantén el idioma de la pregunta del usuario.
 
         Uso de planos (muy importante):
-        - Hay un plano principal de conexión/distribución: "plano_distribucion_electrica.pdf". Debes priorizarlo para entender la alimentación, protecciones, contactores/relés, y el recorrido de energía hacia cargas (resistencias, ventiladores, etc.).
-        - Hay un subplano/auxiliar: "conexionTben.pdf" (TBEN). Debes usarlo SOLO como detalle del TBEN dentro del circuito identificado en el plano principal.
+        - Los planos que recibas vienen adjuntos y listados con su nombre exacto bajo "PLANOS ADJUNTOS". Ese listado es la única fuente de nombres: no uses ninguno que no figure ahí, y si no aparece el listado es que no recibiste planos.
+        - Prioriza la hoja de conexión/distribución general para entender la alimentación, protecciones, contactores/relés, y el recorrido de energía hacia cargas (resistencias, ventiladores, etc.).
+        - Usa la hoja de conexionado del TBEN SOLO como detalle del TBEN dentro del circuito identificado en la hoja general.
         - Si hay conflicto entre planos, reporta la inconsistencia y qué dato falta para decidir.
         """
 
@@ -666,13 +667,14 @@ class Configuration:
         No uses conocimiento externo ni supongas valores/diseños no presentes.
 
         3) PRIORIDAD DE INTERPRETACIÓN DE PLANOS (CRÍTICO)
-        Debes seguir este orden:
-        A) Primero interpreta el plano principal: "plano_distribucion_electrica.pdf".
+        Los planos adjuntos, si los hay, están listados más abajo bajo "PLANOS ADJUNTOS" con su nombre exacto. Esos son los únicos nombres de archivo que puedes usar para referirte a un plano: no los abrevies ni los cambies, y si ese listado no aparece es que no recibiste ningún plano.
+        Cuando haya planos, debes seguir este orden:
+        A) Primero interpreta la hoja que muestra la distribución eléctrica general.
         - Identifica: alimentación, protecciones, seccionamiento/interruptores, contactores/relés, transformaciones, rutas hacia cargas, señales de control relevantes.
         B) Luego ubica dentro de ese circuito el componente o bloque TBEN.
-        C) Finalmente usa "conexionTben.pdf" como detalle de bornes/conexionado del TBEN, SOLO para confirmar cableado, señales o continuidad dentro de lo ya identificado en el plano principal.
+        C) Finalmente usa la hoja de conexionado del TBEN como detalle de bornes/conexionado, SOLO para confirmar cableado, señales o continuidad dentro de lo ya identificado en la hoja general.
 
-        Si el TBEN no aparece claramente en el plano principal, dilo explícitamente y pide el dato mínimo (referencia del TBEN en el plano, número de hoja, etiqueta, borne, etc.).
+        Si el TBEN no aparece claramente en la hoja general, dilo explícitamente y pide el dato mínimo (referencia del TBEN en el plano, número de hoja, etiqueta, borne, etc.).
 
         4) USO DE CONTEXTOS TEXTUALES
         - Si alguno de los CONTEXTOS contiene información relevante, responde usando EXCLUSIVAMENTE dicha información (y lo observado en los planos).
@@ -704,8 +706,8 @@ class Configuration:
         - Asegúrate de que "referred_contexts" sea siempre una lista de enteros.
 
         "planos_usados": lista de los planos PDF adjuntos de los que SACASTE un dato
-        concreto, con el dato. Formato: [{{"archivo": "plano_distribucion_electrica.pdf",
-        "dato": "qué leíste ahí"}}].
+        concreto, con el dato. Formato: [{{"archivo": "<el nombre exacto, copiado
+        de PLANOS ADJUNTOS>", "dato": "qué leíste ahí"}}].
         - El campo va SIEMPRE, aunque esté vacío: "planos_usados": []. Omitirlo no es
           lo mismo que dejarlo vacío.
         - Un plano entra solo si podés decir qué leíste en él. Si no podés completar
