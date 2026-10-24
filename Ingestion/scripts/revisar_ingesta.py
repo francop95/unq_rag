@@ -36,88 +36,26 @@ import sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(RAIZ, "src"))
 
-from task_utils.chunk_text import readable_chunk_text  # noqa: E402
 from task_utils import revision_store as rev  # noqa: E402
-
-CHUNKS_DATA = os.path.join(RAIZ, "data", "chunks_data")
-
-# Las figuras y las tablas primero: son ~300 de 1569 chunks y ahí vivieron
-# todos los defectos encontrados hasta hoy.
-VISUALES = ("diagram_visual", "image", "table", "diagram_description")
+from task_utils import revision_corridas as disco  # noqa: E402
+from task_utils.revision_corridas import (  # noqa: E402
+    VISUALES, clave, corridas_de, documentos_que_coinciden, leer_chunks,
+    recorte_de, texto_de,
+)
 
 BASE_MEDIA = os.getenv("MEDIA_BASE_URL", "http://127.0.0.1:5000/media")
 
 
-def corridas_de(documento: str):
-    """Las corridas de troceo de un documento, de más nueva a más vieja."""
-    base = os.path.join(CHUNKS_DATA, documento)
-    if not os.path.isdir(base):
-        return []
-    return sorted((d for d in os.listdir(base)
-                   if os.path.isdir(os.path.join(base, d))), reverse=True)
-
-
-def documentos_que_coinciden(texto: str):
-    if not os.path.isdir(CHUNKS_DATA):
-        return []
-    return sorted(d for d in os.listdir(CHUNKS_DATA)
-                  if os.path.isdir(os.path.join(CHUNKS_DATA, d))
-                  and texto.lower() in d.lower())
-
-
-def leer_chunks(documento: str, corrida: str):
-    """Los chunks de una corrida, en orden de página."""
-    base = os.path.join(CHUNKS_DATA, documento, corrida)
-    salida = []
-    for carpeta in sorted(os.listdir(base)):
-        ruta = os.path.join(base, carpeta)
-        if not os.path.isdir(ruta) or carpeta == "crops":
-            continue
-        for nombre in sorted(os.listdir(ruta)):
-            if not nombre.endswith(".json"):
-                continue
-            try:
-                with open(os.path.join(ruta, nombre), encoding="utf-8") as f:
-                    datos = json.load(f)
-            except (OSError, ValueError) as e:
-                print(f"   ⚠️  no se pudo leer {nombre}: {e}")
-                continue
-            salida.extend(datos if isinstance(datos, list) else [datos])
-
-    def orden(c):
-        try:
-            return (int(c.get("page_num", 0)), str(c.get("chunk_id", "")))
-        except (TypeError, ValueError):
-            return (0, str(c.get("chunk_id", "")))
-
-    return sorted(salida, key=orden)
-
-
-def _recorte(chunk):
-    """La ruta del recorte de una figura, si tiene."""
-    original = chunk.get("original_chunk")
-    if isinstance(original, str):
-        try:
-            original = json.loads(original)
-        except ValueError:
-            return None
-    if not isinstance(original, dict):
-        return None
-    return original.get("image_path") or original.get("media_path")
-
-
 def _url_media(ruta: str):
     """La URL con la que la API sirve ese archivo, si cae bajo Ingestion/data."""
-    datos = os.path.abspath(os.path.join(RAIZ, "data"))
-    entero = os.path.abspath(ruta)
-    if not entero.startswith(datos + os.sep):
-        return None
-    return f"{BASE_MEDIA}/{os.path.relpath(entero, datos).replace(os.sep, '/')}"
+    rel = disco.ruta_relativa_a_datos(ruta)
+    return f"{BASE_MEDIA}/{rel}" if rel else None
 
 
 def _marca(veredicto):
     return {None: "[ · ]", "ok": "[ ok]", "redescribir": "[REH]",
-            "editar": "[EDI]", "descartar": "[ ✗ ]"}.get(veredicto, "[ ? ]")
+            "editar": "[EDI]", "corregido": "[COR]",
+            "descartar": "[ ✗ ]"}.get(veredicto, "[ ? ]")
 
 
 def mostrar(documento, corrida, todo=False):
@@ -137,19 +75,19 @@ def mostrar(documento, corrida, todo=False):
             return
         print(f"── {titulo} ({len(lista)}) " + "─" * max(0, 56 - len(titulo)))
         for c in lista:
-            pag, cid = str(c.get("page_num")), str(c.get("chunk_id"))
+            pag, cid = clave(c)
             v = yas.get((pag, cid))
             print(f"\n{_marca(v['veredicto'] if v else None)} p{pag}:{cid}"
                   f"   [{c.get('content_type')}]")
             if v and v.get("nota"):
                 print(f"      nota: {v['nota']}")
-            recorte = _recorte(c)
+            recorte = recorte_de(c)
             if recorte:
                 print(f"      recorte: {recorte}")
                 url = _url_media(recorte)
                 if url:
                     print(f"      ver    : {url}")
-            texto = readable_chunk_text(c).strip()
+            texto = texto_de(c)
             if not completo:
                 texto = texto[:400] + ("…" if len(texto) > 400 else "")
             for linea in texto.split("\n"):
@@ -165,7 +103,7 @@ def mostrar(documento, corrida, todo=False):
         print(f"── TEXTO ({len(textos)}) ── se omite; --todo para verlo\n")
 
     falta = [c for c in (visuales if not todo else chunks)
-             if (str(c.get("page_num")), str(c.get("chunk_id"))) not in yas]
+             if clave(c) not in yas]
     pend = rev.trabajo_pendiente(documento, corrida)
     if falta:
         print(f"sin revisar: {len(falta)}")
@@ -177,13 +115,7 @@ def mostrar(documento, corrida, todo=False):
 
 
 def mostrar_diff(documento, corrida):
-    """Qué cambió respecto de la última corrida aprobada.
-
-    Es la vista que más defectos por minuto encuentra: revisar 1569 chunks de
-    cero no se hace dos veces, y los que cambiaron son pocos. Así se vio que un
-    barrido de valores había degradado la página 87, que perdió su "2 kW" y
-    recuperó un "2.5A" inventado que una corrección anterior había sacado.
-    """
+    """Qué cambió respecto de la última corrida aprobada."""
     previa = rev.ultima_aprobada(documento)
     if not previa:
         print(f"{documento}: no hay ninguna corrida aprobada contra la cual comparar.")
@@ -192,27 +124,18 @@ def mostrar_diff(documento, corrida):
         print(f"{documento}: la corrida {corrida} ES la última aprobada.")
         return
 
-    def por_clave(c):
-        return {(str(x.get("page_num")), str(x.get("chunk_id"))):
-                readable_chunk_text(x).strip() for x in c}
-
-    antes = por_clave(leer_chunks(documento, previa))
-    ahora = por_clave(leer_chunks(documento, corrida))
-
-    nuevos = sorted(set(ahora) - set(antes))
-    perdidos = sorted(set(antes) - set(ahora))
-    cambiados = sorted(k for k in set(antes) & set(ahora) if antes[k] != ahora[k])
-
+    d = disco.comparar(documento, corrida, previa)
     print(f"\n{documento}: {corrida} contra la aprobada {previa}")
-    print(f"  nuevos {len(nuevos)}   perdidos {len(perdidos)}   cambiados {len(cambiados)}\n")
-    for k in perdidos:
+    print(f"  nuevos {len(d['nuevos'])}   perdidos {len(d['perdidos'])}"
+          f"   cambiados {len(d['cambiados'])}\n")
+    for k in d["perdidos"]:
         print(f"  ✗ desapareció p{k[0]}:{k[1]}")
-    for k in nuevos:
+    for k in d["nuevos"]:
         print(f"  + nuevo       p{k[0]}:{k[1]}")
-    for k in cambiados:
+    for k in d["cambiados"]:
         print(f"\n  ~ cambió      p{k[0]}:{k[1]}")
-        print(f"      antes ({len(antes[k])} car): {antes[k][:220]}")
-        print(f"      ahora ({len(ahora[k])} car): {ahora[k][:220]}")
+        print(f"      antes ({len(d['antes'][k])} car): {d['antes'][k][:220]}")
+        print(f"      ahora ({len(d['ahora'][k])} car): {d['ahora'][k][:220]}")
 
 
 def main() -> int:

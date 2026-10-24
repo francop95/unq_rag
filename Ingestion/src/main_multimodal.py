@@ -311,6 +311,10 @@ def _parse_args():
                         "el modelo de visión")
     p.add_argument("--dry-run", action="store_true",
                    help="lista los documentos que se procesarían y termina, sin gastar nada")
+    p.add_argument("--forzar", action="store_true",
+                   help="trocea aunque el manifiesto diga que el documento no cambió. "
+                        "Es lo que hace falta para volver a trocear uno ya ingestado: "
+                        "sin esto la corrida termina bien sin haber hecho nada")
     p.add_argument("--solo-chunks", action="store_true",
                    help="trocea y para: deja la corrida registrada para revisar "
                         "con scripts/revisar_ingesta.py, sin gastar embeddings")
@@ -352,7 +356,7 @@ if __name__ == "__main__":
 
         pdf_hash = _compute_file_hash(PDF_PATH)
         prev_entry = manifest.get(file_stem)
-        if (not args.reusar_chunks and prev_entry
+        if (not args.reusar_chunks and not args.forzar and prev_entry
                 and prev_entry.get("sha256") == pdf_hash
                 and prev_entry.get("status") == "success"):
             print(f"⏭️  {file_stem}: sin cambios desde la última ingesta exitosa, se omite.")
@@ -430,6 +434,10 @@ if __name__ == "__main__":
             if descartados:
                 print(f"🚫 {len(descartados)} chunk(s) descartados en la revisión, "
                       f"no se indexan")
+            correcciones = revision.correcciones(file_stem, corrida)
+            if correcciones:
+                print(f"✏️  {len(correcciones)} chunk(s) con texto corregido en la "
+                      f"revisión")
 
             # --------------------
             # 1.5) VALIDACIÓN Y ENRIQUECIMIENTO
@@ -462,6 +470,22 @@ if __name__ == "__main__":
                               if (str(c.get("page_num")),
                                   str(c.get("chunk_id"))) not in descartados]
                 print(f"   🚫 descartados por revisión: {antes - len(raw_chunks)}")
+
+            # Y lo que la revisión reescribió se inyecta en el mismo punto, por
+            # el mismo motivo: así la corrección llega al enriquecedor, a las
+            # preguntas sintéticas y al embedding, en vez de aplicarse al final
+            # sobre un texto del que ya colgaban preguntas con el error adentro.
+            # El JSON del troceo no se toca: es la captura cruda de lo que leyó
+            # el modelo, y pisarla borraría la evidencia de qué se corrigió.
+            if correcciones:
+                aplicadas = 0
+                for c in raw_chunks:
+                    nuevo = correcciones.get((str(c.get("page_num")),
+                                              str(c.get("chunk_id"))))
+                    if nuevo:
+                        c["texto_revisado"] = nuevo
+                        aplicadas += 1
+                print(f"   ✏️  correcciones aplicadas: {aplicadas}")
 
             # Restaurar el orden documental: os.listdir devuelve un orden
             # arbitrario del filesystem, y varios pasos posteriores dependen

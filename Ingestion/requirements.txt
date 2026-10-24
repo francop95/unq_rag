@@ -192,3 +192,11 @@ rank-bm25==0.2.2
 
 # Query expansion
 thefuzz==0.20.0  # Fuzzy matching para sinónimos
+
+# ============================================
+# PANTALLA DE REVISIÓN DE LA INGESTA
+# ============================================
+# Sirve src/revision_web/ en local: la pantalla donde una persona mira los
+# chunks y las figuras antes de que se indexen. No la usa el pipeline; si no
+# está instalado, la ingesta y la revisión por consola siguen funcionando.
+flask==3.0.3

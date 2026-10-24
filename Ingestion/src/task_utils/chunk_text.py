@@ -113,7 +113,18 @@ def readable_chunk_text(chunk: Dict[str, Any]) -> str:
 
     Nunca lanza: ante contenido inesperado devuelve la mejor aproximación
     disponible (o cadena vacía).
+
+    `texto_revisado` gana sobre todo lo demás. Lo pone la compuerta de revisión
+    cuando una persona corrigió la figura —a mano o releyéndola— y es la única
+    forma de que esa corrección llegue a los cuatro consumidores de esta
+    función (enriquecedor, embeddings, indexer, validadores) sin tener que
+    acordarse de aplicarla en cada uno: ese olvido es exactamente el que hizo
+    que `diagram_visual` se perdiera en silencio en tres lugares.
     """
+    revisado = chunk.get("texto_revisado")
+    if isinstance(revisado, str) and revisado.strip():
+        return revisado
+
     original = chunk.get("original_chunk", "")
     ctype = (chunk.get("content_type") or "").lower()
     payload = _parse_payload(original)
@@ -142,3 +153,44 @@ def readable_chunk_text(chunk: Dict[str, Any]) -> str:
     if isinstance(original, str):
         return original
     return json.dumps(original, ensure_ascii=False) if original else ""
+
+
+def texto_del_chunk(n: Dict[str, Any]) -> str:
+    """Arma el texto de una figura a partir de una descripción recién leída.
+
+    Es el camino inverso de `readable_chunk_text`: ahí se renderiza lo que el
+    troceo dejó en `notes`, acá lo que devolvió una relectura
+    (`redescribir_figuras_con_valores.py`, o el botón de releer de la pantalla
+    de revisión). Las dos tienen que producir el MISMO molde —`Tipo:`,
+    `Componentes:`, el rótulo de conexiones—, porque los 300 chunks visuales
+    del índice lo siguen y el prompt de respuesta lo da por sentado. Por eso
+    viven en el mismo archivo: son dos renderizadores de un formato y tienen
+    que moverse juntos.
+    """
+    def rot(x):
+        if isinstance(x, dict):
+            r = (x.get("rotulo") or "").replace("\n", " ")
+            q = x.get("que_es") or ""
+            return f"{r} ({q})" if q else r
+        return str(x)
+
+    partes = [str(n.get("resumen", "")).strip()]
+    if n.get("tipo"):
+        partes.append(f"Tipo: {n['tipo']}")
+    disp = [rot(x) for x in (n.get("dispositivos") or []) if rot(x).strip()]
+    if disp:
+        partes.append("Componentes: " + ", ".join(disp))
+    if n.get("conexiones"):
+        partes.append(f"{ROTULO_CONEXIONES}: "
+                      + ", ".join(str(c) for c in n["conexiones"]))
+    if n.get("textos_en_la_figura"):
+        partes.append("Textos en la figura: "
+                      + ", ".join(str(t) for t in n["textos_en_la_figura"]))
+    if n.get("valores_nominales"):
+        partes.append("Valores nominales: "
+                      + json.dumps(n["valores_nominales"], ensure_ascii=False))
+    # Las dudas van dentro del texto a propósito: que el modelo de respuesta
+    # sepa qué NO se pudo leer es justamente lo que evita que lo complete solo.
+    if n.get("dudas"):
+        partes.append("No legible en la figura: " + "; ".join(str(d) for d in n["dudas"]))
+    return "\n".join(p for p in partes if p)

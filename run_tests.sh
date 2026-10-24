@@ -15,6 +15,12 @@ echo "════ Ingestion: invariantes de la ingesta ════"
 ( cd Ingestion && ./.venv/bin/python -m pytest tests/test_ingestion_invariants.py -q ) || fallos=1
 
 echo
+echo "════ Ingestion: pantalla de revisión ════"
+# Aparte porque necesita Flask, que es dependencia solo de la pantalla: sin él
+# los tests se saltean en vez de romper la suite.
+( cd Ingestion && ./.venv/bin/python -m pytest tests/test_revision_web.py -q ) || fallos=1
+
+echo
 if [ "$fallos" -eq 0 ]; then
   echo "✅ Todo verde"
 else

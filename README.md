@@ -216,6 +216,19 @@ Es un proceso batch y cuesta dinero: cada página pasa por un modelo de visión 
 enriquecimiento añade llamadas por chunk. Corre una vez, y se repite solo cuando cambian
 los documentos.
 
+Hay una pantalla local para hacerlo con una revisión humana en el medio: trocea, muestra
+cada figura con su recorte al lado de la descripción que se indexaría, y nada entra al
+índice hasta que alguien lo aprueba. Es la forma recomendada de ingestar documentos
+nuevos, porque los errores que importan —una `Δ` leída como `A`— no los agarra ningún
+chequeo automático.
+
+```bash
+python scripts/revisar_web.py            # http://127.0.0.1:5055
+```
+
+Qué hace la compuerta y qué significa cada veredicto:
+[Ingestion/INGESTA.md](Ingestion/INGESTA.md#12-la-revisión-antes-de-indexar).
+
 Para probar consultas contra el índice sin levantar nada más:
 
 ```bash

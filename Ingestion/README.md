@@ -395,7 +395,15 @@ recibe el LLM. Por eso ~2900 de los 3585 vectores son preguntas.
 ```bash
 source .venv/bin/activate
 python src/main_multimodal.py              # respeta el manifest: omite lo que no cambió
+python scripts/revisar_web.py              # pantalla de revisión: http://127.0.0.1:5055
 ```
+
+La pantalla de revisión es la forma recomendada de ingestar un documento
+nuevo: trocea, muestra cada figura con su recorte al lado de la descripción
+que se va a indexar, deja dictaminarlas una por una y recién después indexa.
+Cómo funciona la compuerta y qué significa cada veredicto está en
+[INGESTA.md](INGESTA.md#12-la-revisión-antes-de-indexar); la versión de
+consola es `scripts/revisar_ingesta.py`.
 
 Para forzar una re-ingesta completa hay que borrar el manifest **y** limpiar:
 

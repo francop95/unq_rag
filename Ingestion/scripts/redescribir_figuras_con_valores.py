@@ -506,6 +506,126 @@ def valores_en_disputa(lectura_a: list, lectura_b: list) -> list:
     return sorted(magnitudes(" ".join(lectura_a)) ^ magnitudes(" ".join(lectura_b)))
 
 
+def cliente_llm(modelo: str = None):
+    """El cliente de visión con el que se releen las figuras.
+
+    Se arma acá y no dentro de `main()` porque la pantalla de revisión relee de
+    a una figura sobre una corrida que todavía no está indexada, y tiene que
+    usar el mismo modelo y la misma temperatura: si releyera con otros, el
+    texto que se aprueba no sería el que produce esta herramienta.
+    """
+    from openai import OpenAI
+    from task_utils.llm_json import LLMJsonClient
+    from config.config_reader import ConfigReader
+
+    # El .env por ruta absoluta y la clave de ahí, no del entorno. Era
+    # `OpenAI()` a secas, que solo anda con OPENAI_API_KEY exportada: corrido
+    # desde la terminal de siempre funcionaba, y desde la pantalla de revisión
+    # —otro proceso, otro entorno— moría con "api_key must be set" recién
+    # después de aceptar el trabajo.
+    cfg = ConfigReader(os.path.join(RAIZ, ".env"))
+    clave = cfg.get("OPENAI_API_KEY") or cfg.get("openai_key") or os.getenv("OPENAI_API_KEY")
+    url = cfg.get("openai_url")
+    cliente = OpenAI(api_key=clave, base_url=url) if url else OpenAI(api_key=clave)
+
+    modelo = modelo or cfg.get("multimodal_model", "gpt-4o")
+    return LLMJsonClient(client=cliente, model=modelo, temperature=0.0,
+                         max_output_tokens=4000, etapa="redescripcion_figuras")
+
+
+def redescribir_figura(fig: dict, llm, solo_conexiones: bool = False) -> dict:
+    """Relee UNA figura: transcribir dos veces, cotejar, y recién ahí describir.
+
+    `fig` necesita `ruta` (el recorte), `archivo`, `pagina` y
+    `descripcion_vieja`. Devuelve el mismo dict con `descripcion_nueva`, o con
+    `motivo` si no se pudo.
+
+    Está separada de `main()` para que la pantalla de revisión pueda releer una
+    figura suelta de una corrida que todavía no se indexó. Pedir todo esto en
+    una sola llamada es exactamente lo que produjo `A/Y` donde la chapa decía
+    `Δ/Y`; el porqué está en el encabezado del módulo.
+    """
+    def leer(partes, etiqueta):
+        """Una pasada de transcripción sobre todos los mosaicos de una figura."""
+        lineas, ilegible = [], []
+        for i, parte in enumerate(partes, 1):
+            t = llm.complete_json(
+                SISTEMA_TRANSCRIPCION,
+                [_texto(f"Fragmento {i} de {len(partes)} de la figura. "
+                        "Transcribí el texto que se ve en ESTE fragmento."), parte],
+                label=f"{etiqueta} frag.{i}")
+            lineas += [str(x) for x in ((t or {}).get("lineas") or [])]
+            ilegible += [str(x) for x in ((t or {}).get("ilegible") or [])]
+        return lineas, ilegible
+
+    im = Image.open(fig["ruta"]).convert("RGB")
+    # Dos encuadres distintos, no dos llamadas sobre el mismo (ver mosaicos()).
+    trozos_a = mosaicos(im, desfase=0.0)
+    trozos_b = mosaicos(im, desfase=0.5)
+    et = f"{str(fig['archivo'])[:26]} p.{fig['pagina']}"
+
+    l1, i1 = leer([_parte_imagen(t) for t in trozos_a], f"leer A {et}")
+    l2, i2 = leer([_parte_imagen(t) for t in trozos_b], f"leer B {et}")
+    if not (l1 or l2):
+        return {**fig, "descripcion_nueva": None, "motivo": "transcripción vacía"}
+
+    disputa = valores_en_disputa(l1, l2)
+    ilegible = sorted({x.strip() for x in (i1 + i2) if len(x.strip()) > 3})
+    crudo = _normal(" ".join(l1 + l2))
+    aviso = ""
+    if disputa:
+        aviso = ("\n\nVALORES QUE LAS DOS LECTURAS LEYERON DISTINTO, así que no se "
+                 "pudieron leer con seguridad: " + ", ".join(disputa)
+                 + "\nNo los pongas en textos_en_la_figura, ni en valores_nominales, "
+                   "ni en el resumen. Listalos en dudas.")
+
+    d = llm.complete_json(
+        SISTEMA_DESCRIPCION,
+        [_texto("FRAGMENTOS TRANSCRIPTOS (lectura A):\n" + "\n".join(l1)
+                + "\n\nFRAGMENTOS TRANSCRIPTOS (lectura B, otro encuadre):\n"
+                + "\n".join(l2)
+                + ("\n\nNO LEGIBLE:\n" + "\n".join(ilegible) if ilegible else "")
+                + aviso + "\n\nReconciliá y describí la figura."), _parte_imagen(im)],
+        label=f"describir {et}")
+    if not isinstance(d, dict) or not d.get("resumen"):
+        return {**fig, "descripcion_nueva": None, "motivo": "descripción vacía"}
+
+    # Dos filtros sobre lo que la reconciliación propuso. El primero saca lo
+    # que las lecturas no acordaron; el segundo, lo que ninguna transcribió.
+    descartado = []
+
+    def admitido(v) -> bool:
+        if magnitudes(str(v)) & set(disputa):
+            descartado.append(f"en disputa: {v}")
+            return False
+        if no_transcripto(v, crudo):
+            descartado.append(f"no transcripto: {v}")
+            return False
+        return True
+
+    d["textos_en_la_figura"] = [t for t in (d.get("textos_en_la_figura") or [])
+                                if admitido(t)]
+    d["valores_nominales"] = {k: v for k, v in (d.get("valores_nominales") or {}).items()
+                              if admitido(v)}
+
+    # Una duda que repite algo que sí se leyó no es una duda: el texto del
+    # chunk diría "No legible en la figura: Conexión Δ/Y" justo debajo de
+    # "Textos en la figura: ... Conexión Δ/Y", y de las dos frases la que el
+    # modelo de respuesta va a creer es la peor.
+    leido = _normal(" ".join(d["textos_en_la_figura"]))
+    d["dudas"] = sorted({x for x in
+                         [str(y).strip() for y in (d.get("dudas") or [])] + ilegible
+                         + [f"valor ilegible: {v}" for v in disputa]
+                         if len(x) > 3 and _normal(x) not in leido})
+
+    # En modo conexiones lo transcripto no se pisa: se vino a corregir
+    # recorridos, no a releer valores que ya estaban corregidos.
+    if solo_conexiones:
+        d = solo_conexiones_nuevas(d, fig["descripcion_vieja"])
+    return {**fig, "descripcion_nueva": d, "mosaicos": len(trozos_a),
+            "en_disputa": disputa, "descartado": descartado}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limite", type=int, default=0)
@@ -533,96 +653,14 @@ def main() -> int:
     if not figuras:
         return 0
 
-    from openai import OpenAI
     from task_utils.chunk_text import ROTULO_CONEXIONES
-    from task_utils.llm_json import LLMJsonClient, run_parallel
-    from config.config_reader import ConfigReader
+    from task_utils.llm_json import run_parallel
 
-    modelo = args.modelo or ConfigReader().get("multimodal_model", "gpt-4o")
-    llm = LLMJsonClient(client=OpenAI(), model=modelo, temperature=0.0,
-                        max_output_tokens=4000, etapa="redescripcion_figuras")
-    print(f"Modelo: {modelo}\n")
-
-    def leer(partes, etiqueta):
-        """Una pasada de transcripción sobre todos los mosaicos de una figura."""
-        lineas, ilegible = [], []
-        for i, parte in enumerate(partes, 1):
-            t = llm.complete_json(
-                SISTEMA_TRANSCRIPCION,
-                [_texto(f"Fragmento {i} de {len(partes)} de la figura. "
-                        "Transcribí el texto que se ve en ESTE fragmento."), parte],
-                label=f"{etiqueta} frag.{i}")
-            lineas += [str(x) for x in ((t or {}).get("lineas") or [])]
-            ilegible += [str(x) for x in ((t or {}).get("ilegible") or [])]
-        return lineas, ilegible
+    llm = cliente_llm(args.modelo)
+    print(f"Modelo: {llm.model}\n")
 
     def redescribir(fig):
-        im = Image.open(fig["ruta"]).convert("RGB")
-        # Dos encuadres distintos, no dos llamadas sobre el mismo (ver mosaicos()).
-        trozos_a = mosaicos(im, desfase=0.0)
-        trozos_b = mosaicos(im, desfase=0.5)
-        et = f"{fig['archivo'][:26]} p.{fig['pagina']}"
-
-        l1, i1 = leer([_parte_imagen(t) for t in trozos_a], f"leer A {et}")
-        l2, i2 = leer([_parte_imagen(t) for t in trozos_b], f"leer B {et}")
-        if not (l1 or l2):
-            return {**fig, "descripcion_nueva": None, "motivo": "transcripción vacía"}
-
-        disputa = valores_en_disputa(l1, l2)
-        ilegible = sorted({x.strip() for x in (i1 + i2) if len(x.strip()) > 3})
-        crudo = _normal(" ".join(l1 + l2))
-        aviso = ""
-        if disputa:
-            aviso = ("\n\nVALORES QUE LAS DOS LECTURAS LEYERON DISTINTO, así que no se "
-                     "pudieron leer con seguridad: " + ", ".join(disputa)
-                     + "\nNo los pongas en textos_en_la_figura, ni en valores_nominales, "
-                       "ni en el resumen. Listalos en dudas.")
-
-        d = llm.complete_json(
-            SISTEMA_DESCRIPCION,
-            [_texto("FRAGMENTOS TRANSCRIPTOS (lectura A):\n" + "\n".join(l1)
-                    + "\n\nFRAGMENTOS TRANSCRIPTOS (lectura B, otro encuadre):\n"
-                    + "\n".join(l2)
-                    + ("\n\nNO LEGIBLE:\n" + "\n".join(ilegible) if ilegible else "")
-                    + aviso + "\n\nReconciliá y describí la figura."), _parte_imagen(im)],
-            label=f"describir {et}")
-        if not isinstance(d, dict) or not d.get("resumen"):
-            return {**fig, "descripcion_nueva": None, "motivo": "descripción vacía"}
-
-        # Dos filtros sobre lo que la reconciliación propuso. El primero saca lo
-        # que las lecturas no acordaron; el segundo, lo que ninguna transcribió.
-        descartado = []
-
-        def admitido(v) -> bool:
-            if magnitudes(str(v)) & set(disputa):
-                descartado.append(f"en disputa: {v}")
-                return False
-            if no_transcripto(v, crudo):
-                descartado.append(f"no transcripto: {v}")
-                return False
-            return True
-
-        d["textos_en_la_figura"] = [t for t in (d.get("textos_en_la_figura") or [])
-                                    if admitido(t)]
-        d["valores_nominales"] = {k: v for k, v in (d.get("valores_nominales") or {}).items()
-                                  if admitido(v)}
-
-        # Una duda que repite algo que sí se leyó no es una duda: el texto del
-        # chunk diría "No legible en la figura: Conexión Δ/Y" justo debajo de
-        # "Textos en la figura: ... Conexión Δ/Y", y de las dos frases la que el
-        # modelo de respuesta va a creer es la peor.
-        leido = _normal(" ".join(d["textos_en_la_figura"]))
-        d["dudas"] = sorted({x for x in
-                             [str(y).strip() for y in (d.get("dudas") or [])] + ilegible
-                             + [f"valor ilegible: {v}" for v in disputa]
-                             if len(x) > 3 and _normal(x) not in leido})
-
-        # En modo conexiones lo transcripto no se pisa: se vino a corregir
-        # recorridos, no a releer valores que ya estaban corregidos.
-        if args.conexiones:
-            d = solo_conexiones_nuevas(d, fig["descripcion_vieja"])
-        return {**fig, "descripcion_nueva": d, "mosaicos": len(trozos_a),
-                "en_disputa": disputa, "descartado": descartado}
+        return redescribir_figura(fig, llm, solo_conexiones=args.conexiones)
 
     resultados = [r for r in run_parallel(figuras, redescribir, max_workers=args.hilos,
                                           label="redescripción de figuras") if r]

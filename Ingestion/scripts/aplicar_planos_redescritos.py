@@ -64,44 +64,11 @@ y que ESTA descripción de plano responde.
 Devolvé {"preguntas": ["...", "..."]} con exactamente %d."""
 
 
-def texto_del_chunk(n: dict) -> str:
-    """Arma el texto en el mismo formato que el resto de las figuras del índice.
-
-    Se respeta el formato existente a propósito: los chunks visuales del índice
-    siguen todos este molde (`Tipo:`, `Componentes:`, el rótulo de conexiones),
-    el prompt de respuesta lo da por sentado, y cambiarlo solo para estos 19 los
-    volvería distintos de los otros 288 sin ninguna ventaja. Por lo mismo el
-    rótulo de las conexiones se importa de `chunk_text` en vez de escribirse
-    acá: son dos renderizadores del mismo formato y tienen que moverse juntos.
-    """
-    def rot(x):
-        if isinstance(x, dict):
-            r = (x.get("rotulo") or "").replace("\n", " ")
-            q = x.get("que_es") or ""
-            return f"{r} ({q})" if q else r
-        return str(x)
-
-    partes = [n.get("resumen", "").strip()]
-    if n.get("tipo"):
-        partes.append(f"Tipo: {n['tipo']}")
-    disp = [rot(x) for x in (n.get("dispositivos") or []) if rot(x).strip()]
-    if disp:
-        partes.append("Componentes: " + ", ".join(disp))
-    if n.get("conexiones"):
-        from task_utils.chunk_text import ROTULO_CONEXIONES
-        partes.append(f"{ROTULO_CONEXIONES}: "
-                      + ", ".join(str(c) for c in n["conexiones"]))
-    if n.get("textos_en_la_figura"):
-        partes.append("Textos en la figura: "
-                      + ", ".join(str(t) for t in n["textos_en_la_figura"]))
-    if n.get("valores_nominales"):
-        partes.append("Valores nominales: "
-                      + json.dumps(n["valores_nominales"], ensure_ascii=False))
-    # Las dudas van dentro del texto a propósito: que el modelo de respuesta
-    # sepa qué NO se pudo leer es justamente lo que evita que lo complete solo.
-    if n.get("dudas"):
-        partes.append("No legible en la figura: " + "; ".join(str(d) for d in n["dudas"]))
-    return "\n".join(p for p in partes if p)
+# El renderizador del texto de una figura vive en `task_utils.chunk_text`, al
+# lado del que lee lo que dejó el troceo: son dos vistas del mismo molde y una
+# copia local acá fue la razón de que el rótulo de conexiones tuviera que
+# agregarse dos veces.
+from task_utils.chunk_text import texto_del_chunk  # noqa: E402
 
 
 def main() -> int:

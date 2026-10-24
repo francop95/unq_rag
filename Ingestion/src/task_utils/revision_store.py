@@ -31,9 +31,10 @@ corregir un recorte. Y la reparación puntual ya existe:
 `redescribir_figuras_con_valores.py` relee una figura sola y
 `aplicar_planos_redescritos.py` la re-embebe y le regenera las preguntas.
 
-Así que el veredicto dice qué hacer con ESE artefacto, y solo `descartar` llega
-al pipeline (el chunk no se indexa). `redescribir` y `editar` son para la
-persona, que corre la herramienta que corresponde y vuelve a revisar.
+Así que el veredicto dice qué hacer con ESE artefacto. Dos de ellos llegan al
+pipeline: `descartar` saca el chunk, y `corregido` lo indexa con el texto que
+quedó en `texto_revisado`. `redescribir` y `editar` son el mismo trabajo
+todavía sin hacer, y mientras estén marcados la corrida no se puede aprobar.
 """
 
 import os
@@ -43,13 +44,17 @@ from typing import Any, Dict, List, Optional
 
 VEREDICTOS = {
     "ok": "entra al índice tal como está",
-    "redescribir": "volver a leer la figura con redescribir_figuras_con_valores.py",
-    "editar": "corregir el texto a mano y re-embeber",
+    "redescribir": "hay que volver a leer la figura",
+    "editar": "hay que corregir el texto a mano",
+    "corregido": "entra al índice con el texto corregido en la revisión",
     "descartar": "no indexar este chunk",
 }
 
 # Los únicos que frenan el indexado del documento. `redescribir` y `editar` son
 # trabajo pendiente de la persona: mientras estén, la corrida no está lista.
+# `corregido` es ese mismo trabajo ya hecho, así que no frena nada: es el
+# veredicto que queda cuando la pantalla releyó la figura o alguien reescribió
+# el texto y lo guardó.
 PENDIENTES_DE_ACCION = ("redescribir", "editar")
 
 ESTADOS = ("pendiente", "aprobada", "rechazada")
@@ -98,6 +103,12 @@ def _conectar() -> sqlite3.Connection:
         );
         """
     )
+    # La corrección vino después que la tabla, y hay bases con veredictos ya
+    # cargados: agregarla al CREATE no alcanza, porque ese CREATE no se vuelve
+    # a ejecutar sobre una tabla que ya existe.
+    columnas = {f["name"] for f in con.execute("PRAGMA table_info(veredictos)")}
+    if "texto_revisado" not in columnas:
+        con.execute("ALTER TABLE veredictos ADD COLUMN texto_revisado TEXT")
     return con
 
 
@@ -123,20 +134,54 @@ def registrar_corrida(documento: str, corrida: str, sha256: Optional[str] = None
 
 
 def anotar(documento: str, corrida: str, pagina: Any, chunk_id: str,
-           veredicto: str, nota: str = "", quien: str = "") -> None:
+           veredicto: str, nota: str = "", quien: str = "",
+           texto_revisado: Optional[str] = None) -> None:
+    """Deja el veredicto de un artefacto, y opcionalmente su texto corregido.
+
+    `texto_revisado` tiene tres valores con tres significados distintos:
+    `None` deja la corrección como estaba —marcar "ok" sobre algo ya corregido
+    no debe borrar la corrección—, una cadena la reemplaza, y `""` la borra.
+
+    Cambiar un veredicto sobre una corrida ya aprobada la devuelve a
+    pendiente. La aprobación fue sobre un estado concreto: si después se marca
+    una figura para rehacer, o se descarta un chunk, o se corrige un texto, lo
+    que se aprobó ya no es lo que se indexaría. Sin esto la pantalla mostraba
+    "aprobada" y "1 marcado para rehacer" al mismo tiempo, y `--exigir-revision`
+    le habría dado paso.
+    """
     if veredicto not in VEREDICTOS:
         raise ValueError(f"veredicto desconocido: {veredicto!r}; "
                          f"son {', '.join(VEREDICTOS)}")
     with _conectar() as con:
+        previo = con.execute(
+            "SELECT veredicto, texto_revisado FROM veredictos "
+            "WHERE documento=? AND corrida=? AND pagina=? AND chunk_id=?",
+            (documento, corrida, str(pagina), chunk_id),
+        ).fetchone()
         con.execute(
             "INSERT INTO veredictos "
-            "(documento, corrida, pagina, chunk_id, veredicto, nota, quien, cuando) "
-            "VALUES (?,?,?,?,?,?,?,?) "
+            "(documento, corrida, pagina, chunk_id, veredicto, nota, quien, "
+            " cuando, texto_revisado) "
+            "VALUES (?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(documento, corrida, pagina, chunk_id) DO UPDATE SET "
             "veredicto=excluded.veredicto, nota=excluded.nota, "
-            "quien=excluded.quien, cuando=excluded.cuando",
-            (documento, corrida, str(pagina), chunk_id, veredicto, nota, quien, _ahora()),
+            "quien=excluded.quien, cuando=excluded.cuando, "
+            "texto_revisado=COALESCE(excluded.texto_revisado, "
+            "                        veredictos.texto_revisado)",
+            (documento, corrida, str(pagina), chunk_id, veredicto, nota, quien,
+             _ahora(), texto_revisado),
         )
+        # Solo si cambió el dictamen: retocar la nota no invalida nada.
+        cambio = (previo is None
+                  or previo["veredicto"] != veredicto
+                  or (texto_revisado is not None
+                      and texto_revisado != (previo["texto_revisado"] or "")))
+        if cambio:
+            con.execute(
+                "UPDATE corridas SET estado='pendiente', decidida_en=NULL "
+                "WHERE documento=? AND corrida=? AND estado='aprobada'",
+                (documento, corrida),
+            )
 
 
 def veredictos(documento: str, corrida: str) -> Dict[tuple, Dict[str, Any]]:
@@ -153,6 +198,19 @@ def descartados(documento: str, corrida: str) -> set:
     """Los `(pagina, chunk_id)` que NO deben indexarse."""
     return {k for k, v in veredictos(documento, corrida).items()
             if v["veredicto"] == "descartar"}
+
+
+def correcciones(documento: str, corrida: str) -> Dict[tuple, str]:
+    """`{(pagina, chunk_id): texto}` de lo que una persona reescribió.
+
+    El texto corregido vive acá y no en el JSON del troceo a propósito: ese
+    JSON es la captura cruda de lo que leyó el modelo, y pisarlo borraría la
+    evidencia de qué había que corregir. La compuerta lo inyecta en el chunk
+    justo antes de enriquecer, en el mismo lugar donde saca los descartados.
+    """
+    return {k: v["texto_revisado"]
+            for k, v in veredictos(documento, corrida).items()
+            if (v.get("texto_revisado") or "").strip()}
 
 
 def decidir(documento: str, corrida: str, estado: str,

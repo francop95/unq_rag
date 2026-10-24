@@ -24,7 +24,8 @@ pipeline **no** hace algo que podría parecer que hace, se dice.
 | [9. Los siete tipos de chunk](#9-los-siete-tipos-de-chunk) | qué produce cada camino |
 | [10. El índice resultante](#10-el-índice-resultante) | **el listado final** |
 | [11. Lo que el pipeline no hace solo](#11-lo-que-el-pipeline-no-hace-solo) | los huecos honestos |
-| [12. Cómo se corre](#12-cómo-se-corre) | comandos |
+| [12. La revisión antes de indexar](#12-la-revisión-antes-de-indexar) | **la compuerta y su pantalla** |
+| [13. Cómo se corre](#13-cómo-se-corre) | comandos |
 
 ---
 
@@ -406,7 +407,102 @@ Es barato y deliberado, pero significa que el conteo de vectores del archivo
 
 ---
 
-## 12. Cómo se corre
+## 12. La revisión antes de indexar
+
+Entre trocear y indexar hay una compuerta: una persona mira lo que salió y
+recién después entra al índice.
+
+### Por qué no alcanza con los informes
+
+El pipeline ya genera cuatro —`quality`, `validation`, `technical`,
+`multimodal`— y los cuatro miden **estructura**: cuántos chunks, cuántos
+duplicados, qué longitud, qué confianza. La chapa del motor del forzador pasó
+los cuatro como válida mientras decía:
+
+| en la foto | en el índice |
+|---|---|
+| `MT 802-4` | `MT 160-4` |
+| `V 220/380` | `V 230/380` |
+| `Conexión Δ/Y` | `Conexión A/Y` |
+
+Ningún chequeo de forma podía agarrar eso. Lo único que lo agarra es alguien
+mirando el recorte al lado de su descripción.
+
+### El veredicto es una acción, no un sí/no
+
+Todos los defectos encontrados hasta hoy fueron **una** figura dentro de un
+documento, nunca un documento entero. Y rechazar el documento entero
+significaría volver a pagar el troceo —1,17 millones de tokens de salida para
+un manual de 126 páginas— para corregir un recorte. Así que el veredicto dice
+qué hacer con ESE artefacto:
+
+| veredicto | qué significa | ¿frena la aprobación? |
+|---|---|---|
+| `ok` | entra tal como está | no |
+| `corregido` | entra con el texto que se corrigió en la revisión | no |
+| `descartar` | no se indexa | no |
+| `redescribir` | hay que volver a leer la figura | **sí** |
+| `editar` | hay que corregir el texto a mano | **sí** |
+
+Los dos últimos son trabajo marcado y todavía sin hacer: mientras estén, la
+corrida no se puede aprobar. Si pudiera, el veredicto quedaría anotado y el
+chunk se indexaría igual, que es exactamente lo que la compuerta existe para
+impedir. Por el mismo motivo, cambiar un veredicto sobre una corrida ya
+aprobada la devuelve a pendiente: lo que se aprobó ya no es lo que se
+indexaría.
+
+El texto corregido se guarda en la base de revisión, **no** en el JSON del
+troceo: ese JSON es la captura cruda de lo que leyó el modelo, y pisarlo
+borraría la evidencia de qué había que corregir. La compuerta lo inyecta en el
+chunk justo antes del enriquecimiento, en el mismo punto donde saca los
+descartados, para que la corrección llegue también a las preguntas sintéticas
+y al embedding en vez de quedar pegada al final sobre un texto del que ya
+colgaban preguntas con el error adentro.
+
+### La pantalla
+
+```bash
+cd Ingestion
+python scripts/revisar_web.py          # http://127.0.0.1:5055
+```
+
+Un servidor aparte del asistente, en la máquina donde están los documentos.
+Desde ahí se trocea un documento, se miran sus figuras con el recorte al lado
+de la descripción, se dictamina cada una, se aprueba y se indexa. Tres cosas
+tardan y se siguen por el log en vivo: el troceo, el indexado y la relectura
+de una figura.
+
+Dos botones gastan plata, así que la pantalla escucha solo en `127.0.0.1` y no
+corre más de un trabajo a la vez.
+
+**Releer una figura** la vuelve a pasar por el modelo de visión con la misma
+pasada que `redescribir_figuras_con_valores.py` —transcribir dos veces con
+encuadres distintos, cotejar en Python, y recién ahí describir— y deja el
+resultado **como propuesta**, lado a lado con lo que hay. Aplicarla es un
+segundo gesto: la relectura no siempre mejora, y a veces pierde componentes
+que la descripción original tenía bien.
+
+### Lo mismo desde la consola
+
+Las dos pantallas leen las mismas corridas y escriben la misma base, así que
+se pueden mezclar.
+
+```bash
+python src/main_multimodal.py --solo tesis --solo-chunks   # trocea y para
+python scripts/revisar_ingesta.py tesis                    # figuras y tablas, completas
+python scripts/revisar_ingesta.py tesis --diff             # qué cambió desde lo aprobado
+python scripts/revisar_ingesta.py tesis --descartar p12:chunk_1 --nota "duplicado"
+python scripts/revisar_ingesta.py tesis --aprobar
+python src/main_multimodal.py --solo tesis --reusar-chunks --exigir-revision
+```
+
+`--exigir-revision` es opcional, no el default: la ingesta de siempre sigue
+funcionando igual. Lo único que frena en todos los casos es una corrida
+marcada `rechazada`, porque si no aprobar y rechazar darían lo mismo.
+
+---
+
+## 13. Cómo se corre
 
 ```bash
 cd Ingestion

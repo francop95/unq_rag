@@ -807,3 +807,302 @@ def test_los_valores_del_ocr_salen_en_orden_de_lectura():
     assert valores["current"] == ["40A", "25A", "10A", "2A"], (
         "tienen que salir en el orden en que se leen sobre el plano, "
         "sin repetir el 25A")
+
+
+def test_una_correccion_no_se_borra_al_volver_a_dictaminar(revision):
+    """Marcar "ok" sobre una figura ya corregida no puede tirar la corrección.
+
+    El upsert copiaba todas las columnas de `excluded`, así que un segundo
+    veredicto sin texto dejaba `texto_revisado` en NULL y el chunk volvía a
+    indexarse con la descripción equivocada, sin que nada avisara."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 1, "f", "corregido", texto_revisado="Conexión Δ/Y")
+    revision.anotar("doc", "c1", 1, "f", "ok", nota="mirada de nuevo")
+
+    assert revision.correcciones("doc", "c1") == {("1", "f"): "Conexión Δ/Y"}
+
+
+def test_una_cadena_vacia_si_borra_la_correccion(revision):
+    """Hay que poder volver atrás: `None` conserva, `""` borra."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 1, "f", "corregido", texto_revisado="algo")
+    revision.anotar("doc", "c1", 1, "f", "ok", texto_revisado="")
+    assert revision.correcciones("doc", "c1") == {}
+
+
+def test_corregido_no_frena_la_aprobacion(revision):
+    """`redescribir` y `editar` son trabajo sin hacer; `corregido` es el mismo
+    trabajo ya hecho. Si frenara, corregir algo volvería la corrida
+    inaprobable para siempre."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 1, "a", "corregido", texto_revisado="x")
+    revision.anotar("doc", "c1", 2, "b", "redescribir")
+    pendientes = [p["chunk_id"] for p in revision.trabajo_pendiente("doc", "c1")]
+    assert pendientes == ["b"]
+
+
+def test_una_base_sin_la_columna_nueva_se_migra_sola(tmp_path, monkeypatch):
+    """La corrección llegó después que la tabla, y hay bases con veredictos ya
+    cargados. El `CREATE TABLE IF NOT EXISTS` no las toca, así que sin el
+    ALTER la pantalla fallaba con "no such column" sobre una base real."""
+    import sqlite3
+    ruta = tmp_path / "revisiones.sqlite3"
+    con = sqlite3.connect(ruta)
+    con.executescript("""
+        CREATE TABLE veredictos (
+            documento TEXT NOT NULL, corrida TEXT NOT NULL, pagina TEXT NOT NULL,
+            chunk_id TEXT NOT NULL, veredicto TEXT NOT NULL, nota TEXT,
+            quien TEXT, cuando TEXT NOT NULL,
+            PRIMARY KEY (documento, corrida, pagina, chunk_id));
+        INSERT INTO veredictos VALUES ('doc','c1','1','a','ok','','franco','ayer');
+    """)
+    con.commit()
+    con.close()
+
+    monkeypatch.setenv("REVISION_DB_PATH", str(ruta))
+    from task_utils import revision_store
+    revision_store.anotar("doc", "c1", 2, "b", "corregido", texto_revisado="Δ/Y")
+
+    assert revision_store.correcciones("doc", "c1") == {("2", "b"): "Δ/Y"}
+    assert revision_store.veredictos("doc", "c1")[("1", "a")]["veredicto"] == "ok"
+
+
+def test_el_texto_corregido_gana_sobre_el_renderizador():
+    """Es el único punto por el que una corrección humana llega al enriquecedor,
+    a las preguntas sintéticas, al embedding y al indexer de una sola vez.
+    Aplicarla en cada consumidor es lo que hizo que `diagram_visual` se
+    perdiera en silencio en tres de ellos."""
+    chunk = {"content_type": "table",
+             "original_chunk": json.dumps({"table_markdown": "| mal |"}),
+             "texto_revisado": "| bien |"}
+    assert readable_chunk_text(chunk) == "| bien |"
+    assert readable_chunk_text({**chunk, "texto_revisado": "   "}) == "| mal |"
+
+
+# ─────────────────────── lectura de las corridas, compartida por las dos pantallas
+
+@pytest.fixture
+def corrida_en_disco(tmp_path, monkeypatch):
+    """Una corrida de troceo falsa, con la misma forma que la real."""
+    monkeypatch.setenv("INGESTION_DATA_DIR", str(tmp_path))
+    base = tmp_path / "chunks_data" / "doc" / "20260101_000000"
+    (base / "crops").mkdir(parents=True)
+    recorte = base / "crops" / "doc_p2_image_1.png"
+    from PIL import Image
+    Image.new("RGB", (40, 30), "white").save(recorte)
+
+    def escribir(pagina, chunk_id, contenido):
+        carpeta = base / f"doc_{pagina}"
+        carpeta.mkdir(exist_ok=True)
+        (carpeta / f"doc_{pagina}_{chunk_id}.json").write_text(
+            json.dumps(contenido), encoding="utf-8")
+
+    escribir(10, "chunk_1", {"page_num": 10, "chunk_id": "chunk_1",
+                             "content_type": "text", "original_chunk": "página diez"})
+    escribir(2, "chunk_1", {"page_num": 2, "chunk_id": "chunk_1",
+                            "content_type": "text", "original_chunk": "página dos"})
+    escribir(2, "chunk_2_visual", {
+        "page_num": 2, "chunk_id": "chunk_2_visual", "content_type": "diagram_visual",
+        "original_chunk": json.dumps({"image_path": str(recorte),
+                                      "notes": {"description": "un plano"}})})
+
+    (tmp_path / "raw_data").mkdir()
+    (tmp_path / "raw_data" / "doc.pdf").write_bytes(b"%PDF-1.4\n")
+
+    from task_utils import revision_corridas
+    return revision_corridas
+
+
+def test_los_chunks_salen_en_orden_de_pagina_y_no_alfabetico(corrida_en_disco):
+    """`os.listdir` devuelve "doc_10" antes que "doc_2", y varios pasos del
+    pipeline dependen del orden real de lectura del documento."""
+    paginas = [c["page_num"] for c in corrida_en_disco.leer_chunks("doc", "20260101_000000")]
+    assert paginas == [2, 2, 10]
+
+
+def test_la_carpeta_de_recortes_no_se_lee_como_chunks(corrida_en_disco):
+    """`crops/` está dentro de la corrida y no contiene JSON de chunks."""
+    assert len(corrida_en_disco.leer_chunks("doc", "20260101_000000")) == 3
+
+
+def test_un_recorte_fuera_de_data_no_se_puede_servir(corrida_en_disco):
+    """El `image_path` sale de un JSON generado, no de la configuración. Si se
+    acepta tal cual, basta un `../` en ese campo para que la pantalla sirva
+    cualquier archivo de la máquina."""
+    assert corrida_en_disco.ruta_relativa_a_datos("/etc/passwd") is None
+    assert corrida_en_disco.ruta_relativa_a_datos(
+        str(corrida_en_disco.raiz_datos()) + "/../.env") is None
+    chunks = corrida_en_disco.leer_chunks("doc", "20260101_000000")
+    visual = next(c for c in chunks if c["chunk_id"] == "chunk_2_visual")
+    assert corrida_en_disco.ruta_relativa_a_datos(
+        corrida_en_disco.recorte_de(visual)).startswith("chunks_data/")
+
+
+def test_el_diff_compara_por_la_identidad_del_indice(corrida_en_disco):
+    """Dos corridas se comparan chunk a chunk por `(página, chunk_id)`, no por
+    posición: con un chunk nuevo al principio, comparar por orden marcaría
+    todo como cambiado."""
+    import shutil
+    base = os.path.join(corrida_en_disco.raiz_chunks(), "doc")
+    shutil.copytree(os.path.join(base, "20260101_000000"),
+                    os.path.join(base, "20260102_000000"))
+    nuevo = os.path.join(base, "20260102_000000", "doc_2", "doc_2_chunk_1.json")
+    with open(nuevo, encoding="utf-8") as f:
+        datos = json.load(f)
+    datos["original_chunk"] = "página dos, corregida"
+    with open(nuevo, "w", encoding="utf-8") as f:
+        json.dump(datos, f)
+
+    d = corrida_en_disco.comparar("doc", "20260102_000000", "20260101_000000")
+    assert d["cambiados"] == [("2", "chunk_1")]
+    assert not d["nuevos"] and not d["perdidos"]
+
+
+def test_las_extensiones_de_la_pantalla_son_las_que_el_pipeline_sabe_trocear():
+    """`revision_corridas` repite la lista de `main_multimodal` para no
+    arrastrar torch y chromadb adentro de un servidor web. La copia solo es
+    aceptable si algo falla cuando se separan: si la pantalla ofrece trocear
+    un .docx que el pipeline no sabe leer, el botón lanza una corrida que
+    termina en error."""
+    import ast
+    from task_utils.revision_corridas import (
+        CARPETAS_IGNORADAS, EXTENSIONES_INGESTABLES,
+    )
+    ruta = os.path.join(os.path.dirname(__file__), "..", "src", "main_multimodal.py")
+    with open(ruta, encoding="utf-8") as f:
+        arbol = ast.parse(f.read())
+
+    asignaciones = {d.id: nodo.value for nodo in arbol.body
+                    if isinstance(nodo, ast.Assign)
+                    for d in nodo.targets if isinstance(d, ast.Name)}
+
+    # De CHUNKERS solo las claves: los valores son clases de task, que
+    # `literal_eval` no puede resolver y que acá no interesan.
+    extensiones = {ast.literal_eval(k) for k in asignaciones["CHUNKERS"].keys}
+    assert extensiones == set(EXTENSIONES_INGESTABLES)
+    assert ast.literal_eval(asignaciones["CARPETAS_IGNORADAS"]) == CARPETAS_IGNORADAS
+
+
+def test_la_relectura_de_una_figura_descarta_lo_que_las_dos_lecturas_no_acordaron():
+    """`redescribir_figura` salió de adentro de `main()` para que la pantalla
+    de revisión pueda releer una figura suelta. Lo que no puede perder en la
+    mudanza es el cotejo: una magnitud que una lectura vio y la otra no es un
+    valor que el modelo completó, no que leyó, y guardarlo es exactamente el
+    bug que puso "A 3.5" donde la chapa dice "A 3.51/2.03".
+    """
+    sys.path.insert(0, os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "scripts")))
+    from PIL import Image
+    import redescribir_figuras_con_valores as R
+
+    class LLMFalso:
+        """Dos lecturas que discrepan en la corriente y coinciden en la tensión."""
+        model = "falso"
+
+        def __init__(self):
+            self.pasadas = 0
+
+        def complete_json(self, sistema, partes, label=""):
+            if sistema is R.SISTEMA_TRANSCRIPCION:
+                self.pasadas += 1
+                corriente = "A 3.51/2.03" if "leer A" in label else "A 3.1/1.8"
+                return {"lineas": ["V 220/380", corriente], "ilegible": []}
+            return {"resumen": "chapa del motor", "tipo": "nameplate",
+                    "textos_en_la_figura": ["V 220/380", "A 3.51/2.03"],
+                    "valores_nominales": {"voltage": "V 220/380",
+                                          "current": "A 3.51/2.03"},
+                    "dudas": []}
+
+    ruta = os.path.join(os.path.dirname(__file__), "chapa_de_prueba.png")
+    Image.new("RGB", (900, 500), "white").save(ruta)
+    try:
+        r = R.redescribir_figura(
+            {"ruta": ruta, "archivo": "tesis.pdf", "pagina": 87,
+             "descripcion_vieja": "lo de antes"}, LLMFalso())
+    finally:
+        os.remove(ruta)
+
+    d = r["descripcion_nueva"]
+    # La disputa se lleva en magnitudes normalizadas, no en la cadena cruda.
+    assert set(r["en_disputa"]) == {"3.51A", "2.03A", "3.1A", "1.8A"}
+    assert d["valores_nominales"] == {"voltage": "V 220/380"}, (
+        "la corriente que las dos lecturas leyeron distinto no se puede guardar")
+    assert "A 3.51/2.03" not in d["textos_en_la_figura"]
+    assert any("3.51" in x for x in d["dudas"]), "tiene que quedar declarada como ilegible"
+
+
+def test_la_relectura_en_modo_conexiones_no_pisa_lo_transcripto():
+    """Esa pasada se corre para corregir recorridos. Si además reescribiera
+    los valores, volvería a meter los que una corrección anterior ya sacó:
+    pasó con la página 87, que perdió su "2 kW" y recuperó un "2.5A" inventado.
+    """
+    sys.path.insert(0, os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "scripts")))
+    from PIL import Image
+    import redescribir_figuras_con_valores as R
+
+    class LLMFalso:
+        model = "falso"
+
+        def complete_json(self, sistema, partes, label=""):
+            if sistema is R.SISTEMA_TRANSCRIPCION:
+                return {"lineas": ["QF03", "VFD01"], "ilegible": []}
+            return {"resumen": "otro resumen", "conexiones": ["QF03 → VFD01"],
+                    "textos_en_la_figura": ["QF03"], "valores_nominales": {},
+                    "dudas": []}
+
+    vieja = ("Un plano\nComponentes: QF03 (interruptor), VFD01 (variador)\n"
+             f"{ROTULO_CONEXIONES}: QF03 → IF01, IF01 → VFD01\n"
+             "Valores nominales: {\"voltage\": \"220 VCA\"}")
+    ruta = os.path.join(os.path.dirname(__file__), "plano_de_prueba.png")
+    Image.new("RGB", (900, 500), "white").save(ruta)
+    try:
+        r = R.redescribir_figura(
+            {"ruta": ruta, "archivo": "plano.pdf", "pagina": 1,
+             "descripcion_vieja": vieja}, LLMFalso(), solo_conexiones=True)
+    finally:
+        os.remove(ruta)
+
+    d = r["descripcion_nueva"]
+    assert d["conexiones"] == ["QF03 → VFD01"], "el recorrido sí se reemplaza"
+    assert d["valores_nominales"] == {"voltage": "220 VCA"}, "los valores no"
+    assert "QF03 (interruptor)" in [str(x) for x in d["dispositivos"]]
+
+
+def test_tocar_un_veredicto_devuelve_la_corrida_aprobada_a_pendiente(revision):
+    """La aprobación fue sobre un estado concreto. Si después se marca una
+    figura para rehacer, lo aprobado ya no es lo que se indexaría: la pantalla
+    mostraba "aprobada" y "1 marcado para rehacer" a la vez, y
+    `--exigir-revision` le daba paso igual."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 1, "a", "ok")
+    revision.decidir("doc", "c1", "aprobada", "franco")
+
+    revision.anotar("doc", "c1", 1, "a", "ok", nota="una aclaración")
+    assert revision.estado("doc", "c1")["estado"] == "aprobada", (
+        "cambiar solo la nota no invalida la aprobación")
+
+    revision.anotar("doc", "c1", 2, "b", "redescribir")
+    assert revision.estado("doc", "c1")["estado"] == "pendiente"
+
+
+def test_corregir_el_texto_de_algo_ya_aprobado_tambien_lo_devuelve_a_pendiente(revision):
+    """Corregir cambia lo que se indexa tanto como descartar."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 1, "a", "corregido", texto_revisado="Δ/Y")
+    revision.decidir("doc", "c1", "aprobada")
+
+    revision.anotar("doc", "c1", 1, "a", "corregido", texto_revisado="Δ/Y")
+    assert revision.estado("doc", "c1")["estado"] == "aprobada", (
+        "volver a guardar el mismo texto no cambia nada")
+
+    revision.anotar("doc", "c1", 1, "a", "corregido", texto_revisado="otra cosa")
+    assert revision.estado("doc", "c1")["estado"] == "pendiente"
+
+
+def test_una_corrida_rechazada_no_vuelve_a_pendiente_sola(revision):
+    """Rechazar es una decisión explícita; solo la levanta otra decisión."""
+    revision.registrar_corrida("doc", "c1")
+    revision.decidir("doc", "c1", "rechazada")
+    revision.anotar("doc", "c1", 1, "a", "ok")
+    assert revision.estado("doc", "c1")["estado"] == "rechazada"
