@@ -19,6 +19,7 @@ from task_utils.contextual_enricher import (
     ContextualEnricher, build_question_chunks, build_document_outline,
 )
 from task_utils.llm_json import QuotaExhaustedError
+from task_utils import revision_store as revision
 from task_utils.usage_meter import MEDIDOR
 import json
 import traceback
@@ -310,6 +311,11 @@ def _parse_args():
                         "el modelo de visión")
     p.add_argument("--dry-run", action="store_true",
                    help="lista los documentos que se procesarían y termina, sin gastar nada")
+    p.add_argument("--solo-chunks", action="store_true",
+                   help="trocea y para: deja la corrida registrada para revisar "
+                        "con scripts/revisar_ingesta.py, sin gastar embeddings")
+    p.add_argument("--exigir-revision", action="store_true",
+                   help="no indexa una corrida que una persona no haya aprobado")
     return p.parse_args()
 
 
@@ -390,6 +396,42 @@ if __name__ == "__main__":
                 print(f"✅ Chunking OK. Carpeta: {chunks_dir}")
 
             # --------------------
+            # 1.25) COMPUERTA DE REVISIÓN
+            # --------------------
+            # El troceo es lo caro y ya quedó en disco; de acá para adelante se
+            # gastan embeddings y se escribe el índice. Es el punto donde tiene
+            # sentido que alguien mire lo que salió: los cuatro reportes que el
+            # pipeline genera miden estructura, no verdad, y la chapa del motor
+            # pasó los cuatro como válida diciendo "Conexión A/Y" en vez de Δ/Y.
+            corrida = os.path.basename(chunks_dir.rstrip(os.sep))
+            revision.registrar_corrida(file_stem, corrida, pdf_hash)
+
+            if args.solo_chunks:
+                print(f"⏸️  --solo-chunks: queda para revisar.\n"
+                      f"    python scripts/revisar_ingesta.py '{file_stem}'")
+                skipped_docs.append(f"{file_stem} (pendiente de revisión)")
+                continue
+
+            estado_revision = (revision.estado(file_stem, corrida) or {}).get("estado")
+            if args.exigir_revision and estado_revision != "aprobada":
+                print(f"🛑 --exigir-revision: la corrida {corrida} está "
+                      f"'{estado_revision}'. No se indexa.\n"
+                      f"    python scripts/revisar_ingesta.py '{file_stem}'")
+                skipped_docs.append(f"{file_stem} (sin aprobar)")
+                continue
+            if estado_revision == "rechazada":
+                # Rechazada es una decisión explícita y vale aunque no se pida
+                # exigir revisión: si no, aprobar y rechazar darían lo mismo.
+                print(f"🛑 La corrida {corrida} está rechazada. No se indexa.")
+                skipped_docs.append(f"{file_stem} (rechazada)")
+                continue
+
+            descartados = revision.descartados(file_stem, corrida)
+            if descartados:
+                print(f"🚫 {len(descartados)} chunk(s) descartados en la revisión, "
+                      f"no se indexan")
+
+            # --------------------
             # 1.5) VALIDACIÓN Y ENRIQUECIMIENTO
             # --------------------
             print("\n🔍 Validando y enriqueciendo chunks...")
@@ -410,6 +452,16 @@ if __name__ == "__main__":
                                         raw_chunks.append(chunk_data)
                             except Exception as e:
                                 print(f"   ⚠️  Error cargando {json_file}: {e}")
+
+            # Lo que la revisión marcó "descartar" se saca acá y no después:
+            # así tampoco se le generan preguntas sintéticas —que heredarían su
+            # error— ni se le paga el embedding.
+            if descartados:
+                antes = len(raw_chunks)
+                raw_chunks = [c for c in raw_chunks
+                              if (str(c.get("page_num")),
+                                  str(c.get("chunk_id"))) not in descartados]
+                print(f"   🚫 descartados por revisión: {antes - len(raw_chunks)}")
 
             # Restaurar el orden documental: os.listdir devuelve un orden
             # arbitrario del filesystem, y varios pasos posteriores dependen

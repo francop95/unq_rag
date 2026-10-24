@@ -717,3 +717,93 @@ def test_los_dos_encuadres_no_son_el_mismo():
     b = mosaicos(im, desfase=0.5)
     assert [x.size for x in a] == [x.size for x in b]
     assert any(x.tobytes() != y.tobytes() for x, y in zip(a, b))
+
+
+# ──────────────────────── compuerta de revisión humana antes de indexar
+
+@pytest.fixture
+def revision(tmp_path, monkeypatch):
+    """El almacén de revisión sobre una base nueva por test."""
+    monkeypatch.setenv("REVISION_DB_PATH", str(tmp_path / "revisiones.sqlite3"))
+    from task_utils import revision_store
+    return revision_store
+
+
+def test_registrar_una_corrida_dos_veces_no_pisa_lo_revisado(revision):
+    """Volver a correr el troceo del mismo documento sobre la misma carpeta no
+    puede borrar los veredictos ya cargados ni devolver el estado a pendiente."""
+    revision.registrar_corrida("doc", "20260101_000000", "abc")
+    revision.anotar("doc", "20260101_000000", 1, "chunk_1", "ok")
+    revision.decidir("doc", "20260101_000000", "aprobada", "franco")
+
+    assert revision.registrar_corrida("doc", "20260101_000000", "abc") == "aprobada"
+    assert revision.estado("doc", "20260101_000000")["estado"] == "aprobada"
+    assert len(revision.veredictos("doc", "20260101_000000")) == 1
+
+
+def test_un_veredicto_nuevo_reemplaza_al_anterior(revision):
+    """Revisar es iterativo: se marca para rehacer, se rehace, se marca ok. Si
+    se acumularan, `trabajo_pendiente` nunca se vaciaría."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 87, "chunk_3_visual", "redescribir", "Δ leído como A")
+    assert len(revision.trabajo_pendiente("doc", "c1")) == 1
+    revision.anotar("doc", "c1", 87, "chunk_3_visual", "ok", "corregido")
+    assert revision.trabajo_pendiente("doc", "c1") == []
+    assert len(revision.veredictos("doc", "c1")) == 1
+
+
+def test_un_veredicto_inventado_se_rechaza(revision):
+    """Un veredicto que el pipeline no sabe interpretar se guardaría igual y
+    no haría nada, que es la forma silenciosa de no funcionar."""
+    revision.registrar_corrida("doc", "c1")
+    with pytest.raises(ValueError):
+        revision.anotar("doc", "c1", 1, "chunk_1", "mas o menos")
+
+
+def test_solo_descartar_llega_al_pipeline(revision):
+    """`redescribir` y `editar` son trabajo de la persona; el único veredicto
+    que cambia lo que se indexa es `descartar`."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 1, "a", "ok")
+    revision.anotar("doc", "c1", 2, "b", "descartar")
+    revision.anotar("doc", "c1", 3, "c", "redescribir")
+    assert revision.descartados("doc", "c1") == {("2", "b")}
+
+
+def test_la_pagina_se_guarda_como_texto_venga_como_venga(revision):
+    """En los JSON del troceo `page_num` es int y en el índice es str. Si la
+    clave no se normaliza, el descarte no matchea y el chunk se indexa igual."""
+    revision.registrar_corrida("doc", "c1")
+    revision.anotar("doc", "c1", 7, "chunk_1", "descartar")
+    assert ("7", "chunk_1") in revision.descartados("doc", "c1")
+
+
+def test_la_ultima_aprobada_es_contra_la_que_se_compara(revision):
+    """El diff necesita saber cuál fue la última que se dio por buena."""
+    for c in ("c1", "c2", "c3"):
+        revision.registrar_corrida("doc", c)
+    revision.decidir("doc", "c1", "aprobada")
+    revision.decidir("doc", "c3", "aprobada")
+    revision.decidir("doc", "c2", "rechazada")
+    assert revision.ultima_aprobada("doc") == "c3"
+    assert revision.ultima_aprobada("otro") is None
+
+
+def test_los_valores_del_ocr_salen_en_orden_de_lectura():
+    """Era `list(set(matches))`, y Python aleatoriza el hash de los strings
+    ENTRE procesos: el mismo plano daba "Current: 2A, 10A, 25A, 40A" en una
+    corrida y "10A, 40A, 25A, 2A" en otra. Mismo contenido, texto distinto,
+    embedding distinto, y un diff que marca cambios donde no los hubo.
+
+    No alcanza con llamar dos veces y comparar: dentro de un mismo proceso un
+    set SÍ es estable, así que esa prueba pasaría con el código viejo. Lo que
+    hay que afirmar es la propiedad concreta —deduplicar conservando el orden
+    de aparición—, que un set no cumple salvo por casualidad.
+    """
+    from task_utils.diagram_processor import ElectricalDiagramProcessor
+    p = ElectricalDiagramProcessor()
+    valores = p._extract_electrical_values(
+        "Inter. dif. In: 40A, Inter. Ter. In: 25A, In: 10A, In: 25A, 2A")
+    assert valores["current"] == ["40A", "25A", "10A", "2A"], (
+        "tienen que salir en el orden en que se leen sobre el plano, "
+        "sin repetir el 25A")

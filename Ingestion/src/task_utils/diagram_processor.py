@@ -279,14 +279,25 @@ class ElectricalDiagramProcessor:
         return list(set(components))  # Eliminar duplicados
     
     def _extract_electrical_values(self, text: str) -> Dict[str, List[str]]:
-        """Extrae valores eléctricos del texto."""
+        """Extrae valores eléctricos del texto, sin repetir y en orden de lectura.
+
+        Era `list(set(matches))`, y el orden de un set de strings cambia entre
+        procesos porque Python aleatoriza el hash. El mismo plano troceado dos
+        veces daba "Current: 2A, 10A, 25A, 40A" y "Current: 10A, 40A, 25A, 2A":
+        mismo contenido, texto distinto, embedding distinto. Y al comparar dos
+        corridas el chunk figuraba como cambiado sin haber cambiado, que es la
+        clase de ruido que enseña a ignorar los diffs.
+
+        `dict.fromkeys` deduplica conservando la primera aparición, así que
+        además quedan en el orden en que se leen sobre el plano.
+        """
         values = {}
-        
+
         for value_type, pattern in self.value_patterns.items():
             matches = re.findall(pattern, text, re.IGNORECASE)
             if matches:
-                values[value_type] = list(set(matches))
-        
+                values[value_type] = list(dict.fromkeys(matches))
+
         return values
     
     def create_enhanced_diagram_chunks(
