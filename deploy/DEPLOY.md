@@ -146,6 +146,107 @@ aws ec2 delete-key-pair --key-name unq-rag-key
 
 ---
 
+## Que se encienda sola cuando alguien entra
+
+La demo se usa un día de cada cuatro, y el 89% de los ~21 USD/mes que cuesta
+es tiempo encendido. Con esto la instancia está apagada salvo cuando alguien
+la visita.
+
+```bash
+AWS_PROFILE=admin ./deploy/instalar-despertador.sh
+```
+
+Hace falta una cuenta con permisos de admin **una sola vez**: el usuario
+`unq-rag-deploy` solo tiene EC2, y esto crea un rol de IAM y una Lambda.
+
+### Cómo queda
+
+```
+  visitante
+     │  https
+     ▼
+┌─ Lambda "unq-rag-despertador" (Function URL) ──────────────────┐
+│  1. ¿tiene la contraseña?  no → 401 y no toca nada             │
+│  2. ¿la instancia está apagada?  sí → la enciende + "esperá…"  │
+│  3. proxy a nginx, reenviando la misma cabecera de la clave    │
+└────────────────────────────────────────────────────────────────┘
+     │
+     ▼  EC2, que se apaga sola tras 20 min sin pedidos
+```
+
+| | USD/mes |
+|---|---|
+| Lambda | 0 (capa gratuita: 1M invocaciones) |
+| EBS 30 GB, se paga aunque esté apagada | 2,40 |
+| EC2 + IPv4 mientras está prendida | ~1 |
+| **Total** | **≈ 3,50** contra 21,20 |
+
+### Lo que cambia para el que la usa
+
+**La URL pasa a ser la de la Lambda.** Al apagarse, la IP pública se libera y
+en cada encendido le toca otra, así que entrar por IP deja de funcionar. Es la
+dirección de la Lambda la que hay que compartir — y encima es HTTPS, así que
+la contraseña deja de viajar en claro hasta la instancia.
+
+**La primera visita espera un minuto.** Medido sobre esta instancia: 22 s
+desde que arranca el sistema hasta que nginx contesta, más 20-40 s de
+aprovisionamiento de EC2. La página de espera se actualiza sola. Las visitas
+siguientes no esperan nada.
+
+**La contraseña se valida en la Lambda, no solo en nginx.** Es lo que hace que
+el ahorro exista: si no, cualquier bot que escanee la URL enciende la
+instancia y a las pocas semanas estás pagando lo mismo sin que nadie la use.
+Por eso el instalador verifica que la contraseña que le des sea la misma que
+tiene `deploy/.htpasswd`: si no coincidieran, el navegador la pediría dos
+veces.
+
+### Operarla
+
+```bash
+# apagarla ahora
+aws ec2 stop-instances --region us-east-1 --instance-ids <id>
+
+# ver qué decidió el apagado automático
+ssh -i deploy/unq-rag-key.pem ec2-user@<ip> "journalctl -t despertador --no-pager | tail"
+
+# probar la decisión sin apagar nada
+ssh -i deploy/unq-rag-key.pem ec2-user@<ip> 'SOLO_MIRAR=1 bash -s' \
+    < deploy/despertador/apagar-si-ocioso.sh
+
+# cambiar los minutos de inactividad
+MINUTOS_OCIOSO=45 AWS_PROFILE=admin ./deploy/instalar-despertador.sh
+```
+
+`upload-data.sh` y `ver-feedback.sh` ya no leen la IP de `.deploy-target`: se
+la preguntan a EC2 y encienden la instancia si hace falta, porque con el
+despertador esa IP queda vieja al primer apagado.
+
+El apagado automático no corre mientras haya una sesión SSH abierta, así que
+no te va a bajar la instancia en medio de un `upload-data.sh`.
+
+### Probar la Lambda sin desplegarla
+
+```bash
+cd deploy/despertador && node pruebas.mjs
+```
+
+Está escrita sin dependencias de npm —la firma SigV4 de las dos llamadas a
+EC2 va a mano— justamente para que el handler entero se pueda correr en tu
+máquina. La prueba que más importa es la del archivo de 5,4 MB: una Lambda sin
+*response streaming* corta en 6 MB de payload y el cuerpo binario viaja en
+base64, así que el PDF que se sirve por `/media` no entraría.
+
+### Darlo de baja
+
+```bash
+aws lambda delete-function --function-name unq-rag-despertador --region us-east-1
+aws iam delete-role-policy --role-name unq-rag-despertador-rol --policy-name encender-unq-rag
+aws iam delete-role --role-name unq-rag-despertador-rol
+ssh -i deploy/unq-rag-key.pem ec2-user@<ip> "sudo systemctl disable --now apagar-si-ocioso.timer"
+```
+
+---
+
 ## Decisiones y sus límites
 
 **Una sola instancia, no ECS ni Lambda.** Chroma es SQLite embebido: la API

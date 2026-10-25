@@ -19,7 +19,15 @@ die()  { printf '\n\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [ -f "$HERE/.deploy-target" ] || die "falta deploy/.deploy-target. Corré primero: ./deploy/provision.sh"
 # shellcheck disable=SC1091
 . "$HERE/.deploy-target"
-[ -n "${IP:-}" ] && [ -n "${KEY_FILE:-}" ] || die ".deploy-target incompleto"
+[ -n "${KEY_FILE:-}" ] || die ".deploy-target incompleto"
+
+# La IP se pregunta a EC2 en vez de leerla del archivo: con el despertador la
+# instancia se apaga sola y en cada encendido le toca otra. Si está apagada,
+# se enciende para poder desplegar.
+# shellcheck disable=SC1091
+. "$HERE/lib-instancia.sh"
+IP=$(ip_lista_para_ssh) || exit 1
+info "instancia en $IP"
 [ -f "$HERE/.htpasswd" ] || die "falta deploy/.htpasswd. Lo genera provision.sh"
 [ -f "$ROOT/.env" ] || die "falta el .env de la raíz con OPENAI_API_KEY"
 

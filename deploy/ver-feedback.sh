@@ -21,7 +21,14 @@ die() { printf '\n\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [ -f "$HERE/.deploy-target" ] || die "falta deploy/.deploy-target. Corré primero: ./deploy/provision.sh"
 # shellcheck disable=SC1091
 source "$HERE/.deploy-target"
-[ -n "${IP:-}" ] && [ -n "${KEY_FILE:-}" ] || die ".deploy-target incompleto"
+[ -n "${KEY_FILE:-}" ] || die ".deploy-target incompleto"
+
+# La IP se pregunta a EC2: con el despertador la instancia se apaga sola y en
+# cada encendido le toca otra. Mirar la telemetría la enciende, que es lo que
+# uno quiere cuando viene a consultarla.
+# shellcheck disable=SC1091
+source "$HERE/lib-instancia.sh"
+IP=$(ip_lista_para_ssh) || exit 1
 
 SSH="ssh -i $KEY_FILE -o StrictHostKeyChecking=accept-new ec2-user@$IP"
 DC="docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml"
