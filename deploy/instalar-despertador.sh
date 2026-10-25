@@ -61,9 +61,11 @@ if [ "${1:-}" = "--permisos" ]; then
       "Effect": "Allow",
       "Action": [
         "lambda:CreateFunction", "lambda:GetFunction", "lambda:DeleteFunction",
+        "lambda:GetFunctionConfiguration",
         "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
         "lambda:CreateFunctionUrlConfig", "lambda:GetFunctionUrlConfig",
-        "lambda:UpdateFunctionUrlConfig", "lambda:AddPermission"
+        "lambda:UpdateFunctionUrlConfig",
+        "lambda:AddPermission", "lambda:RemovePermission"
       ],
       "Resource": "arn:aws:lambda:$REGION:$CUENTA:function:$FUNCION"
     },
@@ -99,17 +101,44 @@ say "Cuenta $CUENTA · región $REGION · instancia $INSTANCE_ID"
 # Se chequea antes de empezar para no dejar medio creado lo que no se puede
 # terminar: el usuario de deploy no tiene Lambda ni IAM, y el error aparecería
 # recién después de haber creado el rol.
-aws lambda list-functions --region "$REGION" --max-items 1 >/dev/null 2>&1 \
-    || die "$USUARIO_ACTUAL no puede usar Lambda.
+# Se prueban TODOS los permisos de lectura antes de tocar nada. La primera
+# versión solo miraba lambda:ListFunctions, y faltaba
+# lambda:GetFunctionConfiguration —el que usan los `wait`—: la corrida creó el
+# rol y la función, y recién ahí se cayó. Media instalación es peor que
+# ninguna, porque no se ve desde afuera qué quedó hecho.
+#
+# Las cinco son lecturas: sobre algo que todavía no existe devuelven
+# "no encontrado", que es distinto de "no autorizado".
+denegado() {
+    local salida
+    salida=$("$@" 2>&1) || true
+    printf '%s' "$salida" | grep -q "AccessDenied\|not authorized"
+}
 
-    Opción A — darle los permisos justos (y después sacárselos):
+FALTAN=""
+denegado aws lambda list-functions --region "$REGION" --max-items 1 \
+    && FALTAN="$FALTAN lambda:ListFunctions"
+denegado aws lambda get-function --region "$REGION" --function-name "$FUNCION" \
+    && FALTAN="$FALTAN lambda:GetFunction"
+denegado aws lambda get-function-configuration --region "$REGION" --function-name "$FUNCION" \
+    && FALTAN="$FALTAN lambda:GetFunctionConfiguration"
+denegado aws lambda get-function-url-config --region "$REGION" --function-name "$FUNCION" \
+    && FALTAN="$FALTAN lambda:GetFunctionUrlConfig"
+denegado aws iam get-role --role-name "$ROL" \
+    && FALTAN="$FALTAN iam:GetRole"
+
+[ -z "$FALTAN" ] \
+    || die "a $USUARIO_ACTUAL le faltan estos permisos:$(printf '\n      %s' $FALTAN)
+
+    La política completa y al día:
         $0 --permisos
-      te imprime la política. Pegala en la consola de AWS con una cuenta de
-      admin: IAM › Usuarios › $(basename "$USUARIO_ACTUAL") › Agregar permisos
-      › Crear política en línea › JSON. Después volvé a correr esto.
+    Pegala en IAM › Usuarios › $(basename "$USUARIO_ACTUAL") › política en línea,
+    reemplazando la que ya tenga. Después volvé a correr esto: es idempotente,
+    así que reutiliza lo que ya haya creado.
 
-    Opción B — correrlo con credenciales de admin:
+    O corré todo con credenciales de admin:
         AWS_PROFILE=admin $0"
+
 
 # -------------------------------------------------------------- la contraseña
 HTPASSWD="$AQUI/.htpasswd"
