@@ -195,8 +195,11 @@ textarea.edicion{width:100%;min-height:230px;background:#0a0e13;color:var(--tex)
 .conex .alta{color:var(--mal);font-size:.73rem}
 .conex .nueva{display:flex;gap:.4rem;align-items:center;margin-top:.7rem;
   padding-top:.7rem;border-top:1px solid var(--bor);flex-wrap:wrap}
-.conex .nueva select{background:var(--sup2);color:var(--tex);border:1px solid var(--bor);
-  border-radius:7px;padding:.25rem .45rem;font:inherit;font-size:.78rem}
+.conex .nueva select,.conex input.cod{background:var(--sup2);color:var(--tex);
+  border:1px solid var(--bor);border-radius:7px;padding:.25rem .45rem;font:inherit;
+  font-size:.78rem;width:9.5rem;font-family:ui-monospace,Menlo,monospace}
+.conex input.cod:focus{border-color:var(--ace);outline:none}
+.conex .fuera{color:var(--ace);font-size:.72rem}
 
 /* ---------- diff ---------- */
 .diff{background:var(--sup);border:1px solid var(--bor);border-radius:var(--r);
@@ -572,19 +575,24 @@ function tablaConexiones() {
   const c = estado.conexiones, r = c.resumen;
   const caja = E('div', {className: 'conex'});
 
-  const opciones = (sel) => codigosDisponibles()
-    .map(x => '<option' + (x === sel ? ' selected' : '') + '>' + esc(x) + '</option>')
-    .join('');
+  // Un input con datalist y no un desplegable: hay componentes dibujados que
+  // no están en el inventario —la acometida N, R, S, T, PE, por ejemplo— y
+  // con un select cerrado no habría forma de conectarlos nunca. Así se elige
+  // del catálogo con autocompletado, o se escribe lo que haga falta.
+  const combo = (clase, valor) => '<input class="cod ' + clase +
+    '" list="codigos-inventario" value="' + esc(valor || '') + '" spellcheck="false">';
 
   const filas = c.conexiones.map(x => {
     const choca = (x.conflicto || '').startsWith('CONFLICTO');
     const clave = x.origen + '|' + x.destino;
     const editando = estado.corrigiendo === clave;
 
+    const fuera = [x.origen, x.destino].filter(c => !enInventario(c));
     const celdaArista = editando
-      ? '<td><select class="e-o">' + opciones(x.origen) + '</select> → ' +
-        '<select class="e-d">' + opciones(x.destino) + '</select></td>'
-      : '<td class="par">' + esc(x.origen) + ' → ' + esc(x.destino) + '</td>';
+      ? '<td>' + combo('e-o', x.origen) + ' → ' + combo('e-d', x.destino) + '</td>'
+      : '<td class="par">' + esc(x.origen) + ' → ' + esc(x.destino) +
+        (fuera.length ? '<div class="fuera">fuera del inventario: ' +
+          esc(fuera.join(', ')) + '</div>' : '') + '</td>';
 
     const acciones = editando
       ? '<button class="btn p chico" data-a="guardar">Guardar</button> ' +
@@ -608,6 +616,9 @@ function tablaConexiones() {
   }).join('');
 
   caja.innerHTML =
+    '<datalist id="codigos-inventario">' +
+      codigosDisponibles().map(x => '<option value="' + esc(x) + '">').join('') +
+    '</datalist>' +
     '<h3 class="seccion">Conexiones del plano</h3>' +
     '<div class="cuentas">' +
       '<span class="chip"><b>' + r.total + '</b> aristas</span>' +
@@ -637,20 +648,23 @@ function tablaConexiones() {
 
   // Agregar a mano lo que el modelo no vio.
   const mano = E('div', {className: 'nueva'});
-  const sel = (id) => {
-    const s = E('select', {id});
-    s.innerHTML = '<option value="">—</option>' + codigosDisponibles()
-      .map(x => '<option>' + esc(x) + '</option>').join('');
-    return s;
+  const campo = (id) => {
+    const i = E('input', {id, className: 'cod', spellcheck: false});
+    i.setAttribute('list', 'codigos-inventario');
+    i.placeholder = 'código';
+    return i;
   };
-  mano.appendChild(E('span', {className: 'ev', textContent: 'Agregar a mano:'}));
-  mano.appendChild(sel('c-origen'));
+  mano.appendChild(E('span', {className: 'ev',
+    textContent: 'Agregar a mano (elegí o escribí):'}));
+  mano.appendChild(campo('c-origen'));
   mano.appendChild(E('span', {textContent: '→'}));
-  mano.appendChild(sel('c-destino'));
+  mano.appendChild(campo('c-destino'));
   const add = E('button', {className: 'btn chico', textContent: 'Confirmar'});
   add.onclick = () => {
-    const o = $('#c-origen').value, d = $('#c-destino').value;
-    if (!o || !d) { aviso('elegí origen y destino', true); return; }
+    const o = codigo($('#c-origen').value), d = codigo($('#c-destino').value);
+    if (!o || !d) { aviso('escribí o elegí origen y destino', true); return; }
+    if (o === d) { aviso('origen y destino tienen que ser distintos', true); return; }
+    if (!avisarSiEstaFuera(o, d)) return;
     veredictoConexion(o, d, (c.paginas[0] || '1'), 'confirmada', 'agregada a mano');
   };
   mano.appendChild(add);
@@ -672,6 +686,33 @@ function tablaConexiones() {
     };
   });
   return caja;
+}
+
+/** Un código escrito a mano, normalizado: sin espacios y en mayúsculas. */
+function codigo(texto) {
+  return (texto || '').trim().toUpperCase();
+}
+
+function enInventario(c) {
+  return codigosDisponibles().includes(codigo(c));
+}
+
+/**
+ * Deja pasar un código que no está en el inventario, pero avisando.
+ *
+ * No se bloquea porque hay componentes dibujados sin código —la acometida,
+ * por ejemplo—, y bloquearlos dejaría al grafo sin raíz para siempre. Pero
+ * la arista va a apuntar a un nodo que no existe: el grafo no se rompe, el
+ * componente simplemente queda sin nombre ni sistema hasta que se lo agregue
+ * a la hoja Nomenclatura.
+ */
+function avisarSiEstaFuera(o, d) {
+  const fuera = [o, d].filter(c => !enInventario(c));
+  if (!fuera.length) return true;
+  return confirm(fuera.join(' y ') + ' no está' + (fuera.length > 1 ? 'n' : '') +
+    ' en la hoja Nomenclatura del inventario.\n\nLa conexión se guarda igual, ' +
+    'pero en el grafo ese componente va a quedar sin nombre hasta que lo ' +
+    'agregues ahí.\n\n¿Guardar?');
 }
 
 /** Los códigos que se pueden elegir: el catálogo entero del inventario.
@@ -696,10 +737,12 @@ function codigosDisponibles() {
  * persona, que es lo que permite saber después si conviene seguir usando la
  * lectura automática o no.
  */
-async function corregirConexion(origen, destino, pagina, nuevoO, nuevoD) {
+async function corregirConexion(origen, destino, pagina, crudoO, crudoD) {
+  const nuevoO = codigo(crudoO), nuevoD = codigo(crudoD);
   if (!nuevoO || !nuevoD || nuevoO === nuevoD) {
     aviso('origen y destino tienen que ser distintos', true); return;
   }
+  if (!avisarSiEstaFuera(nuevoO, nuevoD)) return;
   if (nuevoO === origen && nuevoD === destino) {
     estado.corrigiendo = null;
     return veredictoConexion(origen, destino, pagina, 'confirmada');

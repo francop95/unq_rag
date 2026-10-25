@@ -400,3 +400,21 @@ def test_el_desplegable_ofrece_todo_el_inventario(pantalla):
     assert len(codigos) > 20, "tiene que venir el catálogo entero, no lo propuesto"
     for esperado in ("QF03", "VFD01", "IF01", "VENT01"):
         assert esperado in codigos
+
+
+def test_se_puede_conectar_algo_que_no_esta_en_el_inventario(pantalla):
+    """La acometida —N, R, S, T, PE— está dibujada en el plano y no tiene
+    código en la hoja Nomenclatura. Si el campo solo aceptara códigos del
+    catálogo, el grafo se quedaría sin raíz para siempre: nada alimentaría a
+    QD01 y "qué protege la instalación" no tendría respuesta.
+
+    Se guarda igual. El grafo no se rompe: la arista existe y el componente
+    queda sin nombre ni sistema hasta que alguien lo agregue al inventario.
+    """
+    cliente, store, _, _ = pantalla
+    r = cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "ACOMETIDA", "destino": "QD01", "estado": "confirmada",
+        "nota": "sin código en Nomenclatura"})
+    assert r.status_code == 200
+    assert ("ACOMETIDA", "QD01") in store.conexiones_confirmadas("doc", "20260101_000000")
