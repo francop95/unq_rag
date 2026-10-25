@@ -1106,3 +1106,99 @@ def test_una_corrida_rechazada_no_vuelve_a_pendiente_sola(revision):
     revision.decidir("doc", "c1", "rechazada")
     revision.anotar("doc", "c1", 1, "a", "ok")
     assert revision.estado("doc", "c1")["estado"] == "rechazada"
+
+
+# ───────────────────────── propuesta automática de conexiones de un plano
+
+@pytest.fixture
+def proponer_conexiones():
+    sys.path.insert(0, os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "scripts")))
+    import proponer_conexiones
+    return proponer_conexiones
+
+
+CATALOGO_DE_PRUEBA = {
+    "QF03": {"id": "I004", "nombre": "Interruptor termomagnético del forzador",
+             "alias": "Inter. Ter. 10 A"},
+    "QF04": {"id": "I005", "nombre": "Interruptor termomagnético de control",
+             "alias": "Inter. Ter. 25 A bipolar"},
+    "IO01": {"id": "I018", "nombre": "Módulo de entradas/salidas TBEN", "alias": ""},
+    "MCU01": {"id": "I022", "nombre": "Arduino Uno", "alias": ""},
+    "R01": {"id": "I006", "nombre": "Resistencia calefactora 1", "alias": "Grupo 3 x 2 kW"},
+    "R02": {"id": "I007", "nombre": "Resistencia calefactora 2", "alias": "Grupo 3 x 2 kW"},
+}
+
+
+def test_el_mismo_componente_nombrado_de_dos_formas_es_una_sola_arista(proponer_conexiones):
+    """El modelo dice "PS01" preguntándole en un sentido y "Fuente de
+    alimentación 220 VCA a 24 VCC/10A" en el otro. Sin normalizar quedan dos
+    aristas distintas que no se encuentran entre sí, y la evidencia de las dos
+    lecturas —que es lo único que el revisor tiene para triar— se pierde."""
+    normalizar = proponer_conexiones.normalizar
+    assert normalizar("TBEN-L4-8IOL", CATALOGO_DE_PRUEBA) == "IO01"
+    assert normalizar("Arduino uno", CATALOGO_DE_PRUEBA) == "MCU01"
+    assert normalizar("el módulo de entradas/salidas", CATALOGO_DE_PRUEBA) == "IO01"
+
+
+def test_no_adivina_cuando_el_nombre_no_distingue(proponer_conexiones):
+    """"Interruptor" lo comparten todos los QF0x. Adivinar uno es peor que
+    reportarlo sin reconocer: una arista hacia el interruptor equivocado manda
+    a revisar el componente que no es."""
+    normalizar = proponer_conexiones.normalizar
+    assert normalizar("interruptor", CATALOGO_DE_PRUEBA) is None
+    assert normalizar("Inter. Ter.", CATALOGO_DE_PRUEBA) is None
+    assert normalizar("", CATALOGO_DE_PRUEBA) is None
+    assert normalizar("un cable cualquiera", CATALOGO_DE_PRUEBA) is None
+
+
+def test_el_numero_corto_distingue_dos_componentes_iguales(proponer_conexiones):
+    """"Resistencia calefactora 2" y "...1" solo se diferencian en un dígito,
+    y los tokens de un carácter normalmente se descartan por ruido. Acá no se
+    pueden descartar. Además el alias de R01 —"Grupo 3 x 2 kW"— aporta un 2
+    que no identifica nada, así que el nombre técnico tiene que pesar más."""
+    normalizar = proponer_conexiones.normalizar
+    assert normalizar("Resistencia calefactora 1", CATALOGO_DE_PRUEBA) == "R01"
+    assert normalizar("Resistencia calefactora 2", CATALOGO_DE_PRUEBA) == "R02"
+
+
+def test_una_propuesta_que_contradice_lo_ya_revisado_sale_marcada(proponer_conexiones):
+    """La hoja `Conexiones TBEN` ya declara IO01 → IF01 → VFD01, revisada por
+    una persona. Si el modelo propone la arista al revés, eso no es una
+    novedad: es un conflicto, y tiene que llegarle al revisor como tal."""
+    catalogo = {**CATALOGO_DE_PRUEBA,
+                "IF01": {"id": "I019", "nombre": "Interfaz DP1213", "alias": ""},
+                "VFD01": {"id": "I016", "nombre": "Variador de frecuencia", "alias": ""}}
+    declaradas = {("IO01", "IF01"): "C6", ("IF01", "VFD01"): "C6"}
+    propuestas = {
+        ("QF03", "IF01"): {"arriba": "conductor continuo"},   # el error conocido
+        ("VFD01", "IF01"): {"abajo": "sale del variador"},    # invertida
+        ("IF01", "VFD01"): {"arriba": "", "abajo": ""},       # ya declarada
+    }
+    filas = proponer_conexiones.filas_para_excel(
+        propuestas, catalogo, declaradas, "plano.pdf p.1")
+    por_arista = {f[3]: f for f in filas}
+
+    nueva = por_arista["I004 / QF03 → I019 / IF01"]
+    assert nueva[7] == "", "una arista nueva no es conflicto, es para revisar"
+
+    invertida = por_arista["I016 / VFD01 → I019 / IF01"]
+    assert invertida[7].startswith("CONFLICTO")
+
+    ya = por_arista["I019 / IF01 → I016 / VFD01"]
+    assert "ya declarada" in ya[7]
+
+
+def test_ninguna_fila_sale_confirmada(proponer_conexiones):
+    """Es lo único que separa un borrador de un dato. `construir_grafo.py`
+    solo toma las filas con "Conexión confirmada", así que una propuesta que
+    saliera marcada entraría al grafo sin que nadie la haya mirado."""
+    catalogo = {**CATALOGO_DE_PRUEBA}
+    filas = proponer_conexiones.filas_para_excel(
+        {("QF03", "QF04"): {"arriba": "x", "abajo": "y"}}, catalogo, {}, "f")
+    assert len(filas) == 1
+    assert filas[0][8] == "", "la columna 'Conexión confirmada' la llena una persona"
+    assert "PROPUESTA AUTOMÁTICA" in filas[0][9]
+    # Y que las dos lecturas coincidan no la vuelve correcta: se midió que el
+    # acuerdo entre direcciones era anticorrelacionado con la verdad.
+    assert "no implica que sea correcta" in filas[0][6]
