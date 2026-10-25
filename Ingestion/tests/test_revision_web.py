@@ -459,3 +459,29 @@ def test_dos_trabajos_largos_no_se_pisan(pantalla):
     _trabajo_falso(trabajos, "desplegar", "subiendo a la demo", {}, corriendo=True)
     assert cliente.post("/api/grafo", json={}).status_code == 409
     assert cliente.post("/api/desplegar", json={}).status_code == 409
+
+
+def test_decidir_una_conexion_marca_el_grafo_como_desactualizado(pantalla, tmp_path):
+    """No se reconstruye solo al aprobar —la mayoría de las revisiones no
+    tocan conexiones, y reconstruir pagaría la extracción cada vez— pero
+    tampoco puede quedar en que alguien se acuerde: mientras no se
+    reconstruya, el grafo le sigue afirmando al modelo lo que leyó mal.
+
+    Y una propuesta sin revisar no cuenta: no cambia el grafo.
+    """
+    cliente, store, _, servidor = pantalla
+    grafo = tmp_path / "API" / "configs" / "grafo.json"
+    grafo.parent.mkdir(parents=True)
+    grafo.write_text("{}", encoding="utf-8")
+    # El servidor lo busca al lado de Ingestion.
+    import unittest.mock as mock
+    with mock.patch.object(servidor, "RAIZ_INGESTION", str(tmp_path / "Ingestion")):
+        store.registrar_corrida("doc", "20260101_000000")
+        store.guardar_conexiones("doc", "20260101_000000", 1,
+                                 [{"origen": "QF03", "destino": "IF01"}])
+        assert servidor._grafo_desactualizado() is False, (
+            "una propuesta sin revisar no cambia el grafo")
+
+        store.anotar_conexion("doc", "20260101_000000", 1,
+                              "QF03", "IF01", "descartada")
+        assert servidor._grafo_desactualizado() is True

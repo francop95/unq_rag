@@ -125,6 +125,10 @@ button{font:inherit}
   font-variant-numeric:tabular-nums}
 .chip b{color:var(--tex);font-weight:620}
 .chip.al{border-color:#f59e0b55;color:var(--ace)}
+.aviso-grafo{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;
+  margin-top:.65rem;padding:.5rem .7rem;border-radius:8px;
+  background:#f59e0b14;border:1px solid #f59e0b44;font-size:.8rem}
+.aviso-grafo b{color:var(--ace)}
 .acciones{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.65rem;
   padding-top:.65rem;border-top:1px solid var(--bor)}
 .acciones .sep{margin-left:auto}
@@ -365,6 +369,12 @@ function pintar() {
       (r.corregidos ? '<span class="chip"><b>' + r.corregidos + '</b> corregidos</span>' : '') +
       (r.descartados ? '<span class="chip"><b>' + r.descartados + '</b> descartados</span>' : '') +
     '</div>' +
+    (d.grafo_desactualizado
+      ? '<div class="aviso-grafo"><b>El grafo está desactualizado.</b> ' +
+        'Hay conexiones revisadas que todavía no llegaron al grafo que la ' +
+        'API le inyecta al modelo: hasta que se reconstruya, sigue ' +
+        'afirmando lo que leyó mal la pasada de visión.</div>'
+      : '') +
     '<div class="acciones">' +
       '<button class="btn p" id="b-aprobar">Aprobar</button>' +
       '<button class="btn mal" id="b-rechazar">Rechazar</button>' +

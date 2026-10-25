@@ -201,6 +201,7 @@ def api_corrida(documento):
             "corregidos": len([c for c in vistos if c["veredicto"] == "corregido"]),
         },
         "ultima_aprobada": rev.ultima_aprobada(documento),
+        "grafo_desactualizado": _grafo_desactualizado(),
     })
 
 
@@ -395,6 +396,41 @@ def api_releer():
     rev.anotar(documento, corrida, pagina, chunk_id, "redescribir",
                "relectura lanzada desde la pantalla", _quien())
     return jsonify({"ok": True, "etiqueta": t.etiqueta})
+
+
+def _grafo_desactualizado():
+    """¿Hay decisiones sobre conexiones más nuevas que el último grafo?
+
+    No se reconstruye solo al aprobar, por tres motivos:
+
+    - Aprobar casi nunca toca conexiones. La mayoría de las revisiones son
+      sobre figuras, y reconstruir pagaría la extracción con el modelo cada
+      vez sin que el grafo cambie en nada.
+    - `construir_grafo.py` reescribe el grafo y tira las aristas extraídas;
+      las repone `extraer_relaciones.py`. Correr solo el primero, que es el
+      gratis, DEGRADA el grafo. O van los dos o no va ninguno, y los dos
+      cuestan.
+    - Gastar plata como efecto secundario de un botón que dice "Aprobar" es
+      una sorpresa, y en esta pantalla todo lo que cuesta pregunta antes.
+
+    Así que en vez de automatizarlo se lo hace imposible de olvidar: si hay
+    decisiones sin reflejar, la pantalla lo dice.
+    """
+    grafo = os.path.join(os.path.dirname(RAIZ_INGESTION), "API", "configs", "grafo.json")
+    if not os.path.isfile(grafo):
+        return True
+    construido = os.path.getmtime(grafo)
+    for c in rev.corridas():
+        for f in rev.conexiones(c["documento"], c["corrida"]):
+            if f["estado"] == "propuesta":
+                continue  # una propuesta no cambia el grafo
+            try:
+                from datetime import datetime
+                if datetime.fromisoformat(f["cuando"]).timestamp() > construido:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
 
 
 def _catalogo():
