@@ -485,3 +485,51 @@ def test_decidir_una_conexion_marca_el_grafo_como_desactualizado(pantalla, tmp_p
         store.anotar_conexion("doc", "20260101_000000", 1,
                               "QF03", "IF01", "descartada")
         assert servidor._grafo_desactualizado() is True
+
+
+def test_la_tabla_arranca_con_lo_que_ya_habia_leido_el_troceo(pantalla):
+    """El chunk de una figura viene afirmando conexiones desde que se troceó.
+    Si la pestaña arranca vacía, son dos lecturas del mismo dibujo y la
+    pantalla muestra una en el texto y ninguna en la tabla: al revisar, no
+    hay con qué comparar.
+
+    Una cadena A → B → C son dos aristas, igual que en el inventario.
+    """
+    import json as _json
+    cliente, store, _, _ = pantalla
+    base = os.path.join(os.environ["INGESTION_DATA_DIR"], "chunks_data", "doc",
+                        "20260101_000000", "doc_1")
+    with open(os.path.join(base, "doc_1_chunk_2_visual.json"), encoding="utf-8") as f:
+        chunk = _json.load(f)
+    notas = _json.loads(chunk["original_chunk"])
+    notas["notes"]["connections"] = ["QD01 → QF01", "QF01 → QF02 → QF03"]
+    chunk["original_chunk"] = _json.dumps(notas)
+    with open(os.path.join(base, "doc_1_chunk_2_visual.json"), "w", encoding="utf-8") as f:
+        _json.dump(chunk, f)
+
+    r = cliente.post("/api/conexiones/sembrar",
+                     json={"documento": "doc", "corrida": "20260101_000000"})
+    assert _json.loads(r.data)["nuevas"] == 3
+    pares = {(c["origen"], c["destino"])
+             for c in store.conexiones("doc", "20260101_000000")}
+    assert pares == {("QD01", "QF01"), ("QF01", "QF02"), ("QF02", "QF03")}
+    assert all(c["estado"] == "propuesta"
+               for c in store.conexiones("doc", "20260101_000000"))
+
+
+def test_el_texto_que_se_muestra_usa_las_conexiones_confirmadas(pantalla):
+    """La pantalla promete mostrar el texto que se va a indexar, y la
+    compuerta reemplaza las conexiones del troceo por las confirmadas. Sin
+    hacer lo mismo acá, apenas confirmás una arista la pantalla empieza a
+    mentir: mostraría las del troceo mientras el índice recibe las tuyas.
+    """
+    cliente, store, _, _ = pantalla
+    store.registrar_corrida("doc", "20260101_000000")
+    store.anotar_conexion("doc", "20260101_000000", 1, "QF01", "QF03", "confirmada")
+    store.anotar_conexion("doc", "20260101_000000", 1, "QF03", "IF01", "descartada")
+
+    d = _json(cliente.get("/api/corrida/doc"))
+    figura = next(c for c in d["chunks"] if c["visual"])
+    linea = next(l for l in figura["texto"].split("\n") if l.startswith("Conexiones"))
+    assert "QF01 → QF03" in linea
+    assert "IF01" not in linea, "lo descartado no puede quedar en el texto"

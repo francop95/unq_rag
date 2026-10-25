@@ -748,10 +748,23 @@ async function verDiff() {
 
 /* ------------------------------------------------------------ conexiones */
 
-async function cargarConexiones() {
+async function cargarConexiones({sembrar = true} = {}) {
+  const url = '/api/conexiones/' + encodeURIComponent(estado.doc) +
+    '?corrida=' + encodeURIComponent(estado.corrida);
   try {
-    estado.conexiones = await pedir('/api/conexiones/' + encodeURIComponent(estado.doc) +
-      '?corrida=' + encodeURIComponent(estado.corrida));
+    estado.conexiones = await pedir(url);
+    // La primera vez se traen las que el troceo ya había leído. Si no, la
+    // tabla arranca vacía mientras el texto del chunk viene afirmando
+    // conexiones desde el día que se troceó: dos lecturas del mismo dibujo
+    // y la pantalla mostrando una sola.
+    if (sembrar && !estado.conexiones.conexiones.length) {
+      const r = await enviar('/api/conexiones/sembrar',
+        {documento: estado.doc, corrida: estado.corrida});
+      if (r.nuevas) {
+        aviso(r.nuevas + ' conexiones que ya había leído el troceo');
+        estado.conexiones = await pedir(url);
+      }
+    }
   } catch (e) { aviso(e.message, true); return; }
   pintar();
 }

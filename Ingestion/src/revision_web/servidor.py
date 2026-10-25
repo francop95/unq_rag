@@ -109,7 +109,34 @@ def _extraido(chunk: Dict[str, Any]):
     return notas if isinstance(notas, dict) and notas else None
 
 
-def _chunk_para_pantalla(chunk: Dict[str, Any], veredicto: Optional[Dict]) -> Dict:
+def _con_conexiones_confirmadas(chunk, confirmadas):
+    """El chunk con la lista de conexiones que una persona firmó.
+
+    La pantalla promete mostrar el texto que se va a indexar, y la compuerta
+    reemplaza las conexiones del troceo por las confirmadas. Sin hacer lo
+    mismo acá, apenas confirmás una arista la pantalla empieza a mentir:
+    seguiría mostrando las 16 que leyó el modelo en septiembre mientras el
+    índice recibiría las tuyas.
+    """
+    if not confirmadas:
+        return chunk
+    original = chunk.get("original_chunk")
+    if isinstance(original, str):
+        try:
+            original = json.loads(original)
+        except ValueError:
+            return chunk
+    if not isinstance(original, dict) or not isinstance(original.get("notes"), dict):
+        return chunk
+
+    copia = json.loads(json.dumps(original))
+    copia["notes"]["connections"] = [f"{o} → {d}" for o, d in confirmadas]
+    return {**chunk, "original_chunk": json.dumps(copia, ensure_ascii=False)}
+
+
+def _chunk_para_pantalla(chunk: Dict[str, Any], veredicto: Optional[Dict],
+                         confirmadas=None) -> Dict:
+    chunk = _con_conexiones_confirmadas(chunk, confirmadas)
     recorte = disco.recorte_de(chunk)
     relativa = disco.ruta_relativa_a_datos(recorte) if recorte else None
     pagina, chunk_id = disco.clave(chunk)
@@ -203,7 +230,10 @@ def api_corrida(documento):
     est = rev.estado(documento, corrida) or {}
     pendientes = rev.trabajo_pendiente(documento, corrida)
 
-    vistos = [_chunk_para_pantalla(c, yas.get(disco.clave(c))) for c in chunks]
+    vistos = [_chunk_para_pantalla(
+                  c, yas.get(disco.clave(c)),
+                  rev.conexiones_confirmadas(documento, corrida, str(c.get("page_num"))))
+              for c in chunks]
     visuales = [c for c in vistos if c["visual"]]
 
     return jsonify({
@@ -505,6 +535,40 @@ def api_conexiones(documento):
                                if (c["conflicto"] or "").startswith("CONFLICTO")]),
         },
     })
+
+
+@app.post("/api/conexiones/sembrar")
+def api_conexiones_sembrar():
+    """Mete en la tabla las conexiones que el troceo ya había leído.
+
+    Sin esto, la pestaña arranca vacía aunque el chunk de la figura venga
+    afirmando dieciséis conexiones desde septiembre: dos lecturas del mismo
+    dibujo, y la pantalla mostraba una en el texto y la otra —ninguna— en la
+    tabla. Lo que el troceo leyó es una propuesta más, y le corresponde estar
+    donde se las revisa.
+
+    No pisa nada: `guardar_conexiones` saltea las que ya existen.
+    """
+    cuerpo = request.get_json(silent=True) or {}
+    documento = _documento_valido(str(cuerpo.get("documento", "")))
+    corrida = _corrida_valida(documento, str(cuerpo.get("corrida") or ""))
+
+    por_pagina = {}
+    for c in disco.leer_chunks(documento, corrida):
+        notas = _extraido(c)
+        for cruda in ((notas or {}).get("connections") or []):
+            partes = [x.strip() for x in str(cruda).replace("->", "→").split("→")]
+            # Una cadena A → B → C son dos aristas, igual que en el inventario.
+            for o, d in zip(partes, partes[1:]):
+                if o and d and o != d:
+                    por_pagina.setdefault(str(c.get("page_num")), []).append(
+                        {"origen": o, "destino": d,
+                         "evidencia": f"leída por el troceo: «{cruda}»"})
+
+    rev.registrar_corrida(documento, corrida)
+    nuevas = sum(rev.guardar_conexiones(documento, corrida, pag, aristas)
+                 for pag, aristas in por_pagina.items())
+    return jsonify({"ok": True, "nuevas": nuevas})
 
 
 @app.post("/api/conexiones/veredicto")
