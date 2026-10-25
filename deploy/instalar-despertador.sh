@@ -46,6 +46,53 @@ source "$DESTINO"
 
 aws sts get-caller-identity >/dev/null 2>&1 || die "el AWS CLI no tiene credenciales válidas"
 CUENTA=$(aws sts get-caller-identity --query Account --output text)
+USUARIO_ACTUAL=$(aws sts get-caller-identity --query Arn --output text)
+
+# --permisos: imprime la política que le falta al usuario de deploy, ya
+# rellenada con la cuenta y la región. No vive en un archivo del repo porque
+# lleva el número de cuenta y este repositorio es público.
+if [ "${1:-}" = "--permisos" ]; then
+    cat <<POLITICA
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CrearLaFuncion",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction", "lambda:GetFunction", "lambda:DeleteFunction",
+        "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
+        "lambda:CreateFunctionUrlConfig", "lambda:GetFunctionUrlConfig",
+        "lambda:UpdateFunctionUrlConfig", "lambda:AddPermission"
+      ],
+      "Resource": "arn:aws:lambda:$REGION:$CUENTA:function:$FUNCION"
+    },
+    {
+      "Sid": "ComprobarQueHayLambda",
+      "Effect": "Allow",
+      "Action": "lambda:ListFunctions",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ElRolQueUsaLaFuncion",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:GetRole", "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy", "iam:DeleteRole", "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::$CUENTA:role/$ROL"
+    },
+    {
+      "Sid": "QueLosLogsCaduquen",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:PutRetentionPolicy"],
+      "Resource": "arn:aws:logs:$REGION:$CUENTA:log-group:/aws/lambda/$FUNCION*"
+    }
+  ]
+}
+POLITICA
+    exit 0
+fi
 
 say "Cuenta $CUENTA · región $REGION · instancia $INSTANCE_ID"
 
@@ -53,8 +100,15 @@ say "Cuenta $CUENTA · región $REGION · instancia $INSTANCE_ID"
 # terminar: el usuario de deploy no tiene Lambda ni IAM, y el error aparecería
 # recién después de haber creado el rol.
 aws lambda list-functions --region "$REGION" --max-items 1 >/dev/null 2>&1 \
-    || die "estas credenciales no pueden usar Lambda.
-    Corré esto una vez con una cuenta de admin:
+    || die "$USUARIO_ACTUAL no puede usar Lambda.
+
+    Opción A — darle los permisos justos (y después sacárselos):
+        $0 --permisos
+      te imprime la política. Pegala en la consola de AWS con una cuenta de
+      admin: IAM › Usuarios › $(basename "$USUARIO_ACTUAL") › Agregar permisos
+      › Crear política en línea › JSON. Después volvé a correr esto.
+
+    Opción B — correrlo con credenciales de admin:
         AWS_PROFILE=admin $0"
 
 # -------------------------------------------------------------- la contraseña

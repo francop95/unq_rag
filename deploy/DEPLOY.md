@@ -152,12 +152,29 @@ La demo se usa un día de cada cuatro, y el 89% de los ~21 USD/mes que cuesta
 es tiempo encendido. Con esto la instancia está apagada salvo cuando alguien
 la visita.
 
+Hace falta permiso para crear un rol de IAM y una Lambda, **una sola vez**:
+`unq-rag-deploy` solo tiene EC2. Dos caminos.
+
+**Darle los permisos justos al usuario que ya usás:**
+
+```bash
+./deploy/instalar-despertador.sh --permisos      # imprime la política, con tu cuenta puesta
+```
+
+Pegala en la consola de AWS con una cuenta de admin: IAM › Usuarios ›
+`unq-rag-deploy` › Agregar permisos › Crear política en línea › JSON. Están
+acotados a esta función y a este rol, así que podés dejarlos puestos o
+sacarlos después.
+
+```bash
+./deploy/instalar-despertador.sh
+```
+
+**O correrlo con credenciales de admin:**
+
 ```bash
 AWS_PROFILE=admin ./deploy/instalar-despertador.sh
 ```
-
-Hace falta una cuenta con permisos de admin **una sola vez**: el usuario
-`unq-rag-deploy` solo tiene EC2, y esto crea un rol de IAM y una Lambda.
 
 ### Cómo queda
 
