@@ -299,6 +299,17 @@ function pintarDocumentos() {
 /* --------------------------------------------------------------- corrida */
 
 async function abrir(nombre, corrida) {
+  // Todo lo que cuelga de la corrida anterior se tira acá, sin excepción.
+  //
+  // Si no, la tabla de conexiones seguía mostrando las del documento
+  // anterior al cambiar de documento con la pestaña abierta. Y las
+  // propuestas de relectura es peor: su clave es `página:chunk_id`, y
+  // `1:chunk_2_visual` existe en media docena de documentos, así que la
+  // propuesta de uno aparecía sobre la figura de otro.
+  estado.conexiones = null;
+  estado.propuestas = {};
+  estado.corrigiendo = null;
+
   estado.doc = nombre;
   estado.corrida = corrida;
   pintarDocumentos();
@@ -310,7 +321,10 @@ async function abrir(nombre, corrida) {
       (corrida ? '?corrida=' + encodeURIComponent(corrida) : ''));
   } catch (e) { $('#panel').innerHTML = '<div class="vacio">' + esc(e.message) + '</div>'; return; }
   estado.corrida = estado.datos.corrida;
-  pintar();
+  // Con la pestaña de conexiones abierta se recargan las del documento que
+  // se acaba de abrir; `cargarConexiones` ya pinta.
+  if (estado.verConexiones) await cargarConexiones();
+  else pintar();
 }
 
 function pintarSinCorridas(doc) {
@@ -956,12 +970,18 @@ async function sondear() {
   if (t.estado !== 'corriendo') {
     clearInterval(estado.sondeo); estado.sondeo = null;
     if (t.estado === 'error') aviso(t.etiqueta + ': ' + (t.error || 'falló'), true);
-    if (t.clase === 'releer' && t.estado === 'ok' && t.resultado) {
-      estado.propuestas[t.resultado.pagina + ':' + t.resultado.chunk_id] = t.resultado;
-    }
+
     await cargarDocumentos();
     const ctx = t.contexto || {};
+    // Primero se abre y recién después se cuelga el resultado: `abrir` tira
+    // todo lo de la corrida anterior, así que guardar la propuesta antes la
+    // borraría justo al mostrarla.
     if (ctx.documento) await abrir(ctx.documento, ctx.corrida || null);
+
+    if (t.clase === 'releer' && t.estado === 'ok' && t.resultado) {
+      estado.propuestas[t.resultado.pagina + ':' + t.resultado.chunk_id] = t.resultado;
+      pintar();
+    }
     if (t.clase === 'conexiones' && t.estado === 'ok') {
       estado.verConexiones = true;
       await cargarConexiones();
