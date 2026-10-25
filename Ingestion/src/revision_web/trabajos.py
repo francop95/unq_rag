@@ -173,6 +173,44 @@ def lanzar_comando(clase: str, etiqueta: str, argv: List[str], cwd: str,
     return _arrancar(trabajo, cuerpo)
 
 
+def lanzar_secuencia(clase: str, etiqueta: str, comandos: List[List[str]], cwd: str,
+                     contexto: Dict[str, Any] = None) -> Trabajo:
+    """Varios comandos en orden, parando en el primero que falle.
+
+    Hace falta porque reconstruir el grafo son dos pasos que tienen que
+    correr en ese orden —el primero lo reescribe desde el inventario y la
+    base de revisión, el segundo le agrega encima lo que extrae de los
+    textos— y correr solo el segundo deja un grafo a medias.
+    """
+    trabajo = Trabajo(clase, etiqueta, contexto)
+
+    def cuerpo():
+        entorno = dict(os.environ, PYTHONUNBUFFERED="1")
+        for i, argv in enumerate(comandos, 1):
+            trabajo.log(f"\n$ {' '.join(argv)}")
+            try:
+                proceso = subprocess.Popen(
+                    argv, cwd=cwd, env=entorno, stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, text=True, bufsize=1,
+                    errors="replace", start_new_session=True)
+            except OSError as e:
+                trabajo._terminar("error", f"no se pudo lanzar: {e}")
+                return
+            trabajo._proceso = proceso
+            for linea in proceso.stdout:
+                trabajo.log(linea)
+            codigo = proceso.wait()
+            if trabajo._cancelado:
+                trabajo.log("\n⏹  cancelado desde la pantalla.")
+                return trabajo._terminar("cancelado")
+            if codigo != 0:
+                return trabajo._terminar(
+                    "error", f"el paso {i} terminó con código {codigo}")
+        trabajo._terminar("ok")
+
+    return _arrancar(trabajo, cuerpo)
+
+
 def lanzar_funcion(clase: str, etiqueta: str, fn: Callable[[Callable[[str], None]], Any],
                    contexto: Dict[str, Any] = None) -> Trabajo:
     """Corre `fn(log)` en un hilo; lo que devuelva queda en `resultado`."""

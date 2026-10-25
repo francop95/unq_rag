@@ -510,6 +510,49 @@ def api_conexiones_proponer():
     return jsonify({"ok": True, "etiqueta": t.etiqueta})
 
 
+@app.post("/api/grafo")
+def api_grafo():
+    """Reconstruye el grafo de componentes que la API inyecta en el prompt.
+
+    Son dos pasos y van en ese orden: el primero lo reescribe desde el
+    inventario y lo confirmado en esta pantalla, el segundo le agrega lo que
+    extrae de los textos. Correr solo el segundo deja un grafo a medias.
+
+    Hay que correrlo después de confirmar conexiones: hasta entonces el grafo
+    sigue afirmándole al modelo lo que leyó mal la pasada de visión.
+    """
+    py = trabajos.python_del_entorno()
+    try:
+        t = trabajos.lanzar_secuencia(
+            "grafo", "reconstruyendo el grafo de componentes",
+            [[py, "scripts/construir_grafo.py"],
+             [py, "scripts/extraer_relaciones.py", "--escribir"]],
+            RAIZ_INGESTION, {})
+    except trabajos.EnCurso as e:
+        return jsonify({"ok": False, "motivo": str(e)}), 409
+    return jsonify({"ok": True, "etiqueta": t.etiqueta})
+
+
+@app.post("/api/desplegar")
+def api_desplegar():
+    """Sube el código y el índice a la demo y levanta el stack allá.
+
+    Es el único botón de la pantalla que se ve desde afuera: hasta acá todo
+    pasaba en esta máquina. Si la instancia está apagada, el script la
+    enciende.
+    """
+    guion = os.path.join(os.path.dirname(RAIZ_INGESTION), "deploy", "upload-data.sh")
+    if not os.path.isfile(guion):
+        abort(400, "no encuentro deploy/upload-data.sh")
+    try:
+        t = trabajos.lanzar_comando(
+            "desplegar", "subiendo a la demo", ["bash", guion],
+            os.path.dirname(RAIZ_INGESTION), {})
+    except trabajos.EnCurso as e:
+        return jsonify({"ok": False, "motivo": str(e)}), 409
+    return jsonify({"ok": True, "etiqueta": t.etiqueta})
+
+
 @app.get("/api/trabajo")
 def api_trabajo():
     t = trabajos.actual()

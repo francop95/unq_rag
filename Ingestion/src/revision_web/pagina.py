@@ -369,6 +369,8 @@ function pintar() {
       '<button class="btn p" id="b-aprobar">Aprobar</button>' +
       '<button class="btn mal" id="b-rechazar">Rechazar</button>' +
       '<button class="btn" id="b-indexar">Indexar</button>' +
+      '<button class="btn" id="b-grafo">Reconstruir el grafo</button>' +
+      '<button class="btn" id="b-desplegar">Subir a la demo</button>' +
       '<button class="btn" id="b-diff">Comparar con la aprobada</button>' +
       '<button class="btn" id="b-conex">' +
         (estado.verConexiones ? 'Ocultar conexiones' : 'Conexiones del plano') +
@@ -383,6 +385,8 @@ function pintar() {
   $('#b-aprobar').onclick = () => decidir('aprobada');
   $('#b-rechazar').onclick = () => decidir('rechazada');
   $('#b-indexar').onclick = () => indexar();
+  $('#b-grafo').onclick = () => reconstruirGrafo();
+  $('#b-desplegar').onclick = () => desplegar();
   $('#b-diff').onclick = () => verDiff();
   $('#b-conex').onclick = () => {
     estado.verConexiones = !estado.verConexiones;
@@ -919,6 +923,34 @@ async function indexar() {
   try {
     await enviar('/api/indexar',
       {documento: estado.doc, filtro: doc.filtro || estado.doc});
+    arrancarSondeo(true);
+  } catch (e) { aviso(e.message, true); }
+}
+
+/**
+ * El grafo que la API inyecta en el prompt de respuesta.
+ *
+ * Va después de confirmar conexiones: hasta que no se corre, el grafo le
+ * sigue afirmando al modelo lo que leyó mal la pasada de visión.
+ */
+async function reconstruirGrafo() {
+  if (!confirm('Reconstruir el grafo de componentes.\n\nToma el inventario ' +
+      'más las conexiones que confirmaste acá, y después extrae relaciones de ' +
+      'los textos con el modelo (unos pocos centavos).\n\nLas conexiones que ' +
+      'descartaste dejan de afirmarse.')) return;
+  try {
+    await enviar('/api/grafo', {});
+    arrancarSondeo(true);
+  } catch (e) { aviso(e.message, true); }
+}
+
+/** Lo único de esta pantalla que se ve desde afuera. */
+async function desplegar() {
+  if (!confirm('Subir el código y el índice a la demo pública.\n\nSi la ' +
+      'instancia está apagada se enciende sola. Tarda unos minutos y lo que ' +
+      'suba lo van a ver quienes entren con la contraseña.\n\n¿Seguir?')) return;
+  try {
+    await enviar('/api/desplegar', {});
     arrancarSondeo(true);
   } catch (e) { aviso(e.message, true); }
 }

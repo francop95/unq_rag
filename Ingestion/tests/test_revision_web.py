@@ -418,3 +418,44 @@ def test_se_puede_conectar_algo_que_no_esta_en_el_inventario(pantalla):
         "nota": "sin código en Nomenclatura"})
     assert r.status_code == 200
     assert ("ACOMETIDA", "QD01") in store.conexiones_confirmadas("doc", "20260101_000000")
+
+
+def test_el_grafo_se_reconstruye_en_dos_pasos_y_en_orden(pantalla, monkeypatch):
+    """Primero construir_grafo, que lo reescribe desde el inventario y lo
+    confirmado acá; después extraer_relaciones, que le agrega lo de los
+    textos. Al revés, o corriendo solo el segundo, queda a medias."""
+    cliente, _, trabajos, _ = pantalla
+    lanzados = []
+    monkeypatch.setattr(trabajos, "lanzar_secuencia",
+                        lambda c, e, cmds, cwd, ctx=None: lanzados.append(cmds)
+                        or _trabajo_falso(trabajos, c, e, ctx))
+
+    assert cliente.post("/api/grafo", json={}).status_code == 200
+    guiones = [cmd[-1] for cmd in lanzados[0]]
+    assert guiones == ["scripts/construir_grafo.py", "--escribir"]
+    assert "construir_grafo.py" in lanzados[0][0][1]
+    assert "extraer_relaciones.py" in lanzados[0][1][1]
+
+
+def test_desplegar_corre_el_guion_del_repo_y_no_otra_cosa(pantalla, monkeypatch):
+    """Es el único botón de la pantalla que se ve desde afuera."""
+    cliente, _, trabajos, _ = pantalla
+    lanzados = []
+    monkeypatch.setattr(trabajos, "lanzar_comando",
+                        lambda c, e, argv, cwd, ctx=None: lanzados.append((argv, cwd))
+                        or _trabajo_falso(trabajos, c, e, ctx))
+
+    r = cliente.post("/api/desplegar", json={})
+    assert r.status_code == 200
+    argv, cwd = lanzados[0]
+    assert argv[0] == "bash" and argv[1].endswith("deploy/upload-data.sh")
+    assert os.path.isfile(argv[1]), "tiene que ser el guion real del repo"
+
+
+def test_dos_trabajos_largos_no_se_pisan(pantalla):
+    """Reconstruir el grafo mientras se sube a la demo dejaría a la demo con
+    un grafo a medio escribir."""
+    cliente, _, trabajos, _ = pantalla
+    _trabajo_falso(trabajos, "desplegar", "subiendo a la demo", {}, corriendo=True)
+    assert cliente.post("/api/grafo", json={}).status_code == 409
+    assert cliente.post("/api/desplegar", json={}).status_code == 409

@@ -550,6 +550,20 @@ error de lectura— y el grafo se la afirmaba al modelo como leída del plano.
 Si descartarla en la pantalla no la borrara de acá, decir "esto no existe"
 no cambiaría nada de lo que el sistema responde.
 
+### Después de indexar
+
+Dos pasos más, también en la pantalla:
+
+**Reconstruir el grafo** corre `construir_grafo.py` y después
+`extraer_relaciones.py --escribir`, en ese orden. Hasta que no se corre, el
+grafo le sigue afirmando al modelo de respuesta lo que leyó mal la pasada de
+visión. Medido sobre el plano codificado: con `QF03 → IF01` descartada y
+`QF03 → VFD01` confirmada, la arista falsa desaparece del grafo y "qué
+protege al variador" pasa a contestarse bien.
+
+**Subir a la demo** corre `deploy/upload-data.sh`. Es lo único de la pantalla
+que se ve desde afuera; si la instancia está apagada, el script la enciende.
+
 ### Lo mismo desde la consola
 
 Las dos pantallas leen las mismas corridas y escriben la misma base, así que
