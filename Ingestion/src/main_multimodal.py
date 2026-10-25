@@ -487,6 +487,43 @@ if __name__ == "__main__":
                         aplicadas += 1
                 print(f"   ✏️  correcciones aplicadas: {aplicadas}")
 
+            # Las conexiones del plano, si alguien las revisó.
+            #
+            # Se reemplaza la lista entera, no se completa: los recorridos
+            # son lo único que el modelo DEDUCE del dibujo, y se midió que
+            # deduce mal de forma estable —lee una línea de llamada como un
+            # conductor y pone IF01, la interfaz de control, en la línea de
+            # potencia del motor—. Si una página tiene filas revisadas, lo
+            # que vale es lo revisado y nada más. Una página sin ninguna fila
+            # queda como estaba: no se cambia en silencio lo que nadie miró.
+            revisadas = revision.conexiones(file_stem, corrida)
+            if revisadas:
+                paginas_tocadas = {c["pagina"] for c in revisadas}
+                cambiados = 0
+                for c in raw_chunks:
+                    pagina = str(c.get("page_num"))
+                    if pagina not in paginas_tocadas:
+                        continue
+                    original = c.get("original_chunk")
+                    if isinstance(original, str):
+                        try:
+                            original = json.loads(original)
+                        except ValueError:
+                            continue
+                    if not isinstance(original, dict) or "notes" not in original:
+                        continue
+                    notas = original.get("notes")
+                    if not isinstance(notas, dict):
+                        continue
+                    notas["connections"] = [
+                        f"{o} → {d}" for o, d in
+                        revision.conexiones_confirmadas(file_stem, corrida, pagina)]
+                    c["original_chunk"] = json.dumps(original, ensure_ascii=False)
+                    cambiados += 1
+                confirmadas = len(revision.conexiones_confirmadas(file_stem, corrida))
+                print(f"   🔌 conexiones revisadas: {confirmadas} confirmadas "
+                      f"de {len(revisadas)}, aplicadas a {cambiados} figura(s)")
+
             # Restaurar el orden documental: os.listdir devuelve un orden
             # arbitrario del filesystem, y varios pasos posteriores dependen
             # del orden real de lectura del documento (el re-chunking semántico

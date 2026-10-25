@@ -482,6 +482,45 @@ resultado **como propuesta**, lado a lado con lo que hay. Aplicarla es un
 segundo gesto: la relectura no siempre mejora, y a veces pierde componentes
 que la descripción original tenía bien.
 
+### Las conexiones de un plano
+
+Los recorridos son el único campo de una figura que el modelo **deduce** en
+vez de transcribir, y se midió que deduce mal de forma estable: lee una línea
+de llamada como un conductor —así nace `QF03 → IF01`, que mete la interfaz de
+control en la línea de potencia del motor— y no sigue las barras colectoras,
+usando adyacencia física como si fuera conexión.
+
+Preguntar en las dos direcciones y quedarse con lo que coincide **no lo
+arregla**: de 7 aristas que ambas lecturas confirmaban, 2 estaban mal, y 14
+correctas quedaban afuera. El mismo trazo equivocado se ve igual desde las
+dos puntas.
+
+Así que el modelo propone y una persona decide, en la misma pantalla:
+
+1. **Conexiones del plano** → **Leer conexiones de la p.N**. Son ~50 llamadas
+   al modelo de visión, va por el log como el troceo.
+2. Cada arista sale **sin confirmar**, con la evidencia de las dos lecturas y
+   marcada si contradice algo ya declarado en la hoja `Conexiones TBEN`.
+3. **Es así** / **No existe**, y abajo se agregan a mano las que el modelo no
+   vio —las barras colectoras se las come casi siempre.
+4. Al indexar, el chunk de la figura usa **exactamente** las confirmadas, en
+   lugar de lo que leyó el modelo.
+
+Una página con filas revisadas reemplaza la lista entera; una sin ninguna
+fila queda como estaba, para no cambiar en silencio lo que nadie miró.
+Volver a leer el plano no pisa lo ya revisado.
+
+El catálogo de códigos sale de la hoja `Nomenclatura`, así que el modelo no
+inventa nombres: lo que no se puede llevar a un código existente se reporta
+en vez de colarse.
+
+También corre por consola, y escribe un Excel con las mismas columnas que la
+hoja del inventario:
+
+```bash
+python scripts/proponer_conexiones.py --plano 2_Planos --pagina 1
+```
+
 ### Lo mismo desde la consola
 
 Las dos pantallas leen las mismas corridas y escriben la misma base, así que

@@ -318,6 +318,55 @@ def proponer(llm, img, codigos, catalogo, hilos=6):
     return dict(propuestas), sorted(sin_reconocer)
 
 
+def analizar_plano(pdf, pagina, llm=None, limite=0, hilos=6, log=print):
+    """Todo el análisis de una página: catálogo, detección, topología, cotejo.
+
+    Existe para que la pantalla de revisión y la línea de comandos corran
+    exactamente lo mismo. Si una propusiera distinto de la otra, confirmar
+    una arista en un lado dejaría de significar lo mismo que en el otro.
+    """
+    wb = openpyxl.load_workbook(EXCEL, data_only=True)
+    catalogo = cargar_catalogo(wb)
+    declaradas = aristas_declaradas(wb)
+    log(f"catálogo: {len(catalogo)} códigos   ya declaradas: {len(declaradas)} aristas")
+
+    if llm is None:
+        sys.path.insert(0, os.path.join(RAIZ, "scripts"))
+        from redescribir_figuras_con_valores import cliente_llm
+        llm = cliente_llm()
+    log(f"modelo: {llm.model}")
+
+    img = _imagen(render(pdf, pagina))
+    log("detectando componentes…")
+    codigos = detectar(llm, img, catalogo)
+    if limite:
+        codigos = codigos[:limite]
+    log(f"componentes: {', '.join(codigos)}")
+
+    log(f"topología: {len(codigos) * 2} preguntas, dos por componente…")
+    propuestas, sin_reconocer = proponer(llm, img, codigos, catalogo, hilos)
+
+    aristas = []
+    for (origen, destino), direcciones in sorted(propuestas.items()):
+        if origen == destino:
+            continue
+        ya = declaradas.get((origen, destino))
+        invertida = declaradas.get((destino, origen))
+        aristas.append({
+            "origen": origen, "destino": destino,
+            "nombre_origen": catalogo[origen]["nombre"],
+            "nombre_destino": catalogo[destino]["nombre"],
+            "evidencia": " / ".join(f"[{s}] {m}" for s, m in sorted(direcciones.items())),
+            "direcciones": sorted(direcciones),
+            "conflicto": (f"ya declarada en {ya}" if ya else
+                          f"CONFLICTO: {destino} → {origen} ya está declarada "
+                          f"({invertida})" if invertida else ""),
+        })
+    log(f"aristas propuestas: {len(aristas)}")
+    return {"catalogo": catalogo, "codigos": codigos, "aristas": aristas,
+            "sin_reconocer": sin_reconocer, "declaradas": declaradas}
+
+
 # ----------------------------------------------------------------- la salida
 
 def filas_para_excel(propuestas, catalogo, declaradas, fuente):
@@ -409,24 +458,16 @@ def main() -> int:
     pdf = os.path.join(carpeta, candidatos[0])
     fuente = f"{candidatos[0]} p.{args.pagina}"
 
-    wb = openpyxl.load_workbook(EXCEL, data_only=True)
-    catalogo = cargar_catalogo(wb)
-    declaradas = aristas_declaradas(wb)
-    print(f"catálogo: {len(catalogo)} códigos   ya declaradas: {len(declaradas)} aristas")
+    r = analizar_plano(pdf, args.pagina, limite=args.limite, hilos=args.hilos)
+    catalogo, codigos = r["catalogo"], r["codigos"]
+    sin_reconocer = r["sin_reconocer"]
 
-    sys.path.insert(0, os.path.join(RAIZ, "scripts"))
-    from redescribir_figuras_con_valores import cliente_llm
-    llm = cliente_llm()
-    img = _imagen(render(pdf, args.pagina))
-    print(f"modelo: {llm.model}   plano: {fuente}\n")
-
-    codigos = detectar(llm, img, catalogo)
-    if args.limite:
-        codigos = codigos[: args.limite]
-    print(f"componentes detectados ({len(codigos)}): {', '.join(codigos)}\n")
-
-    propuestas, sin_reconocer = proponer(llm, img, codigos, catalogo, args.hilos)
-    filas = filas_para_excel(propuestas, catalogo, declaradas, fuente)
+    propuestas = {(a["origen"], a["destino"]): {d: "" for d in a["direcciones"]}
+                  for a in r["aristas"]}
+    filas = filas_para_excel(propuestas, catalogo, r["declaradas"], fuente)
+    # La evidencia real, no la reconstruida.
+    for fila, arista in zip(filas, r["aristas"]):
+        fila[5] = arista["evidencia"]
     escribir(args.salida, filas, codigos, sin_reconocer, fuente)
 
     nuevas = sum(1 for f in filas if not f[7])

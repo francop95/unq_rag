@@ -397,6 +397,98 @@ def api_releer():
     return jsonify({"ok": True, "etiqueta": t.etiqueta})
 
 
+@app.get("/api/conexiones/<documento>")
+def api_conexiones(documento):
+    """Las aristas de un plano, propuestas y revisadas."""
+    documento = _documento_valido(documento)
+    corrida = _corrida_valida(documento, request.args.get("corrida"))
+
+    # Las páginas que tienen una figura son las que vale la pena analizar:
+    # una página de puro texto no tiene topología que leer.
+    paginas = sorted({c["pagina"] for c in
+                      (_chunk_para_pantalla(x, None)
+                       for x in disco.leer_chunks(documento, corrida))
+                      if c["visual"] and c["imagen"]},
+                     key=lambda x: int(x) if x.isdigit() else 0)
+
+    filas = rev.conexiones(documento, corrida)
+    return jsonify({
+        "documento": documento, "corrida": corrida,
+        "paginas": paginas,
+        "conexiones": filas,
+        "estados": rev.ESTADOS_CONEXION,
+        "resumen": {
+            "total": len(filas),
+            "propuestas": len([c for c in filas if c["estado"] == "propuesta"]),
+            "confirmadas": len([c for c in filas if c["estado"] == "confirmada"]),
+            "descartadas": len([c for c in filas if c["estado"] == "descartada"]),
+            "conflictos": len([c for c in filas
+                               if (c["conflicto"] or "").startswith("CONFLICTO")]),
+        },
+    })
+
+
+@app.post("/api/conexiones/veredicto")
+def api_conexion_veredicto():
+    """Confirma, descarta o agrega a mano una arista."""
+    cuerpo = request.get_json(silent=True) or {}
+    documento = _documento_valido(str(cuerpo.get("documento", "")))
+    corrida = _corrida_valida(documento, str(cuerpo.get("corrida") or ""))
+    estado = str(cuerpo.get("estado", ""))
+    if estado not in rev.ESTADOS_CONEXION:
+        abort(400, f"estado desconocido: {estado!r}")
+    origen = str(cuerpo.get("origen", "")).strip()
+    destino = str(cuerpo.get("destino", "")).strip()
+    if not origen or not destino or origen == destino:
+        abort(400, "hacen falta un origen y un destino distintos")
+
+    rev.anotar_conexion(documento, corrida, str(cuerpo.get("pagina", "")),
+                        origen, destino, estado,
+                        str(cuerpo.get("nota") or ""), _quien())
+    return jsonify({"ok": True})
+
+
+@app.post("/api/conexiones/proponer")
+def api_conexiones_proponer():
+    """Lanza la lectura del plano y guarda lo que proponga, sin confirmar nada.
+
+    Es un trabajo largo —unas 50 llamadas al modelo de visión— así que va por
+    el mismo carril que el troceo y se sigue por el log.
+    """
+    cuerpo = request.get_json(silent=True) or {}
+    documento = _documento_valido(str(cuerpo.get("documento", "")))
+    corrida = _corrida_valida(documento, str(cuerpo.get("corrida") or ""))
+    pagina = str(cuerpo.get("pagina", "1"))
+
+    pdf = next((os.path.join(disco.raiz_corpus(), d["relativa"])
+                for d in disco.documentos_ingestables()
+                if d["nombre"] == documento), None)
+    if not pdf or not pdf.lower().endswith(".pdf"):
+        abort(400, "la propuesta de conexiones solo corre sobre un PDF del corpus")
+
+    def cuerpo_trabajo(log):
+        sys.path.insert(0, os.path.join(RAIZ_INGESTION, "scripts"))
+        from proponer_conexiones import analizar_plano
+
+        r = analizar_plano(pdf, int(pagina), log=log)
+        nuevas = rev.guardar_conexiones(documento, corrida, pagina, r["aristas"])
+        log(f"guardadas {nuevas} aristas nuevas "
+            f"(las ya revisadas no se tocan)")
+        if r["sin_reconocer"]:
+            log("nombres que no se pudieron llevar a un código del catálogo: "
+                + ", ".join(r["sin_reconocer"]))
+        return {"aristas": len(r["aristas"]), "nuevas": nuevas,
+                "sin_reconocer": r["sin_reconocer"]}
+
+    try:
+        t = trabajos.lanzar_funcion(
+            "conexiones", f"leyendo conexiones de {documento} p.{pagina}",
+            cuerpo_trabajo, {"documento": documento, "corrida": corrida})
+    except trabajos.EnCurso as e:
+        return jsonify({"ok": False, "motivo": str(e)}), 409
+    return jsonify({"ok": True, "etiqueta": t.etiqueta})
+
+
 @app.get("/api/trabajo")
 def api_trabajo():
     t = trabajos.actual()

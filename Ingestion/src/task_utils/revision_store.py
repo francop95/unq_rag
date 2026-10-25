@@ -101,6 +101,20 @@ def _conectar() -> sqlite3.Connection:
             cuando    TEXT NOT NULL,
             PRIMARY KEY (documento, corrida, pagina, chunk_id)
         );
+        CREATE TABLE IF NOT EXISTS conexiones (
+            documento TEXT NOT NULL,
+            corrida   TEXT NOT NULL,
+            pagina    TEXT NOT NULL,
+            origen    TEXT NOT NULL,
+            destino   TEXT NOT NULL,
+            estado    TEXT NOT NULL,
+            evidencia TEXT,
+            conflicto TEXT,
+            nota      TEXT,
+            quien     TEXT,
+            cuando    TEXT NOT NULL,
+            PRIMARY KEY (documento, corrida, pagina, origen, destino)
+        );
         """
     )
     # La corrección vino después que la tabla, y hay bases con veredictos ya
@@ -263,3 +277,88 @@ def ultima_aprobada(documento: str) -> Optional[str]:
             (documento,),
         ).fetchone()
     return fila["corrida"] if fila else None
+
+
+# ---------------------------------------- conexiones propuestas de un plano
+
+# Lo que se puede decir de una conexión. `propuesta` es lo que leyó el
+# modelo y nadie miró todavía; es el único estado que NO llega al chunk.
+ESTADOS_CONEXION = {
+    "propuesta": "la leyó el modelo, nadie la revisó",
+    "confirmada": "una persona la dio por buena",
+    "descartada": "una persona dijo que no existe",
+}
+
+
+def guardar_conexiones(documento: str, corrida: str, pagina: Any,
+                       propuestas: List[Dict[str, Any]]) -> int:
+    """Deja las aristas que propuso el modelo, sin pisar lo ya revisado.
+
+    Volver a proponer sobre el mismo plano no puede borrar lo que alguien ya
+    confirmó o descartó: si lo hiciera, cada relectura mandaría a revisar de
+    nuevo las mismas cuarenta filas, que es exactamente el trabajo manual que
+    esto vino a evitar.
+    """
+    nuevas = 0
+    with _conectar() as con:
+        for p in propuestas:
+            fila = con.execute(
+                "SELECT estado FROM conexiones WHERE documento=? AND corrida=? "
+                "AND pagina=? AND origen=? AND destino=?",
+                (documento, corrida, str(pagina), p["origen"], p["destino"]),
+            ).fetchone()
+            if fila:
+                continue
+            con.execute(
+                "INSERT INTO conexiones (documento, corrida, pagina, origen, "
+                " destino, estado, evidencia, conflicto, nota, quien, cuando) "
+                "VALUES (?,?,?,?,?,'propuesta',?,?,'','',?)",
+                (documento, corrida, str(pagina), p["origen"], p["destino"],
+                 p.get("evidencia", ""), p.get("conflicto", ""), _ahora()),
+            )
+            nuevas += 1
+    return nuevas
+
+
+def anotar_conexion(documento: str, corrida: str, pagina: Any, origen: str,
+                    destino: str, estado: str, nota: str = "",
+                    quien: str = "") -> None:
+    """Confirma, descarta o agrega a mano una arista."""
+    if estado not in ESTADOS_CONEXION:
+        raise ValueError(f"estado desconocido: {estado!r}; "
+                         f"son {', '.join(ESTADOS_CONEXION)}")
+    with _conectar() as con:
+        con.execute(
+            "INSERT INTO conexiones (documento, corrida, pagina, origen, destino, "
+            " estado, evidencia, conflicto, nota, quien, cuando) "
+            "VALUES (?,?,?,?,?,?,'','',?,?,?) "
+            "ON CONFLICT(documento, corrida, pagina, origen, destino) DO UPDATE SET "
+            "estado=excluded.estado, nota=excluded.nota, quien=excluded.quien, "
+            "cuando=excluded.cuando",
+            (documento, corrida, str(pagina), origen, destino, estado,
+             nota, quien, _ahora()),
+        )
+
+
+def conexiones(documento: str, corrida: str, pagina: Any = None) -> List[Dict[str, Any]]:
+    sql = "SELECT * FROM conexiones WHERE documento=? AND corrida=?"
+    args: list = [documento, corrida]
+    if pagina is not None:
+        sql += " AND pagina=?"
+        args.append(str(pagina))
+    sql += " ORDER BY origen, destino"
+    with _conectar() as con:
+        return [dict(f) for f in con.execute(sql, args).fetchall()]
+
+
+def conexiones_confirmadas(documento: str, corrida: str,
+                           pagina: Any = None) -> List[tuple]:
+    """Los `(origen, destino)` que una persona dio por buenos.
+
+    Es lo único que llega al texto del chunk. Una propuesta sin revisar no
+    entra: si entrara, el modelo volvería a afirmar cableado y estaríamos
+    donde empezamos.
+    """
+    return [(c["origen"], c["destino"])
+            for c in conexiones(documento, corrida, pagina)
+            if c["estado"] == "confirmada"]

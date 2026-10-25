@@ -269,3 +269,89 @@ def test_si_el_buffer_rota_se_avisa_en_vez_de_mentir(pantalla, monkeypatch):
     assert foto["perdidas"] == 7
     assert foto["lineas"] == ["linea 7", "linea 8", "linea 9"]
     assert foto["total"] == 10
+
+
+# ─────────────────────────────────────── conexiones del plano, en la pantalla
+
+def test_solo_lo_confirmado_cuenta_como_conexion(pantalla):
+    """Una propuesta sin revisar no es un dato. Si contara, el modelo
+    seguiría afirmando cableado en el índice y no habríamos movido nada."""
+    cliente, store, _, _ = pantalla
+    store.registrar_corrida("doc", "20260101_000000")
+    store.guardar_conexiones("doc", "20260101_000000", 1, [
+        {"origen": "QF03", "destino": "IF01", "evidencia": "conductor continuo"},
+        {"origen": "QF03", "destino": "VFD01", "evidencia": "las dos lecturas"},
+    ])
+
+    d = _json(cliente.get("/api/conexiones/doc"))
+    assert d["resumen"]["propuestas"] == 2
+    assert d["resumen"]["confirmadas"] == 0
+    assert store.conexiones_confirmadas("doc", "20260101_000000") == []
+
+    cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "QF03", "destino": "VFD01", "estado": "confirmada"})
+    cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "QF03", "destino": "IF01", "estado": "descartada",
+        "nota": "es una línea de llamada"})
+
+    assert store.conexiones_confirmadas("doc", "20260101_000000") == [("QF03", "VFD01")]
+
+
+def test_volver_a_leer_el_plano_no_pisa_lo_revisado(pantalla):
+    """Si cada relectura devolviera las cuarenta filas a "sin revisar", el
+    trabajo manual que esto vino a evitar volvería entero."""
+    cliente, store, _, _ = pantalla
+    store.registrar_corrida("doc", "20260101_000000")
+    store.guardar_conexiones("doc", "20260101_000000", 1,
+                             [{"origen": "QF03", "destino": "IF01"}])
+    cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "QF03", "destino": "IF01", "estado": "descartada"})
+
+    nuevas = store.guardar_conexiones("doc", "20260101_000000", 1, [
+        {"origen": "QF03", "destino": "IF01"},      # la misma, ya descartada
+        {"origen": "QF01", "destino": "QF02"},      # una nueva
+    ])
+    assert nuevas == 1
+    estados = {(c["origen"], c["destino"]): c["estado"]
+               for c in store.conexiones("doc", "20260101_000000")}
+    assert estados[("QF03", "IF01")] == "descartada"
+    assert estados[("QF01", "QF02")] == "propuesta"
+
+
+def test_se_puede_agregar_a_mano_una_arista_que_el_modelo_no_vio(pantalla):
+    """El modelo no sigue las barras colectoras: se come QF01 → QF03. Si solo
+    se pudiera confirmar o descartar lo propuesto, esa arista no habría forma
+    de meterla y la tabla quedaría incompleta para siempre."""
+    cliente, store, _, _ = pantalla
+    store.registrar_corrida("doc", "20260101_000000")
+    r = cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "QF01", "destino": "QF03", "estado": "confirmada",
+        "nota": "agregada a mano"})
+    assert r.status_code == 200
+    assert store.conexiones_confirmadas("doc", "20260101_000000") == [("QF01", "QF03")]
+
+
+def test_una_arista_hacia_si_misma_se_rechaza(pantalla):
+    cliente, _, _, _ = pantalla
+    r = cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "QF01", "destino": "QF01", "estado": "confirmada"})
+    assert r.status_code == 400
+
+
+def test_leer_el_plano_es_un_trabajo_y_no_bloquea_la_peticion(pantalla, monkeypatch):
+    """Son ~50 llamadas al modelo: adentro de una petición HTTP el navegador
+    cortaría antes de terminar."""
+    cliente, _, trabajos, _ = pantalla
+    lanzados = []
+    monkeypatch.setattr(trabajos, "lanzar_funcion",
+                        lambda c, e, fn, ctx=None: lanzados.append(c)
+                        or _trabajo_falso(trabajos, c, e, ctx))
+    r = cliente.post("/api/conexiones/proponer", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1"})
+    assert r.status_code == 200
+    assert lanzados == ["conexiones"]

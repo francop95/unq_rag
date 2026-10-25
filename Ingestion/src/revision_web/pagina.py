@@ -177,6 +177,27 @@ textarea.edicion{width:100%;min-height:230px;background:#0a0e13;color:var(--tex)
 .lado pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:.76rem;
   line-height:1.55;max-height:16rem;overflow:auto}
 
+/* ---------- conexiones ---------- */
+.conex{background:var(--sup);border:1px solid var(--bor);border-radius:var(--r);
+  padding:.8rem;margin-bottom:.9rem}
+.conex table{width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem;
+  margin-top:.6rem}
+.conex th{text-align:left;padding:.35rem .5rem;border-bottom:1px solid var(--bor);
+  font-size:.7rem;text-transform:uppercase;letter-spacing:.055em;color:var(--mut)}
+.conex td{padding:.35rem .5rem;border-bottom:1px solid var(--bor);vertical-align:top}
+.conex tr:last-child td{border-bottom:0}
+.conex tr.descartada{opacity:.45}
+.conex tr.confirmada td{background:#34d3990d}
+.conex tr.chocado td{background:#f8717112}
+.conex .par{font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+.conex .ev{color:var(--mut2);font-size:.73rem;max-width:30rem}
+.conex .acc{white-space:nowrap;text-align:right}
+.conex .alta{color:var(--mal);font-size:.73rem}
+.conex .nueva{display:flex;gap:.4rem;align-items:center;margin-top:.7rem;
+  padding-top:.7rem;border-top:1px solid var(--bor);flex-wrap:wrap}
+.conex .nueva select{background:var(--sup2);color:var(--tex);border:1px solid var(--bor);
+  border-radius:7px;padding:.25rem .45rem;font:inherit;font-size:.78rem}
+
 /* ---------- diff ---------- */
 .diff{background:var(--sup);border:1px solid var(--bor);border-radius:var(--r);
   padding:.8rem;margin-bottom:.9rem}
@@ -208,6 +229,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
 let estado = {
   docs: [], veredictos: {}, doc: null, corrida: null, datos: null,
   verTexto: false, propuestas: {}, lineasVistas: 0, sondeo: null,
+  conexiones: null, verConexiones: false,
 };
 
 function aviso(texto, mal) {
@@ -320,6 +342,9 @@ function pintar() {
       '<button class="btn mal" id="b-rechazar">Rechazar</button>' +
       '<button class="btn" id="b-indexar">Indexar</button>' +
       '<button class="btn" id="b-diff">Comparar con la aprobada</button>' +
+      '<button class="btn" id="b-conex">' +
+        (estado.verConexiones ? 'Ocultar conexiones' : 'Conexiones del plano') +
+      '</button>' +
       '<button class="btn sep" id="b-trocear">Volver a trocear</button>' +
       '<button class="btn" id="b-texto">' +
         (estado.verTexto ? 'Ocultar el texto' : 'Ver también el texto') + '</button>' +
@@ -331,8 +356,14 @@ function pintar() {
   $('#b-rechazar').onclick = () => decidir('rechazada');
   $('#b-indexar').onclick = () => indexar();
   $('#b-diff').onclick = () => verDiff();
+  $('#b-conex').onclick = () => {
+    estado.verConexiones = !estado.verConexiones;
+    estado.verConexiones ? cargarConexiones() : pintar();
+  };
   $('#b-trocear').onclick = () => trocear(doc);
   $('#b-texto').onclick = () => { estado.verTexto = !estado.verTexto; pintar(); };
+
+  if (estado.verConexiones && estado.conexiones) panel.appendChild(tablaConexiones());
 
   const visuales = d.chunks.filter(c => c.visual);
   const textos = d.chunks.filter(c => !c.visual);
@@ -527,6 +558,127 @@ async function verDiff() {
   caja.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }
 
+/* ------------------------------------------------------------ conexiones */
+
+async function cargarConexiones() {
+  try {
+    estado.conexiones = await pedir('/api/conexiones/' + encodeURIComponent(estado.doc) +
+      '?corrida=' + encodeURIComponent(estado.corrida));
+  } catch (e) { aviso(e.message, true); return; }
+  pintar();
+}
+
+function tablaConexiones() {
+  const c = estado.conexiones, r = c.resumen;
+  const caja = E('div', {className: 'conex'});
+
+  const filas = c.conexiones.map(x => {
+    const choca = (x.conflicto || '').startsWith('CONFLICTO');
+    return '<tr class="' + esc(x.estado) + (choca ? ' chocado' : '') +
+      '" data-o="' + esc(x.origen) + '" data-d="' + esc(x.destino) +
+      '" data-p="' + esc(x.pagina) + '">' +
+      '<td class="par">' + esc(x.origen) + ' → ' + esc(x.destino) + '</td>' +
+      '<td><span class="badge b-' + (x.estado === 'confirmada' ? 'ok' :
+        x.estado === 'descartada' ? 'descartar' : 'pendiente') + '">' +
+        esc(x.estado) + '</span></td>' +
+      '<td class="ev">' + esc(x.evidencia || '') +
+        (choca ? '<div class="alta">' + esc(x.conflicto) + '</div>' :
+         x.conflicto ? '<div>' + esc(x.conflicto) + '</div>' : '') +
+        (x.nota ? '<div>' + esc(x.nota) + '</div>' : '') + '</td>' +
+      '<td class="acc">' +
+        '<button class="btn chico" data-a="confirmada">Es así</button> ' +
+        '<button class="btn chico" data-a="descartada">No existe</button>' +
+      '</td></tr>';
+  }).join('');
+
+  caja.innerHTML =
+    '<h3 class="seccion">Conexiones del plano</h3>' +
+    '<div class="cuentas">' +
+      '<span class="chip"><b>' + r.total + '</b> aristas</span>' +
+      (r.propuestas ? '<span class="chip al"><b>' + r.propuestas +
+        '</b> sin revisar</span>' : '') +
+      '<span class="chip"><b>' + r.confirmadas + '</b> confirmadas</span>' +
+      (r.descartadas ? '<span class="chip"><b>' + r.descartadas +
+        '</b> descartadas</span>' : '') +
+      (r.conflictos ? '<span class="chip al"><b>' + r.conflictos +
+        '</b> en conflicto con lo ya declarado</span>' : '') +
+    '</div>' +
+    (c.conexiones.length
+      ? '<table><thead><tr><th>Arista</th><th>Estado</th>' +
+        '<th>Evidencia del modelo</th><th></th></tr></thead><tbody>' +
+        filas + '</tbody></table>'
+      : '<p class="vacio">Todavía no se leyó el plano. Solo entran al chunk ' +
+        'las que confirmes.</p>');
+
+  // Proponer, una página a la vez: cada una es un plano distinto.
+  const pie = E('div', {className: 'nueva'});
+  for (const pag of c.paginas) {
+    const b = E('button', {className: 'btn', textContent: 'Leer conexiones de la p.' + pag});
+    b.onclick = () => proponerConexiones(pag);
+    pie.appendChild(b);
+  }
+  caja.appendChild(pie);
+
+  // Agregar a mano lo que el modelo no vio.
+  const mano = E('div', {className: 'nueva'});
+  const sel = (id) => {
+    const s = E('select', {id});
+    s.innerHTML = '<option value="">—</option>' + codigosVistos()
+      .map(x => '<option>' + esc(x) + '</option>').join('');
+    return s;
+  };
+  mano.appendChild(E('span', {className: 'ev', textContent: 'Agregar a mano:'}));
+  mano.appendChild(sel('c-origen'));
+  mano.appendChild(E('span', {textContent: '→'}));
+  mano.appendChild(sel('c-destino'));
+  const add = E('button', {className: 'btn chico', textContent: 'Confirmar'});
+  add.onclick = () => {
+    const o = $('#c-origen').value, d = $('#c-destino').value;
+    if (!o || !d) { aviso('elegí origen y destino', true); return; }
+    veredictoConexion(o, d, (c.paginas[0] || '1'), 'confirmada', 'agregada a mano');
+  };
+  mano.appendChild(add);
+  caja.appendChild(mano);
+
+  caja.querySelectorAll('button[data-a]').forEach(b => {
+    b.onclick = () => {
+      const tr = b.closest('tr');
+      veredictoConexion(tr.dataset.o, tr.dataset.d, tr.dataset.p, b.dataset.a);
+    };
+  });
+  return caja;
+}
+
+/** Los códigos que ya aparecen en alguna arista, para el desplegable. */
+function codigosVistos() {
+  const s = new Set();
+  for (const x of (estado.conexiones || {}).conexiones || []) {
+    s.add(x.origen); s.add(x.destino);
+  }
+  return [...s].sort();
+}
+
+async function veredictoConexion(origen, destino, pagina, estadoNuevo, nota) {
+  try {
+    await enviar('/api/conexiones/veredicto', {
+      documento: estado.doc, corrida: estado.corrida, pagina,
+      origen, destino, estado: estadoNuevo, nota: nota || ''});
+    aviso(origen + ' → ' + destino + ': ' + estadoNuevo);
+    await cargarConexiones();
+  } catch (e) { aviso(e.message, true); }
+}
+
+async function proponerConexiones(pagina) {
+  if (!confirm('Leer las conexiones de la página ' + pagina +
+      ' con el modelo de visión.\n\nSon unas 50 llamadas. Lo que proponga ' +
+      'queda SIN confirmar: nada entra al chunk hasta que lo marques.')) return;
+  try {
+    await enviar('/api/conexiones/proponer',
+      {documento: estado.doc, corrida: estado.corrida, pagina});
+    arrancarSondeo(true);
+  } catch (e) { aviso(e.message, true); }
+}
+
 /* --------------------------------------------------------------- trabajos */
 
 async function trocear(doc) {
@@ -604,6 +756,10 @@ async function sondear() {
     await cargarDocumentos();
     const ctx = t.contexto || {};
     if (ctx.documento) await abrir(ctx.documento, ctx.corrida || null);
+    if (t.clase === 'conexiones' && t.estado === 'ok') {
+      estado.verConexiones = true;
+      await cargarConexiones();
+    }
   }
 }
 
