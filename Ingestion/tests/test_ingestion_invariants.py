@@ -1277,3 +1277,26 @@ def test_una_lista_larga_no_se_corta_en_silencio():
         {"notes": {"labels": [f"L{i}" for i in range(_MAX_LIST_ITEMS + 7)]}})}
     cortado = readable_chunk_text(muchos)
     assert "… y 7 más" in cortado, "si corta, tiene que decirlo"
+
+
+def test_la_evidencia_dice_que_pregunta_la_produjo(proponer_conexiones):
+    """Decía "[arriba]" y "[abajo]", que no se entiende sin leyenda: son los
+    dos sentidos en que se interroga a cada componente, y la etiqueta se
+    refiere a la PREGUNTA, no a una propiedad de la conexión.
+
+    Lo fácil de equivocar es de quién se habla en cada caso: "arriba" salió
+    de preguntarle al DESTINO, "abajo" al ORIGEN. Invertirlos haría que la
+    evidencia nombre al componente que no se preguntó, que es peor que la
+    etiqueta críptica que se vino a reemplazar.
+    """
+    ev = proponer_conexiones.evidencia_de(
+        "QF01", "QF03",
+        {"abajo": "QF01 alimenta a QF02, QF03 y QF04",
+         "arriba": "QF03 sale de la salida de QF01"})
+
+    assert "preguntando por QF01 — ¿a quién alimenta?: QF01 alimenta" in ev
+    assert "preguntando por QF03 — ¿quién lo alimenta?: QF03 sale" in ev
+    assert "[arriba]" not in ev and "[abajo]" not in ev
+
+    sola = proponer_conexiones.evidencia_de("QF01", "QF03", {"abajo": "x"})
+    assert sola == "preguntando por QF01 — ¿a quién alimenta?: x"

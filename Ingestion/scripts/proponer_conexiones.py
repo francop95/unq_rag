@@ -318,6 +318,28 @@ def proponer(llm, img, codigos, catalogo, hilos=6):
     return dict(propuestas), sorted(sin_reconocer)
 
 
+def evidencia_de(origen, destino, direcciones):
+    """Qué pregunta produjo esta arista, con todas las letras.
+
+    Antes decía "[arriba]" y "[abajo]". No se entiende sin leyenda: son los
+    dos sentidos en que se interroga a cada componente, y la etiqueta se
+    refiere a la PREGUNTA, no a una propiedad de la conexión. Quien revisa
+    tiene que poder leer la fila sin que nadie se la explique.
+
+    Ojo con de quién se habla en cada caso: "arriba" salió de preguntarle al
+    DESTINO quién lo alimenta, y "abajo" de preguntarle al ORIGEN a quién
+    alimenta. Invertirlos haría que la evidencia nombre al componente que no
+    se preguntó.
+    """
+    partes = []
+    for sentido, motivo in sorted(direcciones.items()):
+        if sentido == "arriba":
+            partes.append(f"preguntando por {destino} — ¿quién lo alimenta?: {motivo}")
+        else:
+            partes.append(f"preguntando por {origen} — ¿a quién alimenta?: {motivo}")
+    return " / ".join(partes)
+
+
 def analizar_plano(pdf, pagina, llm=None, limite=0, hilos=6, log=print):
     """Todo el análisis de una página: catálogo, detección, topología, cotejo.
 
@@ -356,7 +378,7 @@ def analizar_plano(pdf, pagina, llm=None, limite=0, hilos=6, log=print):
             "origen": origen, "destino": destino,
             "nombre_origen": catalogo[origen]["nombre"],
             "nombre_destino": catalogo[destino]["nombre"],
-            "evidencia": " / ".join(f"[{s}] {m}" for s, m in sorted(direcciones.items())),
+            "evidencia": evidencia_de(origen, destino, direcciones),
             "direcciones": sorted(direcciones),
             "conflicto": (f"ya declarada en {ya}" if ya else
                           f"CONFLICTO: {destino} → {origen} ya está declarada "
