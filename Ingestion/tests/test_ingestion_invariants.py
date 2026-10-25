@@ -1251,3 +1251,29 @@ def test_una_propuesta_sin_revisar_no_frena_ni_entra(revision):
     decididas = {(f["origen"], f["destino"]) for f in filas
                  if f["estado"] in ("descartada", "confirmada")}
     assert ("QD01", "QF04") not in decididas
+
+
+def test_una_lista_larga_no_se_corta_en_silencio():
+    """El renderizador cortaba las listas en 30 y no lo decía. Medido sobre
+    el corpus: 34 de 427 chunks visuales perdían contenido, 358 elementos.
+    En el plano codificado se iban 14 de los 44 "Textos en la figura", y no
+    cualquiera: PS02, MCU01, los dos servos y las notas de las compuertas.
+    Buscar "PS02" no encontraba el plano donde está dibujada.
+
+    Sigue habiendo tope —una lista desbocada no puede comerse el chunk— pero
+    ahora avisa, así el modelo de respuesta sabe que la lista es parcial en
+    vez de creer que vio todo.
+    """
+    from task_utils.chunk_text import _MAX_LIST_ITEMS
+
+    chunk = {"content_type": "diagram_visual", "original_chunk": json.dumps(
+        {"notes": {"description": "un plano", "labels": [f"L{i}" for i in range(44)]}})}
+    salida = readable_chunk_text(chunk)
+    for esperado in ("L0", "L29", "L30", "L43"):
+        assert esperado in salida, f"se perdió {esperado}"
+    assert "… y" not in salida, "con 44 elementos no hace falta cortar"
+
+    muchos = {"content_type": "diagram_visual", "original_chunk": json.dumps(
+        {"notes": {"labels": [f"L{i}" for i in range(_MAX_LIST_ITEMS + 7)]}})}
+    cortado = readable_chunk_text(muchos)
+    assert "… y 7 más" in cortado, "si corta, tiene que decirlo"

@@ -15,8 +15,19 @@ se perdieron en silencio justamente por eso.
 import json
 from typing import Any, Dict, List, Optional
 
-# Cuántos elementos de cada lista de la descripción estructurada se incluyen
-_MAX_LIST_ITEMS = 30
+# Cuántos elementos de cada lista de la descripción estructurada se incluyen.
+#
+# Era 30, y cortaba en silencio. Medido sobre el corpus: 34 de 427 chunks
+# visuales perdían contenido, 358 elementos en total. En el plano codificado
+# se iban 14 de 44 "Textos en la figura", y no cualquiera: TBEN-L4-8IOL,
+# IO01, PS01, PS02, MCU01, SV01, SV02 y las notas de las compuertas. Toda la
+# sección de control del plano, que el modelo SÍ había leído. Buscar "PS02"
+# no encontraba el plano donde está dibujada.
+#
+# El tope existe para que una lista desbocada no se coma el chunk, y eso
+# sigue valiendo; lo que no vale es cortar sin decirlo. Ahora son 200 —el
+# peor caso del corpus son 65— y si igual corta, lo dice.
+_MAX_LIST_ITEMS = 200
 _MAX_TABLE_ROWS = 400
 
 # Los recorridos de un diagrama no se transcriben: salen de mirar el dibujo y
@@ -92,7 +103,12 @@ def _describe_figure(notes: Any) -> str:
     ):
         value = notes.get(key)
         if isinstance(value, list) and value:
-            parts.append(f"{label}: " + ", ".join(str(v) for v in value[:_MAX_LIST_ITEMS]))
+            visibles = [str(v) for v in value[:_MAX_LIST_ITEMS]]
+            # Decir que la lista está cortada: así el modelo de respuesta
+            # sabe que no es completa, en vez de creer que vio todo.
+            if len(value) > _MAX_LIST_ITEMS:
+                visibles.append(f"… y {len(value) - _MAX_LIST_ITEMS} más")
+            parts.append(f"{label}: " + ", ".join(visibles))
 
     for key, label in (("ratings", "Valores nominales"), ("dimensions", "Dimensiones"),
                        ("equipment_locations", "Ubicaciones")):

@@ -191,6 +191,14 @@ textarea.edicion{width:100%;min-height:230px;background:#0a0e13;color:var(--tex)
 .tabla-chunk tr:last-child td{border-bottom:0}
 .tabla-chunk tbody tr:nth-child(even) td{background:#ffffff05}
 .crudo{margin-top:.3rem}
+.extraido{margin-top:.5rem;border:1px solid var(--bor);border-radius:8px;
+  background:#0a0e13;padding:.5rem .65rem;font-size:.76rem}
+.extraido h5{margin:.35rem 0 .15rem;font-size:.7rem;color:var(--mut2);
+  text-transform:uppercase;letter-spacing:.06em;font-weight:650}
+.extraido h5:first-child{margin-top:0}
+.extraido ol{margin:0;padding-left:1.6rem;color:var(--tex)}
+.extraido li{padding:.04rem 0}
+.extraido p{margin:.1rem 0;color:var(--tex)}
 
 /* ---------- conexiones ---------- */
 .conex{background:var(--sup);border:1px solid var(--bor);border-radius:var(--r);
@@ -495,6 +503,17 @@ function tarjeta(c) {
     caja.appendChild(E('p', {className: 'pie', style: 'padding-left:0;border:0',
       textContent: 'texto corregido en la revisión; el original queda en el JSON del troceo'}));
   }
+  if (c.extraido) {
+    const bruto = E('div', {style: 'display:none'});
+    bruto.innerHTML = dibujarExtraido(c.extraido);
+    const ver = boton('Ver lo que extrajo el modelo', 'mas', () => {
+      const oculto = bruto.style.display === 'none';
+      bruto.style.display = oculto ? '' : 'none';
+      ver.textContent = oculto ? 'Ocultar lo extraído' : 'Ver lo que extrajo el modelo';
+    });
+    caja.appendChild(ver);
+    caja.appendChild(bruto);
+  }
   cuerpo.appendChild(caja);
   art.appendChild(cuerpo);
 
@@ -575,6 +594,41 @@ function dibujarTabla(filas) {
     (conEncabezado ? '<thead>' + fila(cuerpo[0], 'th') + '</thead>' : '') +
     '<tbody>' + cuerpo.slice(conEncabezado ? 1 : 0)
       .map(f => fila(f, 'td')).join('') + '</tbody></table>';
+}
+
+/**
+ * Lo que el modelo de visión devolvió, campo por campo.
+ *
+ * El texto del chunk es el aplanado de esto, y el aplanado puede recortar:
+ * con el tope viejo se perdían 14 de los 44 "Textos en la figura" de un
+ * plano, y nadie podía notarlo porque la pantalla mostraba solo el aplanado.
+ * Numerado a propósito: así se ve de un vistazo cuántos elementos hay.
+ */
+function dibujarExtraido(notas) {
+  const titulos = {
+    description: 'Resumen', diagram_type: 'Tipo',
+    components: 'Componentes', connections: 'Conexiones (deducidas del dibujo)',
+    labels: 'Textos en la figura', ratings: 'Valores nominales',
+    uncertainties: 'No legible',
+  };
+  const partes = [];
+  for (const [campo, valor] of Object.entries(notas)) {
+    const titulo = titulos[campo] || campo;
+    if (Array.isArray(valor)) {
+      if (!valor.length) continue;
+      partes.push('<h5>' + esc(titulo) + ' (' + valor.length + ')</h5><ol>' +
+        valor.map(v => '<li>' + esc(typeof v === 'string' ? v : JSON.stringify(v)) +
+          '</li>').join('') + '</ol>');
+    } else if (valor && typeof valor === 'object') {
+      const filas = Object.entries(valor);
+      if (!filas.length) continue;
+      partes.push('<h5>' + esc(titulo) + ' (' + filas.length + ')</h5><ol>' +
+        filas.map(([k, v]) => '<li>' + esc(k + ': ' + v) + '</li>').join('') + '</ol>');
+    } else if (valor) {
+      partes.push('<h5>' + esc(titulo) + '</h5><p>' + esc(valor) + '</p>');
+    }
+  }
+  return partes.length ? '<div class="extraido">' + partes.join('') + '</div>' : '';
 }
 
 function boton(texto, clase, fn) {

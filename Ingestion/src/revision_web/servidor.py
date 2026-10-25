@@ -31,6 +31,7 @@ aprobar desde la consola son la misma operación: si no lo fueran, la compuerta
 no estaría prometiendo nada.
 """
 
+import json
 import os
 import sys
 from typing import Any, Dict, Optional
@@ -88,6 +89,26 @@ def _corrida_valida(documento: str, corrida: Optional[str]) -> str:
     return corrida
 
 
+def _extraido(chunk: Dict[str, Any]):
+    """Los campos estructurados que devolvió el modelo de visión, crudos.
+
+    El texto del chunk es el aplanado de esto, y el aplanado puede recortar:
+    con el tope en 30 se perdían 14 de los 44 "Textos en la figura" del plano
+    codificado, entre ellos PS02, MCU01 y los servos. Quien revisa tiene que
+    poder ver lo que el modelo leyó, no solo lo que sobrevivió al render.
+    """
+    original = chunk.get("original_chunk")
+    if isinstance(original, str):
+        try:
+            original = json.loads(original)
+        except ValueError:
+            return None
+    if not isinstance(original, dict):
+        return None
+    notas = original.get("notes")
+    return notas if isinstance(notas, dict) and notas else None
+
+
 def _chunk_para_pantalla(chunk: Dict[str, Any], veredicto: Optional[Dict]) -> Dict:
     recorte = disco.recorte_de(chunk)
     relativa = disco.ruta_relativa_a_datos(recorte) if recorte else None
@@ -99,6 +120,7 @@ def _chunk_para_pantalla(chunk: Dict[str, Any], veredicto: Optional[Dict]) -> Di
         "visual": (chunk.get("content_type") or "") in disco.VISUALES,
         "encabezado": chunk.get("heading") or "",
         "texto": disco.texto_de(chunk),
+        "extraido": _extraido(chunk),
         "imagen": f"/media/{relativa}" if relativa else None,
         "veredicto": (veredicto or {}).get("veredicto"),
         "nota": (veredicto or {}).get("nota") or "",

@@ -233,6 +233,27 @@ bornes de control"**.
 Se mide por rachas y no por proporción para no descartar un epígrafe legible
 rodeado de ruido, que es justamente el caso que sirve.
 
+### Entre lo que el modelo extrae y lo que se indexa hay un aplanado
+
+El modelo devuelve campos: `description`, `diagram_type`, `components`,
+`connections`, `labels`, `ratings`. El texto del chunk es el aplanado de
+eso, y el aplanado **recorta las listas largas**.
+
+El tope era 30 y cortaba en silencio. Medido sobre el corpus: **34 de 427
+chunks visuales perdían contenido, 358 elementos en total**. En el plano
+codificado se iban 14 de los 44 "Textos en la figura", y no cualquiera:
+`TBEN-L4-8IOL`, `IO01`, `PS01`, `PS02`, `MCU01`, `SV01`, `SV02` y las notas
+de las compuertas — toda la sección de control. Buscar "PS02" no encontraba
+el plano donde está dibujada.
+
+Ahora el tope es 200, el peor caso del corpus son 65, y si igual cortara lo
+dice con un `… y N más` para que el modelo de respuesta sepa que la lista es
+parcial.
+
+En la pantalla de revisión, **Ver lo que extrajo el modelo** muestra los
+campos crudos con su cuenta, al lado del texto aplanado. Es la única forma de
+notar que el render se está comiendo algo.
+
 ### Paso 5 — La imagen se copia y se indexa dos veces
 
 El recorte se copia a `data/media/` (hoy **1.802 archivos, 140 MB**) y queda
