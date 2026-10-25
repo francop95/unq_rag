@@ -177,6 +177,17 @@ textarea.edicion{width:100%;min-height:230px;background:#0a0e13;color:var(--tex)
 .lado pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:.76rem;
   line-height:1.55;max-height:16rem;overflow:auto}
 
+/* ---------- tablas de los documentos ---------- */
+.tabla-chunk{width:100%;border-collapse:separate;border-spacing:0;font-size:.78rem;
+  margin:.3rem 0 .5rem;border:1px solid var(--bor);border-radius:8px;overflow:hidden}
+.tabla-chunk th,.tabla-chunk td{text-align:left;padding:.3rem .55rem;
+  border-bottom:1px solid var(--bor);vertical-align:top;overflow-wrap:anywhere}
+.tabla-chunk th{background:var(--sup2);font-weight:620;font-size:.72rem;
+  text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+.tabla-chunk tr:last-child td{border-bottom:0}
+.tabla-chunk tbody tr:nth-child(even) td{background:#ffffff05}
+.crudo{margin-top:.3rem}
+
 /* ---------- conexiones ---------- */
 .conex{background:var(--sup);border:1px solid var(--bor);border-radius:var(--r);
   padding:.8rem;margin-bottom:.9rem}
@@ -415,6 +426,32 @@ function tarjeta(c) {
   }
   const caja = E('div');
   const texto = c.texto_revisado || c.texto;
+
+  const trozos = trozosDeTexto(texto);
+  if (trozos) {
+    const vista = E('div');
+    vista.innerHTML = trozos.map(t => t.tipo === 'tabla'
+      ? dibujarTabla(t.filas)
+      : '<pre class="texto">' + esc(t.lineas.join('\n').trim()) + '</pre>').join('');
+    caja.appendChild(vista);
+
+    const crudo = E('pre', {className: 'texto', textContent: texto,
+                            style: 'display:none'});
+    caja.appendChild(crudo);
+    const ver = boton('Ver el markdown que se indexa', 'crudo', () => {
+      const oculto = crudo.style.display === 'none';
+      crudo.style.display = oculto ? '' : 'none';
+      vista.style.display = oculto ? 'none' : '';
+      ver.textContent = oculto ? 'Ver la tabla' : 'Ver el markdown que se indexa';
+    });
+    ver.classList.add('crudo');
+    caja.appendChild(ver);
+    cuerpo.appendChild(caja);
+    art.appendChild(cuerpo);
+    agregarPie(art, c);
+    return art;
+  }
+
   const pre = E('pre', {className: 'texto', textContent: texto});
   caja.appendChild(pre);
   if (texto.length > 700) {
@@ -436,6 +473,11 @@ function tarjeta(c) {
   const prop = estado.propuestas[clave];
   if (prop) art.appendChild(bloquePropuesta(c, prop));
 
+  agregarPie(art, c);
+  return art;
+}
+
+function agregarPie(art, c) {
   const pie = E('div', {className: 'pie'});
   const nota = E('input', {placeholder: 'nota (qué está mal, qué dice el original…)',
     value: c.nota});
@@ -443,7 +485,68 @@ function tarjeta(c) {
   pie.appendChild(nota);
   if (c.quien) pie.appendChild(E('span', {textContent: c.quien}));
   art.appendChild(pie);
-  return art;
+}
+
+/**
+ * Las tablas del documento, dibujadas como tablas.
+ *
+ * El texto del chunk es markdown con pipes, y así es como se embebe y como
+ * lo lee el modelo. Pero revisar una tabla de 20 filas contando barras
+ * verticales no se hace: en el manual del PowerFlex hay 169 tablas.
+ *
+ * Mismo criterio que el frontend del asistente: se dibuja la tabla y el
+ * crudo queda detrás de un botón, porque sigue siendo literalmente lo que
+ * se indexa y a veces es justo lo que hay que mirar.
+ *
+ * Devuelve null si el texto no tiene ninguna tabla, y entonces se muestra
+ * como siempre.
+ */
+function trozosDeTexto(texto) {
+  const lineas = texto.split('\n');
+  const trozos = [];
+  let sueltas = [], tabla = [];
+
+  const cerrarTabla = () => {
+    // Dos filas mínimo: una línea suelta con pipes no es una tabla.
+    if (tabla.length >= 2) trozos.push({tipo: 'tabla', filas: tabla});
+    else sueltas.push(...tabla);
+    tabla = [];
+  };
+  const cerrarTexto = () => {
+    if (sueltas.join('').trim()) trozos.push({tipo: 'texto', lineas: sueltas});
+    sueltas = [];
+  };
+
+  for (const linea of lineas) {
+    const t = linea.trim();
+    if (t.startsWith('|') && t.endsWith('|') && t.length > 2) {
+      if (!tabla.length) cerrarTexto();
+      tabla.push(t);
+    } else {
+      cerrarTabla();
+      sueltas.push(linea);
+    }
+  }
+  cerrarTabla();
+  cerrarTexto();
+  return trozos.some(x => x.tipo === 'tabla') ? trozos : null;
+}
+
+function dibujarTabla(filas) {
+  // La fila de guiones solo separa el encabezado; no es un dato.
+  const celdas = (f) => f.slice(1, -1).split('|').map(c => c.trim());
+  const esSeparador = (f) => /^\|[\s|:-]+\|$/.test(f);
+  const cuerpo = filas.filter(f => !esSeparador(f));
+  const conEncabezado = filas.length > 1 && esSeparador(filas[1]);
+
+  const fila = (f, etiqueta) => '<tr>' +
+    celdas(f).map(c => '<' + etiqueta + '>' + esc(c) + '</' + etiqueta + '>').join('') +
+    '</tr>';
+
+  return '<table class="tabla-chunk">' +
+    (conEncabezado ? '<thead>' + fila(cuerpo[0], 'th') + '</thead>' : '') +
+    '<tbody>' + cuerpo.slice(conEncabezado ? 1 : 0)
+      .map(f => fila(f, 'td')).join('') + '</tbody></table>';
 }
 
 function boton(texto, clase, fn) {
