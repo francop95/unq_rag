@@ -397,6 +397,26 @@ def api_releer():
     return jsonify({"ok": True, "etiqueta": t.etiqueta})
 
 
+def _catalogo():
+    """Los códigos de la hoja `Nomenclatura`, para los desplegables.
+
+    El catálogo entero y no solo los códigos que el modelo nombró: si una
+    arista se arma únicamente con lo ya propuesto, un componente que la
+    lectura no vio —pasa con los que cuelgan de una barra colectora— no se
+    puede conectar nunca, y la tabla queda incompleta para siempre.
+    """
+    try:
+        sys.path.insert(0, os.path.join(RAIZ_INGESTION, "scripts"))
+        import openpyxl
+        from proponer_conexiones import EXCEL, cargar_catalogo
+        catalogo = cargar_catalogo(openpyxl.load_workbook(EXCEL, data_only=True))
+        return [{"codigo": c, "nombre": d["nombre"]}
+                for c, d in sorted(catalogo.items())]
+    except Exception as e:  # noqa: BLE001 — sin inventario la pantalla igual sirve
+        print(f"no se pudo leer la nomenclatura: {e}")
+        return []
+
+
 @app.get("/api/conexiones/<documento>")
 def api_conexiones(documento):
     """Las aristas de un plano, propuestas y revisadas."""
@@ -416,6 +436,7 @@ def api_conexiones(documento):
         "documento": documento, "corrida": corrida,
         "paginas": paginas,
         "conexiones": filas,
+        "catalogo": _catalogo(),
         "estados": rev.ESTADOS_CONEXION,
         "resumen": {
             "total": len(filas),

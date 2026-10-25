@@ -229,7 +229,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
 let estado = {
   docs: [], veredictos: {}, doc: null, corrida: null, datos: null,
   verTexto: false, propuestas: {}, lineasVistas: 0, sondeo: null,
-  conexiones: null, verConexiones: false,
+  conexiones: null, verConexiones: false, corrigiendo: null,
 };
 
 function aviso(texto, mal) {
@@ -572,12 +572,31 @@ function tablaConexiones() {
   const c = estado.conexiones, r = c.resumen;
   const caja = E('div', {className: 'conex'});
 
+  const opciones = (sel) => codigosDisponibles()
+    .map(x => '<option' + (x === sel ? ' selected' : '') + '>' + esc(x) + '</option>')
+    .join('');
+
   const filas = c.conexiones.map(x => {
     const choca = (x.conflicto || '').startsWith('CONFLICTO');
+    const clave = x.origen + '|' + x.destino;
+    const editando = estado.corrigiendo === clave;
+
+    const celdaArista = editando
+      ? '<td><select class="e-o">' + opciones(x.origen) + '</select> → ' +
+        '<select class="e-d">' + opciones(x.destino) + '</select></td>'
+      : '<td class="par">' + esc(x.origen) + ' → ' + esc(x.destino) + '</td>';
+
+    const acciones = editando
+      ? '<button class="btn p chico" data-a="guardar">Guardar</button> ' +
+        '<button class="btn chico" data-a="cancelar">Cancelar</button>'
+      : '<button class="btn chico" data-a="confirmada">Es así</button> ' +
+        '<button class="btn chico" data-a="corregir">Corregir</button> ' +
+        '<button class="btn chico" data-a="descartada">No existe</button>';
+
     return '<tr class="' + esc(x.estado) + (choca ? ' chocado' : '') +
       '" data-o="' + esc(x.origen) + '" data-d="' + esc(x.destino) +
       '" data-p="' + esc(x.pagina) + '">' +
-      '<td class="par">' + esc(x.origen) + ' → ' + esc(x.destino) + '</td>' +
+      celdaArista +
       '<td><span class="badge b-' + (x.estado === 'confirmada' ? 'ok' :
         x.estado === 'descartada' ? 'descartar' : 'pendiente') + '">' +
         esc(x.estado) + '</span></td>' +
@@ -585,10 +604,7 @@ function tablaConexiones() {
         (choca ? '<div class="alta">' + esc(x.conflicto) + '</div>' :
          x.conflicto ? '<div>' + esc(x.conflicto) + '</div>' : '') +
         (x.nota ? '<div>' + esc(x.nota) + '</div>' : '') + '</td>' +
-      '<td class="acc">' +
-        '<button class="btn chico" data-a="confirmada">Es así</button> ' +
-        '<button class="btn chico" data-a="descartada">No existe</button>' +
-      '</td></tr>';
+      '<td class="acc">' + acciones + '</td></tr>';
   }).join('');
 
   caja.innerHTML =
@@ -623,7 +639,7 @@ function tablaConexiones() {
   const mano = E('div', {className: 'nueva'});
   const sel = (id) => {
     const s = E('select', {id});
-    s.innerHTML = '<option value="">—</option>' + codigosVistos()
+    s.innerHTML = '<option value="">—</option>' + codigosDisponibles()
       .map(x => '<option>' + esc(x) + '</option>').join('');
     return s;
   };
@@ -640,22 +656,66 @@ function tablaConexiones() {
   mano.appendChild(add);
   caja.appendChild(mano);
 
-  caja.querySelectorAll('button[data-a]').forEach(b => {
+  caja.querySelectorAll('tbody button[data-a]').forEach(b => {
     b.onclick = () => {
       const tr = b.closest('tr');
-      veredictoConexion(tr.dataset.o, tr.dataset.d, tr.dataset.p, b.dataset.a);
+      const {o, d, p} = tr.dataset;
+      if (b.dataset.a === 'corregir') {
+        estado.corrigiendo = o + '|' + d; pintar(); return;
+      }
+      if (b.dataset.a === 'cancelar') { estado.corrigiendo = null; pintar(); return; }
+      if (b.dataset.a === 'guardar') {
+        corregirConexion(o, d, p, $('.e-o', tr).value, $('.e-d', tr).value);
+        return;
+      }
+      veredictoConexion(o, d, p, b.dataset.a);
     };
   });
   return caja;
 }
 
-/** Los códigos que ya aparecen en alguna arista, para el desplegable. */
-function codigosVistos() {
+/** Los códigos que se pueden elegir: el catálogo entero del inventario.
+ *
+ * No solo los que el modelo nombró. Los componentes que cuelgan de una barra
+ * colectora se le escapan casi siempre, y si el desplegable se armara con lo
+ * ya propuesto no habría forma de conectarlos nunca.
+ */
+function codigosDisponibles() {
+  const c = estado.conexiones || {};
+  if ((c.catalogo || []).length) return c.catalogo.map(x => x.codigo);
   const s = new Set();
-  for (const x of (estado.conexiones || {}).conexiones || []) {
-    s.add(x.origen); s.add(x.destino);
-  }
+  for (const x of c.conexiones || []) { s.add(x.origen); s.add(x.destino); }
   return [...s].sort();
+}
+
+/**
+ * Corrige una arista mal leída.
+ *
+ * No se edita en el lugar: se descarta la que propuso el modelo y se
+ * confirma la corregida. Así queda registrado qué leyó mal y qué dijo la
+ * persona, que es lo que permite saber después si conviene seguir usando la
+ * lectura automática o no.
+ */
+async function corregirConexion(origen, destino, pagina, nuevoO, nuevoD) {
+  if (!nuevoO || !nuevoD || nuevoO === nuevoD) {
+    aviso('origen y destino tienen que ser distintos', true); return;
+  }
+  if (nuevoO === origen && nuevoD === destino) {
+    estado.corrigiendo = null;
+    return veredictoConexion(origen, destino, pagina, 'confirmada');
+  }
+  try {
+    await enviar('/api/conexiones/veredicto', {
+      documento: estado.doc, corrida: estado.corrida, pagina, origen, destino,
+      estado: 'descartada', nota: 'corregida a ' + nuevoO + ' → ' + nuevoD});
+    await enviar('/api/conexiones/veredicto', {
+      documento: estado.doc, corrida: estado.corrida, pagina,
+      origen: nuevoO, destino: nuevoD, estado: 'confirmada',
+      nota: 'corrección de ' + origen + ' → ' + destino});
+    estado.corrigiendo = null;
+    aviso(origen + ' → ' + destino + '  corregida a  ' + nuevoO + ' → ' + nuevoD);
+    await cargarConexiones();
+  } catch (e) { aviso(e.message, true); }
 }
 
 async function veredictoConexion(origen, destino, pagina, estadoNuevo, nota) {

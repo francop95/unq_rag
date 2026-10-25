@@ -355,3 +355,48 @@ def test_leer_el_plano_es_un_trabajo_y_no_bloquea_la_peticion(pantalla, monkeypa
         "documento": "doc", "corrida": "20260101_000000", "pagina": "1"})
     assert r.status_code == 200
     assert lanzados == ["conexiones"]
+
+
+def test_corregir_una_arista_deja_rastro_de_las_dos(pantalla):
+    """Corregir no es editar en el lugar. El modelo leyó QF02 → R02 cuando la
+    resistencia cuelga del SSR; si la fila se sobrescribiera, se perdería qué
+    había leído mal, que es lo único que permite decidir más adelante si
+    conviene seguir usando la lectura automática.
+
+    Así que la corrección son dos gestos: se descarta la propuesta y se
+    confirma la buena, cada una apuntando a la otra.
+    """
+    cliente, store, _, _ = pantalla
+    store.registrar_corrida("doc", "20260101_000000")
+    store.guardar_conexiones("doc", "20260101_000000", 1,
+                             [{"origen": "QF02", "destino": "R02"}])
+
+    cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "QF02", "destino": "R02", "estado": "descartada",
+        "nota": "corregida a SSR02 → R02"})
+    cliente.post("/api/conexiones/veredicto", json={
+        "documento": "doc", "corrida": "20260101_000000", "pagina": "1",
+        "origen": "SSR02", "destino": "R02", "estado": "confirmada",
+        "nota": "corrección de QF02 → R02"})
+
+    filas = {(c["origen"], c["destino"]): c
+             for c in store.conexiones("doc", "20260101_000000")}
+    assert filas[("QF02", "R02")]["estado"] == "descartada"
+    assert "SSR02" in filas[("QF02", "R02")]["nota"]
+    assert filas[("SSR02", "R02")]["estado"] == "confirmada"
+    assert "QF02" in filas[("SSR02", "R02")]["nota"]
+    assert store.conexiones_confirmadas("doc", "20260101_000000") == [("SSR02", "R02")]
+
+
+def test_el_desplegable_ofrece_todo_el_inventario(pantalla):
+    """Si solo ofreciera los códigos que el modelo nombró, un componente que
+    la lectura no vio —los que cuelgan de una barra colectora se le escapan
+    casi siempre— no se podría conectar nunca."""
+    cliente, _, _, _ = pantalla
+    d = _json(cliente.get("/api/conexiones/doc"))
+    assert d["conexiones"] == [], "sin aristas propuestas todavía"
+    codigos = [x["codigo"] for x in d["catalogo"]]
+    assert len(codigos) > 20, "tiene que venir el catálogo entero, no lo propuesto"
+    for esperado in ("QF03", "VFD01", "IF01", "VENT01"):
+        assert esperado in codigos
