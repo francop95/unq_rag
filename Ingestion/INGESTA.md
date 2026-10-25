@@ -518,8 +518,16 @@ dos puntas.
 
 Así que el modelo propone y una persona decide, en la misma pantalla:
 
-1. **Conexiones del plano** → **Leer conexiones de la p.N**. Son ~50 llamadas
-   al modelo de visión, va por el log como el troceo.
+1. **Conexiones del plano** → la pantalla ya muestra las que había leído el
+   troceo, y ofrece leerlas de nuevo con una pasada dedicada: ~54 llamadas
+   al modelo de visión por figura, unos 20 centavos, por el log como el
+   troceo.
+
+   Solo ofrece las figuras **con topología**, leyendo el `diagram_type` que
+   el troceo ya había asignado. De las 427 figuras del corpus, 53 lo tienen
+   y 374 no: una foto o un gráfico no tienen conexiones. En el manual ARGEE
+   son 4 de 115 páginas con figura, y sin ese filtro la pantalla dibujaría
+   115 botones de los que 111 tirarían plata.
 2. Cada arista sale **sin confirmar**, con la evidencia de las dos lecturas y
    marcada si contradice algo ya declarado en la hoja `Conexiones TBEN`.
 3. **Es así** / **No existe**, y abajo se agregan a mano las que el modelo no

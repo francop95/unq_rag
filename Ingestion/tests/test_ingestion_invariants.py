@@ -1300,3 +1300,34 @@ def test_la_evidencia_dice_que_pregunta_la_produjo(proponer_conexiones):
 
     sola = proponer_conexiones.evidencia_de("QF01", "QF03", {"abajo": "x"})
     assert sola == "preguntando por QF01 — ¿a quién alimenta?: x"
+
+
+def test_solo_las_figuras_con_topologia_son_candidatas(corrida_en_disco):
+    """Pasar una foto o un gráfico por la pasada de conexiones es tirar
+    plata: son 54 llamadas al modelo de visión por figura. De las 427
+    figuras del corpus, 53 tienen topología y 374 no. En el manual ARGEE la
+    diferencia es 4 contra 115, así que sin este filtro la pantalla dibuja
+    115 botones y 111 no sirven para nada.
+
+    El tipo no se adivina: lo puso el troceo en `notes.diagram_type`.
+    """
+    base = os.path.join(corrida_en_disco.raiz_chunks(), "doc", "20260101_000000")
+    recorte = os.path.join(base, "crops", "doc_p2_image_1.png")
+
+    def figura(pagina, chunk_id, tipo):
+        carpeta = os.path.join(base, f"doc_{pagina}")
+        os.makedirs(carpeta, exist_ok=True)
+        with open(os.path.join(carpeta, f"doc_{pagina}_{chunk_id}.json"),
+                  "w", encoding="utf-8") as f:
+            json.dump({"page_num": pagina, "chunk_id": chunk_id,
+                       "content_type": "diagram_visual",
+                       "original_chunk": json.dumps(
+                           {"image_path": recorte,
+                            "notes": {"diagram_type": tipo}})}, f)
+
+    figura(3, "chunk_1_visual", "photo")
+    figura(4, "chunk_1_visual", "wiring_diagram")
+    figura(5, "chunk_1_visual", "chart")
+    figura(6, "chunk_1_visual", "connection_diagram")
+
+    assert corrida_en_disco.paginas_con_topologia("doc", "20260101_000000") == ["4", "6"]

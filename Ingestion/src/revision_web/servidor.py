@@ -523,6 +523,9 @@ def api_conexiones(documento):
     return jsonify({
         "documento": documento, "corrida": corrida,
         "paginas": paginas,
+        # Las que vale la pena leer: una foto o un gráfico no tienen
+        # topología, y pasarlos por la pasada de conexiones es tirar plata.
+        "paginas_topologia": disco.paginas_con_topologia(documento, corrida),
         "conexiones": filas,
         "catalogo": _catalogo(),
         "estados": rev.ESTADOS_CONEXION,
@@ -601,7 +604,16 @@ def api_conexiones_proponer():
     cuerpo = request.get_json(silent=True) or {}
     documento = _documento_valido(str(cuerpo.get("documento", "")))
     corrida = _corrida_valida(documento, str(cuerpo.get("corrida") or ""))
-    pagina = str(cuerpo.get("pagina", "1"))
+
+    # Una página suelta, o todas las que tienen topología. Lo segundo existe
+    # porque en un manual de 92 páginas no se sabe cuáles son los diagramas
+    # sin abrirlas una por una, y el troceo ya las había clasificado.
+    if cuerpo.get("todas"):
+        paginas = disco.paginas_con_topologia(documento, corrida)
+        if not paginas:
+            abort(400, "este documento no tiene figuras con topología que leer")
+    else:
+        paginas = [str(cuerpo.get("pagina", "1"))]
 
     pdf = next((os.path.join(disco.raiz_corpus(), d["relativa"])
                 for d in disco.documentos_ingestables()
@@ -611,21 +623,34 @@ def api_conexiones_proponer():
 
     def cuerpo_trabajo(log):
         sys.path.insert(0, os.path.join(RAIZ_INGESTION, "scripts"))
-        from proponer_conexiones import analizar_plano
+        from proponer_conexiones import analizar_plano, cliente_llm
 
-        r = analizar_plano(pdf, int(pagina), log=log)
-        nuevas = rev.guardar_conexiones(documento, corrida, pagina, r["aristas"])
-        log(f"guardadas {nuevas} aristas nuevas "
-            f"(las ya revisadas no se tocan)")
-        if r["sin_reconocer"]:
-            log("nombres que no se pudieron llevar a un código del catálogo: "
-                + ", ".join(r["sin_reconocer"]))
-        return {"aristas": len(r["aristas"]), "nuevas": nuevas,
-                "sin_reconocer": r["sin_reconocer"]}
+        # Un solo cliente para todas las páginas: armarlo por página relee
+        # la configuración y no aporta nada.
+        llm = cliente_llm()
+        total = nuevas_total = 0
+        sin_reconocer = set()
+        for i, pagina in enumerate(paginas, 1):
+            log(f"\n── página {pagina} ({i} de {len(paginas)}) ──")
+            r = analizar_plano(pdf, int(pagina), llm=llm, log=log)
+            nuevas = rev.guardar_conexiones(documento, corrida, pagina, r["aristas"])
+            log(f"guardadas {nuevas} aristas nuevas "
+                f"(las ya revisadas no se tocan)")
+            total += len(r["aristas"])
+            nuevas_total += nuevas
+            sin_reconocer.update(r["sin_reconocer"])
+        if sin_reconocer:
+            log("\nnombres que no se pudieron llevar a un código del catálogo: "
+                + ", ".join(sorted(sin_reconocer)))
+        return {"aristas": total, "nuevas": nuevas_total,
+                "paginas": paginas, "sin_reconocer": sorted(sin_reconocer)}
 
+    etiqueta = (f"leyendo conexiones de {documento} p.{paginas[0]}"
+                if len(paginas) == 1
+                else f"leyendo conexiones de {documento}: {len(paginas)} figuras")
     try:
         t = trabajos.lanzar_funcion(
-            "conexiones", f"leyendo conexiones de {documento} p.{pagina}",
+            "conexiones", etiqueta,
             cuerpo_trabajo, {"documento": documento, "corrida": corrida})
     except trabajos.EnCurso as e:
         return jsonify({"ok": False, "motivo": str(e)}), 409

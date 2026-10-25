@@ -24,6 +24,16 @@ from task_utils.chunk_text import readable_chunk_text
 # vivieron todos los defectos encontrados hasta hoy.
 VISUALES = ("diagram_visual", "image", "table", "diagram_description")
 
+# Los tipos de figura que tienen topología que leer. Una foto de un módulo o
+# un gráfico de barras no tienen conexiones, y pasarlos por la pasada de
+# conexiones es tirar plata: de 427 figuras del corpus, 53 son de estos tipos
+# y 374 no.
+#
+# El tipo lo pone el troceo en `notes.diagram_type`, así que esto no adivina
+# nada: lee lo que el modelo ya había clasificado.
+TIPOS_CON_TOPOLOGIA = ("wiring_diagram", "connection_diagram", "schematic",
+                       "circuit_diagram")
+
 _RAIZ = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 )
@@ -196,3 +206,32 @@ def documentos_ingestables() -> List[Dict[str, Any]]:
                 "bytes": os.path.getsize(ruta),
             })
     return sorted(salida, key=lambda d: d["relativa"].lower())
+
+
+def tipo_de_figura(chunk: Dict[str, Any]) -> str:
+    """El `diagram_type` que le puso el troceo, o "" si no es una figura."""
+    original = chunk.get("original_chunk")
+    if isinstance(original, str):
+        try:
+            original = json.loads(original)
+        except ValueError:
+            return ""
+    if not isinstance(original, dict):
+        return ""
+    notas = original.get("notes")
+    return str((notas or {}).get("diagram_type") or "") if isinstance(notas, dict) else ""
+
+
+def paginas_con_topologia(documento: str, corrida: str) -> List[str]:
+    """Las páginas cuyas figuras tienen conexiones que leer.
+
+    Sirve para no tener que adivinar qué página mirar: en un manual de 92
+    páginas, cuáles son los diagramas no se sabe sin abrirlas una por una.
+    """
+    paginas = []
+    for c in leer_chunks(documento, corrida):
+        if tipo_de_figura(c) in TIPOS_CON_TOPOLOGIA and recorte_de(c):
+            pagina = str(c.get("page_num"))
+            if pagina not in paginas:
+                paginas.append(pagina)
+    return sorted(paginas, key=lambda x: int(x) if x.isdigit() else 0)

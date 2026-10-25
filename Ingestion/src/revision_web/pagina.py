@@ -835,12 +835,31 @@ function tablaConexiones() {
       : '<p class="vacio">Todavía no se leyó el plano. Solo entran al chunk ' +
         'las que confirmes.</p>');
 
-  // Proponer, una página a la vez: cada una es un plano distinto.
+  // Solo las páginas con topología, no todas las que tienen una figura.
+  // ARGEE tiene 115 con figura y 4 con topología: un botón por página sería
+  // una pared de botones, y 111 de ellos tirarían plata sobre una foto.
+  const conTopologia = c.paginas_topologia || [];
   const pie = E('div', {className: 'nueva'});
-  for (const pag of c.paginas) {
-    const b = E('button', {className: 'btn', textContent: 'Leer conexiones de la p.' + pag});
-    b.onclick = () => proponerConexiones(pag);
-    pie.appendChild(b);
+  if (conTopologia.length) {
+    pie.appendChild(E('span', {className: 'ev',
+      textContent: conTopologia.length + ' figura' +
+        (conTopologia.length > 1 ? 's' : '') + ' con topología (p.' +
+        conTopologia.join(', p.') + '):'}));
+    if (conTopologia.length > 1) {
+      const todas = E('button', {className: 'btn p',
+        textContent: 'Leer las ' + conTopologia.length});
+      todas.onclick = () => proponerConexiones(null, conTopologia);
+      pie.appendChild(todas);
+    }
+    for (const pag of conTopologia) {
+      const b = E('button', {className: 'btn chico', textContent: 'p.' + pag});
+      b.onclick = () => proponerConexiones(pag);
+      pie.appendChild(b);
+    }
+  } else {
+    pie.appendChild(E('span', {className: 'ev',
+      textContent: 'Ninguna figura de este documento tiene topología que ' +
+        'leer (son fotos, gráficos o tablas).'}));
   }
   caja.appendChild(pie);
 
@@ -969,13 +988,18 @@ async function veredictoConexion(origen, destino, pagina, estadoNuevo, nota) {
   } catch (e) { aviso(e.message, true); }
 }
 
-async function proponerConexiones(pagina) {
-  if (!confirm('Leer las conexiones de la página ' + pagina +
-      ' con el modelo de visión.\n\nSon unas 50 llamadas. Lo que proponga ' +
-      'queda SIN confirmar: nada entra al chunk hasta que lo marques.')) return;
+async function proponerConexiones(pagina, todas) {
+  const cuantas = todas ? todas.length : 1;
+  const qué = todas ? 'las ' + cuantas + ' figuras con topología'
+                    : 'la figura de la página ' + pagina;
+  if (!confirm('Leer ' + qué + ' con el modelo de visión.\n\nSon unas 50 ' +
+      'llamadas por figura, más o menos 20 centavos cada una (total ~' +
+      (cuantas * 0.2).toFixed(2) + ' USD).\n\nLo que proponga queda SIN ' +
+      'confirmar: nada entra al chunk hasta que lo marques.')) return;
   try {
-    await enviar('/api/conexiones/proponer',
-      {documento: estado.doc, corrida: estado.corrida, pagina});
+    await enviar('/api/conexiones/proponer', todas
+      ? {documento: estado.doc, corrida: estado.corrida, todas: true}
+      : {documento: estado.doc, corrida: estado.corrida, pagina});
     arrancarSondeo(true);
   } catch (e) { aviso(e.message, true); }
 }
