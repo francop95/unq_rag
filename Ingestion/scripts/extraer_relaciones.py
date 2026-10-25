@@ -201,6 +201,31 @@ def main() -> int:
             por_par[k] = e
     nuevas = list(por_par.values())
 
+    # Lo que una persona ya decidió en la pantalla de revisión manda sobre lo
+    # que un modelo dedujo. Descartada se tira; confirmada ya está en el
+    # grafo como `revisado` y repetirla como `extraido` la degradaría.
+    #
+    # No es teórico: QF03 → IF01 llegó acá con confianza "directa" y por
+    # evidencia la cadena "QF03 → IF01" —validada contra el texto del chunk
+    # que venía del mismo error de lectura— y el grafo se la afirmaba al
+    # modelo de respuesta como leída del plano.
+    decididas = set()
+    try:
+        sys.path.insert(0, os.path.join(RAIZ, "src"))
+        from task_utils import revision_store as revision
+        for c in revision.corridas():
+            for f in revision.conexiones(c["documento"], c["corrida"]):
+                if f["estado"] in ("descartada", "confirmada"):
+                    decididas.add((f["origen"], f["destino"]))
+    except Exception as e:  # noqa: BLE001 — sin base de revisión no se filtra nada
+        print(f"  (sin conexiones revisadas: {e})")
+
+    antes = len(nuevas)
+    nuevas = [e for e in nuevas if (e["origen"], e["destino"]) not in decididas]
+    if antes != len(nuevas):
+        print(f"  {antes - len(nuevas)} relaciones no se agregan: ya las decidió "
+              f"una persona en la pantalla de revisión")
+
     g["aristas"] = [e for e in g["aristas"] if e.get("origen_dato") != "extraido"] + nuevas
     with open(GRAFO, "w", encoding="utf-8") as fh:
         json.dump(g, fh, ensure_ascii=False, indent=2)

@@ -521,6 +521,35 @@ hoja del inventario:
 python scripts/proponer_conexiones.py --plano 2_Planos --pagina 1
 ```
 
+### Adónde va lo confirmado
+
+A dos lugares, y conviene saber que son dos:
+
+**Al texto del chunk**, cuando se indexa. Lo hace la compuerta, con las
+confirmadas de esa página.
+
+**Al grafo de componentes**, que no es un artefacto de costado: `API` lo
+inyecta en el prompt de respuesta para poder contestar "qué depende de PS01"
+sin confundir "aparece en el mismo plano" con "depende de".
+
+```bash
+python scripts/construir_grafo.py       # inventario + lo confirmado (revisado)
+python scripts/extraer_relaciones.py --escribir   # + lo que saca de los textos
+```
+
+En ese orden: el primero reescribe el grafo desde el Excel y la base de
+revisión, el segundo le agrega encima lo que extrae de los documentos. Hay
+que correr los dos después de revisar conexiones.
+
+Una arista revisada gana sobre una extraída, en los dos sentidos: la
+confirmada entra como `revisado` y la extracción no la repite; la descartada
+se frena y no vuelve. **Eso último es lo que importa**: `QF03 → IF01` estaba
+en el grafo con validación "directa" y por evidencia la cadena
+`"QF03 → IF01"` —validada contra el texto del chunk que venía del mismo
+error de lectura— y el grafo se la afirmaba al modelo como leída del plano.
+Si descartarla en la pantalla no la borrara de acá, decir "esto no existe"
+no cambiaría nada de lo que el sistema responde.
+
 ### Lo mismo desde la consola
 
 Las dos pantallas leen las mismas corridas y escriben la misma base, así que

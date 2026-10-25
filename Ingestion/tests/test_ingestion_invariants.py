@@ -1202,3 +1202,52 @@ def test_ninguna_fila_sale_confirmada(proponer_conexiones):
     # Y que las dos lecturas coincidan no la vuelve correcta: se midió que el
     # acuerdo entre direcciones era anticorrelacionado con la verdad.
     assert "no implica que sea correcta" in filas[0][6]
+
+
+# ──────────────────── lo revisado en la pantalla llega al grafo de componentes
+
+def test_una_arista_descartada_no_puede_volver_por_la_extraccion(revision):
+    """El grafo se le afirma al modelo de respuesta, así que una arista mala
+    ahí no es ruido: es una afirmación. QF03 → IF01 estaba en el grafo con
+    validación "directa" y por evidencia la cadena "QF03 → IF01" —validada
+    contra el texto del chunk que venía del mismo error de lectura—.
+
+    Si descartarla en la pantalla no la frenara acá, decir "esto no existe"
+    no cambiaría nada de lo que el sistema responde.
+    """
+    revision.registrar_corrida("plano", "c1")
+    revision.anotar_conexion("plano", "c1", 1, "QF03", "IF01", "descartada",
+                             "es una línea de llamada")
+    revision.anotar_conexion("plano", "c1", 1, "QF03", "VFD01", "confirmada")
+
+    decididas = set()
+    for c in revision.corridas():
+        for f in revision.conexiones(c["documento"], c["corrida"]):
+            if f["estado"] in ("descartada", "confirmada"):
+                decididas.add((f["origen"], f["destino"]))
+
+    extraidas = [{"origen": "QF03", "destino": "IF01"},
+                 {"origen": "QF03", "destino": "VFD01"},
+                 {"origen": "TH01", "destino": "IO01"}]
+    quedan = [e for e in extraidas
+              if (e["origen"], e["destino"]) not in decididas]
+
+    assert quedan == [{"origen": "TH01", "destino": "IO01"}], (
+        "lo descartado se frena, y lo confirmado tampoco se repite como "
+        "extraído: ya entra al grafo como revisado y repetirlo lo degradaría")
+
+
+def test_una_propuesta_sin_revisar_no_frena_ni_entra(revision):
+    """Es el estado por defecto de las cuarenta filas que deja una lectura.
+    Si frenara la extracción, proponer empeoraría el grafo; si entrara, el
+    modelo seguiría afirmando cableado que nadie miró."""
+    revision.registrar_corrida("plano", "c1")
+    revision.guardar_conexiones("plano", "c1", 1,
+                                [{"origen": "QD01", "destino": "QF04"}])
+
+    filas = revision.conexiones("plano", "c1")
+    assert [f["estado"] for f in filas] == ["propuesta"]
+    assert revision.conexiones_confirmadas("plano", "c1") == []
+    decididas = {(f["origen"], f["destino"]) for f in filas
+                 if f["estado"] in ("descartada", "confirmada")}
+    assert ("QD01", "QF04") not in decididas

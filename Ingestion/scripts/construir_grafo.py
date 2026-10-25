@@ -37,6 +37,7 @@ import sys
 import openpyxl
 
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.join(RAIZ, "src"))
 EXCEL = os.path.join(RAIZ, "data", "raw_data", "Inventario_secadero_revision_Pablo_v2.xlsx")
 SALIDA = os.path.abspath(os.path.join(RAIZ, "..", "API", "configs", "grafo.json"))
 
@@ -154,6 +155,53 @@ def main() -> int:
                         "origen_dato": "inventario",
                     })
 
+    # ------------- lo que una persona revisó en la pantalla -------------
+    #
+    # La pantalla de revisión produce el mismo tipo de dato que el inventario
+    # —aristas que miró una persona— así que entra al grafo con la misma
+    # autoridad, marcada `revisado` para poder distinguirla.
+    #
+    # Lo descartado también borra, aunque acá solo pueda alcanzar a las
+    # aristas del inventario: las extraídas por LLM las agrega después
+    # `extraer_relaciones.py`, que aplica el mismo descarte de su lado. Es
+    # ahí donde importa — entre ellas estaba QF03 → IF01 con validación
+    # "directa" y por evidencia la cadena "QF03 → IF01", o sea validada
+    # contra el texto del chunk que venía del mismo error.
+    revisadas = confirmadas = descartadas = 0
+    try:
+        from task_utils import revision_store as revision
+        filas = []
+        for c in revision.corridas():
+            filas.extend(revision.conexiones(c["documento"], c["corrida"]))
+    except Exception as e:  # noqa: BLE001 — sin base de revisión el grafo igual se arma
+        print(f"  (sin conexiones revisadas: {e})")
+        filas = []
+
+    a_borrar = {(f["origen"], f["destino"])
+                for f in filas if f["estado"] == "descartada"}
+    buenas = {(f["origen"], f["destino"]): f
+              for f in filas if f["estado"] == "confirmada"}
+
+    antes = len(aristas)
+    aristas = [a for a in aristas
+               if (a["origen"], a["destino"]) not in a_borrar
+               and (a["origen"], a["destino"]) not in buenas]
+    descartadas = antes - len(aristas)
+
+    for (o, d), f in sorted(buenas.items()):
+        aristas.append({
+            "origen": o, "destino": d,
+            "tipo": "alimenta_o_controla",
+            "puerto": "", "funcion": "", "fuente": f"{f['documento']} p.{f['pagina']}",
+            "bidireccional": False,
+            "verificacion_pendiente": "",
+            "nota": f.get("nota") or "",
+            "origen_dato": "revisado",
+            "quien": f.get("quien") or "",
+        })
+        confirmadas += 1
+    revisadas = len(filas)
+
     # ---------------- discrepancias: qué está en duda ----------------
     discrepancias = []
     for f in leer_hoja(wb, "Discrepancias"):
@@ -177,7 +225,11 @@ def main() -> int:
         json.dump(grafo, fh, ensure_ascii=False, indent=2)
 
     print(f"  {len(nodos)} nodos · {len(aristas)} aristas · "
-          f"{len(discrepancias)} discrepancias → {SALIDA}\n")
+          f"{len(discrepancias)} discrepancias → {SALIDA}")
+    if revisadas:
+        print(f"  revisión humana: {confirmadas} aristas confirmadas, "
+              f"{descartadas} reemplazadas o borradas (de {revisadas} filas)")
+    print()
     print("  aristas documentadas:")
     for a in aristas:
         flecha = "↔" if a["bidireccional"] else "→"
