@@ -252,9 +252,32 @@ fi
 # AuthType NONE significa "sin firma de IAM", no "sin contraseña": la
 # contraseña la valida la propia función, que es lo que impide que un bot
 # encienda la instancia.
-aws lambda add-permission --function-name "$FUNCION" --region "$REGION" \
-    --statement-id url-publica --action lambda:InvokeFunctionUrl \
-    --principal "*" --function-url-auth-type NONE >/dev/null 2>&1 || true
+#
+# Van DOS declaraciones, no una. Desde octubre de 2025 una Function URL exige
+# `lambda:InvokeFunctionUrl` y además `lambda:InvokeFunction`; con una sola,
+# la URL devuelve 403 aunque la configuración diga NONE y la política se vea
+# bien. La consola y SAM las crean solas; por CLI hay que ponerlas a mano, y
+# cada una en su propio comando.
+#
+# Se ignora el error de "ya existe" —que es lo que pasa al reinstalar— pero
+# no el resto: antes esto era un `|| true` a secas y se tragó justamente el
+# fallo que dejó la URL devolviendo 403.
+permiso() {
+    local sid="$1"; shift
+    local salida
+    if salida=$(aws lambda add-permission --function-name "$FUNCION" --region "$REGION" \
+                    --statement-id "$sid" "$@" 2>&1); then
+        return 0
+    fi
+    printf '%s' "$salida" | grep -q "ResourceConflictException" \
+        || die "no se pudo dar el permiso $sid:
+    $salida"
+}
+
+permiso url-publica --action lambda:InvokeFunctionUrl \
+    --principal "*" --function-url-auth-type NONE
+permiso url-publica-invocar --action lambda:InvokeFunction \
+    --principal "*" --invoked-via-function-url
 info "$URL"
 
 # Por defecto los logs de Lambda no caducan nunca. Son centavos, pero crecen
@@ -308,6 +331,11 @@ CON_CLAVE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 -u "$AUTH_USER:
 info "sin contraseña  → $SIN_CLAVE  (tiene que ser 401: es lo que frena a los bots)"
 info "con contraseña  → $CON_CLAVE  (200 si ya está arriba, 503 mientras enciende)"
 
+if [ "$SIN_CLAVE" = "403" ]; then
+    die "la URL devuelve 403, o sea que AWS la rechaza antes de llegar a la función.
+    Suele ser que falte una de las dos declaraciones de la política del recurso.
+    Volvé a correr esto: las crea las dos."
+fi
 [ "$SIN_CLAVE" = "401" ] || die "sin contraseña devolvió $SIN_CLAVE y debería ser 401"
 
 say "Listo"

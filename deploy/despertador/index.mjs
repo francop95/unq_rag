@@ -58,6 +58,13 @@ const VUELTAS = Number(process.env.AUTH_ITER || 200000);
 // más 20-40 s de aprovisionamiento de EC2. Medido sobre esta misma instancia.
 const ESPERA_SEG = 6;
 
+// Dónde queda la credencial del navegador, y por cuánto. Una semana: es una
+// demo que se visita cada tantos días y volver a escribir la clave en cada
+// visita es la clase de fricción que hace que nadie la mire.
+const COOKIE = "unq_rag_acceso";
+const COOKIE_SEG = 7 * 24 * 3600;
+const RUTA_ENTRAR = "/__entrar";
+
 // Cabeceras que pertenecen a UNA conexión y no se reenvían. Dejar pasar
 // `transfer-encoding` o `connection` rompe la respuesta que arma Lambda.
 const POR_CONEXION = new Set([
@@ -155,17 +162,16 @@ export async function encender() {
  */
 const yaValidadas = new Set();
 
-export function autorizado(cabeceras = {}) {
-  if (!SAL || !HASH) return false;
-  const cabecera = cabeceras.authorization || cabeceras.Authorization || "";
-  if (!cabecera.startsWith("Basic ")) return false;
+/** ¿Este `usuario:contraseña` en base64 es el bueno? */
+export function credencialValida(base64 = "") {
+  if (!SAL || !HASH || !base64) return false;
 
-  const huella = createHash("sha256").update(cabecera).digest("hex");
+  const huella = createHash("sha256").update(base64).digest("hex");
   if (yaValidadas.has(huella)) return true;
 
   let credenciales;
   try {
-    credenciales = Buffer.from(cabecera.slice(6), "base64").toString("utf8");
+    credenciales = Buffer.from(base64, "base64").toString("utf8");
   } catch {
     return false;
   }
@@ -178,6 +184,37 @@ export function autorizado(cabeceras = {}) {
   // deje de pagar el costo de PBKDF2, que es lo que lo hace caro.
   if (vale) yaValidadas.add(huella);
   return vale;
+}
+
+/**
+ * La credencial del pedido, venga del navegador o de curl.
+ *
+ * Son dos caminos porque el navegador no puede usar el de curl: las Function
+ * URL renombran `WWW-Authenticate` a `x-amzn-Remapped-www-authenticate`, así
+ * que el navegador nunca recibe el desafío y jamás muestra el cuadro de
+ * usuario y contraseña. Comprobado contra la URL ya desplegada. Por eso el
+ * navegador entra por un formulario y queda con una cookie, y la cabecera
+ * `Authorization` se sigue aceptando para `curl -u` y para las pruebas.
+ *
+ * La cookie guarda el mismo `usuario:contraseña` en base64 que guardaría el
+ * navegador con basic auth, pero marcada HttpOnly y Secure: no la puede leer
+ * el JavaScript de la página ni viaja por HTTP. Se guarda la credencial y no
+ * un token firmado porque igual hay que reenviarla a nginx, que la valida con
+ * su propio .htpasswd; con un token habría que tener la contraseña guardada
+ * en la configuración de la función.
+ */
+export function credencialDe(event) {
+  const cabeceras = event.headers || {};
+  const cabecera = cabeceras.authorization || cabeceras.Authorization || "";
+  if (cabecera.startsWith("Basic ")) return cabecera.slice(6);
+
+  for (const galleta of event.cookies || []) {
+    const corte = galleta.indexOf("=");
+    if (corte > 0 && galleta.slice(0, corte).trim() === COOKIE) {
+      return galleta.slice(corte + 1).trim();
+    }
+  }
+  return "";
 }
 
 // -------------------------------------------------------------- las páginas
@@ -214,11 +251,31 @@ const paginaArranque = (detalle) => `<!doctype html><html lang="es"><head>
 actualiza sola; no hace falta hacer nada.</small></p>
 </div></body></html>`;
 
-const pagina401 = `<!doctype html><html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Acceso restringido</title><style>${ESTILO}</style></head><body><div class="caja">
-<h1>Acceso restringido<span class="punto">.</span></h1>
-<p>Hace falta usuario y contraseña.</p>
+const paginaEntrar = (error = "") => `<!doctype html><html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acceso restringido</title><style>${ESTILO}
+  form{display:grid;gap:.6rem;margin-top:1.3rem;text-align:left}
+  label{font-size:.78rem;color:#8b98a5}
+  input{width:100%;background:#121821;border:1px solid #262f3b;border-radius:8px;
+    padding:.55rem .7rem;color:#e6edf3;font:inherit;outline:none}
+  input:focus{border-color:#323d4d}
+  button{margin-top:.4rem;background:#f59e0b;color:#0a0e13;border:0;border-radius:8px;
+    padding:.55rem 1rem;font:inherit;font-weight:650;cursor:pointer}
+  button:hover{filter:brightness(1.1)}
+  .mal{color:#f87171;font-size:.82rem}
+</style></head><body><div class="caja">
+<h1>Asistente técnico<span class="punto">.</span></h1>
+<p>Acceso restringido.</p>
+${error ? `<p class="mal">${escapar(error)}</p>` : ""}
+<form method="post" action="${RUTA_ENTRAR}">
+  <div><label for="u">Usuario</label><input id="u" name="usuario" autocomplete="username"
+       autocapitalize="none" autofocus></div>
+  <div><label for="c">Contraseña</label><input id="c" name="clave" type="password"
+       autocomplete="current-password"></div>
+  <button type="submit">Entrar</button>
+</form>
+<p><small>El servidor está apagado cuando nadie lo usa: la primera visita
+tarda alrededor de un minuto en encenderlo.</small></p>
 </div></body></html>`;
 
 function responder(stream, statusCode, headers, cuerpo) {
@@ -241,7 +298,7 @@ const sinCache = {
  * importa verificar es que un archivo grande pase entero, porque es
  * justamente donde una Lambda sin streaming se rompe.
  */
-export function proxiar(ip, event, stream, puerto = PUERTO) {
+export function proxiar(ip, event, stream, puerto = PUERTO, credencial = "") {
   return new Promise((resolver, rechazar) => {
     const metodo = event.requestContext?.http?.method || "GET";
     const ruta = event.rawPath + (event.rawQueryString ? `?${event.rawQueryString}` : "");
@@ -255,6 +312,11 @@ export function proxiar(ip, event, stream, puerto = PUERTO) {
       cabeceras[n] = valor;
     }
     cabeceras.host = ip;
+    // nginx valida la misma clave con su .htpasswd. Se la arma acá porque el
+    // navegador la trae en una cookie, no en la cabecera: así al visitante se
+    // le pide una sola vez y nginx sigue protegido aunque alguien dé con la
+    // IP de la instancia.
+    if (credencial) cabeceras.authorization = `Basic ${credencial}`;
 
     const cuerpo = event.body
       ? Buffer.from(event.body, event.isBase64Encoded ? "base64" : "utf8")
@@ -296,11 +358,35 @@ export function proxiar(ip, event, stream, puerto = PUERTO) {
 // ------------------------------------------------------------------ handler
 
 export async function manejar(event, stream) {
-  if (!autorizado(event.headers)) {
-    return responder(stream, 401, {
+  const metodo = event.requestContext?.http?.method || "GET";
+  const credencial = credencialDe(event);
+
+  // El formulario. Va antes que todo lo demás: es el único pedido que puede
+  // llegar sin credencial y no ser un bot.
+  if (event.rawPath === RUTA_ENTRAR) {
+    if (metodo !== "POST") return responder(stream, 200, sinCache, paginaEntrar());
+
+    const cuerpo = new URLSearchParams(
+      Buffer.from(event.body || "", event.isBase64Encoded ? "base64" : "utf8").toString("utf8"));
+    const propuesta = Buffer.from(
+      `${cuerpo.get("usuario") || ""}:${cuerpo.get("clave") || ""}`).toString("base64");
+
+    if (!credencialValida(propuesta)) {
+      return responder(stream, 401, sinCache, paginaEntrar("Usuario o contraseña incorrectos."));
+    }
+    return responder(stream, 303, {
       ...sinCache,
-      "www-authenticate": `Basic realm="${REALM}", charset="UTF-8"`,
-    }, pagina401);
+      location: "/",
+      "set-cookie": `${COOKIE}=${propuesta}; Path=/; HttpOnly; Secure; `
+        + `SameSite=Lax; Max-Age=${COOKIE_SEG}`,
+    }, "");
+  }
+
+  if (!credencialValida(credencial)) {
+    // 401 con el formulario, y sin `WWW-Authenticate`: la Function URL la
+    // renombra a `x-amzn-Remapped-www-authenticate`, así que el navegador no
+    // la ve y mandarla solo confundiría a quien lea las cabeceras.
+    return responder(stream, 401, sinCache, paginaEntrar());
   }
 
   let instancia;
@@ -334,7 +420,7 @@ export async function manejar(event, stream) {
   }
 
   try {
-    await proxiar(instancia.ip, event, stream);
+    await proxiar(instancia.ip, event, stream, PUERTO, credencial);
   } catch (e) {
     if (e.yaRespondio) {
       // La respuesta se cortó a mitad y las cabeceras ya salieron: escribir

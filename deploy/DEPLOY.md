@@ -213,9 +213,17 @@ siguientes no esperan nada.
 **La contraseña se valida en la Lambda, no solo en nginx.** Es lo que hace que
 el ahorro exista: si no, cualquier bot que escanee la URL enciende la
 instancia y a las pocas semanas estás pagando lo mismo sin que nadie la use.
-Por eso el instalador verifica que la contraseña que le des sea la misma que
-tiene `deploy/.htpasswd`: si no coincidieran, el navegador la pediría dos
-veces.
+Comprobado sobre la URL desplegada: con la clave mal, la instancia se queda
+apagada.
+
+**Se entra por un formulario, no por el cuadro del navegador.** Las Function
+URL renombran `WWW-Authenticate` a `x-amzn-Remapped-www-authenticate`, así
+que el navegador nunca recibe el desafío de basic auth y el cuadro no
+aparece nunca. El formulario deja una cookie —`HttpOnly`, `Secure`, una
+semana— con la misma credencial que guardaría el navegador, y la Lambda se la
+reenvía a nginx como cabecera. Por eso el instalador verifica que la
+contraseña que le des sea la misma que tiene `deploy/.htpasswd`. Con `curl`
+se sigue usando `-u usuario:clave`, que también funciona.
 
 ### Operarla
 
@@ -252,6 +260,15 @@ EC2 va a mano— justamente para que el handler entero se pueda correr en tu
 máquina. La prueba que más importa es la del archivo de 5,4 MB: una Lambda sin
 *response streaming* corta en 6 MB de payload y el cuerpo binario viaja en
 base64, así que el PDF que se sirve por `/media` no entraría.
+
+### Si la URL devuelve 403
+
+AWS la está rechazando antes de llegar a la función. Desde octubre de 2025
+una Function URL necesita **dos** declaraciones en la política del recurso,
+no una: `lambda:InvokeFunctionUrl` y además `lambda:InvokeFunction` con la
+condición `lambda:InvokedViaFunctionUrl`. Con una sola da 403 aunque
+`get-function-url-config` diga `AuthType: NONE` y la política se vea bien.
+Volvé a correr el instalador: crea las dos.
 
 ### Darlo de baja
 

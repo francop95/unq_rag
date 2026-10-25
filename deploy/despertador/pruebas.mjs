@@ -66,7 +66,11 @@ for (const linea of (() => {
 }
 process.env.AWS_REGION = process.env.AWS_REGION || "us-east-1";
 
-const { autorizado, proxiar, manejar, estadoInstancia } = await import("./index.mjs");
+const { credencialValida, credencialDe, proxiar, manejar, estadoInstancia } =
+  await import("./index.mjs");
+
+/** `autorizado` de antes, para que las pruebas se lean igual. */
+const autorizado = (cabeceras) => credencialValida(credencialDe({ headers: cabeceras }));
 
 const basic = (u, p) => `Basic ${Buffer.from(`${u}:${p}`).toString("base64")}`;
 const pedido = (extra = {}) => ({
@@ -131,17 +135,61 @@ await prueba("sin credenciales configuradas no deja pasar a nadie", async () => 
   const guardado = process.env.AUTH_HASH;
   process.env.AUTH_HASH = "";
   const otro = await import(`./index.mjs?sin-hash`);
-  assert.ok(!otro.autorizado({ authorization: basic(USUARIO, CLAVE) }));
+  assert.ok(!otro.credencialValida(Buffer.from(`${USUARIO}:${CLAVE}`).toString("base64")));
   process.env.AUTH_HASH = guardado;
 });
 
-await prueba("un pedido sin clave devuelve 401 y pide la clave al navegador", async () => {
+await prueba("un pedido sin clave devuelve 401 con el formulario", async () => {
   const salida = salidaDePrueba();
   await manejar(pedido(), salida);
   assert.equal(salida.meta.statusCode, 401);
-  assert.match(salida.meta.headers["www-authenticate"], /^Basic realm="/);
   // Importa que NO haya consultado ni encendido nada: el bot no llega a EC2.
-  assert.match(salida.cuerpo().toString(), /Acceso restringido/);
+  assert.match(salida.cuerpo().toString(), /<form method="post"/);
+  // Sin WWW-Authenticate: la Function URL la renombra y el navegador no la
+  // ve, así que mandarla sería prometer un cuadro de login que no aparece.
+  assert.ok(!("www-authenticate" in salida.meta.headers));
+});
+
+await prueba("el formulario con la clave buena deja una cookie y redirige", async () => {
+  const salida = salidaDePrueba();
+  await manejar(pedido({
+    rawPath: "/__entrar",
+    requestContext: { http: { method: "POST" } },
+    body: `usuario=${USUARIO}&clave=${encodeURIComponent(CLAVE)}`,
+  }), salida);
+
+  assert.equal(salida.meta.statusCode, 303);
+  assert.equal(salida.meta.headers.location, "/");
+  const cookie = salida.meta.headers["set-cookie"];
+  assert.match(cookie, /^unq_rag_acceso=/);
+  // HttpOnly para que no la lea el JavaScript de la página, Secure para que
+  // no viaje por HTTP: es la credencial, igual que la que guarda basic auth.
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /Secure/);
+  assert.match(cookie, /SameSite=Lax/);
+  assert.ok(credencialValida(cookie.split(";")[0].split("=")[1]));
+});
+
+await prueba("el formulario con la clave mala no deja cookie", async () => {
+  const salida = salidaDePrueba();
+  await manejar(pedido({
+    rawPath: "/__entrar",
+    requestContext: { http: { method: "POST" } },
+    body: `usuario=${USUARIO}&clave=nope`,
+  }), salida);
+  assert.equal(salida.meta.statusCode, 401);
+  assert.ok(!("set-cookie" in salida.meta.headers));
+  assert.match(salida.cuerpo().toString(), /incorrectos/);
+});
+
+await prueba("la cookie vale igual que la cabecera, y una falsa no", () => {
+  const buena = Buffer.from(`${USUARIO}:${CLAVE}`).toString("base64");
+  assert.ok(credencialValida(credencialDe({ cookies: [`unq_rag_acceso=${buena}`] })));
+  assert.ok(credencialValida(credencialDe({
+    cookies: ["otra=x", ` unq_rag_acceso=${buena} `] })), "entre otras cookies");
+  assert.ok(!credencialValida(credencialDe({ cookies: ["unq_rag_acceso=inventada"] })));
+  assert.ok(!credencialValida(credencialDe({ cookies: ["unq_rag_accesoX=" + buena] })),
+            "un nombre parecido no cuenta");
 });
 
 // ----------------------------------------------------------------- proxy
@@ -202,6 +250,21 @@ await prueba("reenvía método, ruta, query, cuerpo y la cabecera de la clave", 
   // El host tiene que ser el destino, y el content-length el real.
   assert.equal(visto.cab.host, "127.0.0.1");
   assert.equal(visto.cab["content-length"], "16");
+});
+
+await prueba("la credencial de la cookie llega a nginx como Authorization", async () => {
+  // Sin esto nginx pediría la clave por su cuenta y el visitante vería un
+  // cuadro de login que, encima, la Function URL no deja funcionar.
+  let visto = null;
+  const { servidor, puerto } = await servidorFalso((req, res) => {
+    visto = req.headers.authorization; res.end("ok");
+  });
+  const salida = salidaDePrueba();
+  const cred = Buffer.from(`${USUARIO}:${CLAVE}`).toString("base64");
+  await proxiar("127.0.0.1", pedido({ cookies: [`unq_rag_acceso=${cred}`] }),
+                salida, puerto, cred);
+  servidor.close();
+  assert.equal(visto, `Basic ${cred}`);
 });
 
 await prueba("un cuerpo en base64 se decodifica antes de reenviarlo", async () => {
