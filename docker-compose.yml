@@ -131,11 +131,19 @@ services:
       BASELINE_INDEX_NAME: ${BASELINE_INDEX_NAME:-baseline_documents_v2}
       BASELINE_INDEX_PATH: /app/Ingestion/data/chroma_index_baseline_v2
       BASELINE_PORT: "5001"
-      # Modelo que redacta la respuesta de la línea base. El default de
-      # app_baseline.py es gpt-4-0613, que no tiene visión. Poner gpt-4.1 acá
-      # iguala el modelo de las dos versiones y deja la ingesta como única
-      # variable.
-      BASELINE_OPENAI_MODEL: ${BASELINE_OPENAI_MODEL:-gpt-4-0613}
+      # Modelo que redacta la respuesta de la línea base. Era gpt-4-0613 y
+      # OpenAI lo apagó el 23/10/2026: el contenedor respondía "I don't know"
+      # a todo, sin fuentes, porque la llamada daba 404 y la excepción se
+      # capturaba. Esto pisaba el default del código, así que arreglarlo allá
+      # no alcanzaba — el despliegue seguía roto.
+      #
+      # Es el MISMO modelo que la otra columna a propósito: iguala las dos y
+      # deja la ingesta como única variable. Lo que aísla la comparación no
+      # es el modelo sino que a la línea base no se le adjuntan los planos
+      # (ver app_baseline.py); ya no existen modelos de chat sin visión.
+      BASELINE_OPENAI_MODEL: ${BASELINE_OPENAI_MODEL:-gpt-4.1}
+      # Con gpt-4.1 (128k) el recorte no hace falta, pero se deja por si se
+      # vuelve a fijar un modelo de 8k con BASELINE_OPENAI_MODEL.
       BASELINE_MAX_TOKENS: ${BASELINE_MAX_TOKENS:-2000}
     ports:
       - "${API_BIND:-127.0.0.1}:${API_BASELINE_PORT:-5001}:5001"

@@ -694,3 +694,16 @@ def test_la_linea_base_no_apunta_a_un_modelo_apagado():
                 "o3-mini", "o4-mini", "gpt-4-turbo"}
     assert app_baseline.BASELINE_MODEL not in apagados, (
         f"{app_baseline.BASELINE_MODEL} está dado de baja en OpenAI")
+
+    # Y el del compose, que es el que manda en el despliegue. Arreglar solo
+    # el del código no alcanzó: el contenedor recibía gpt-4-0613 igual,
+    # porque la variable de entorno pisa el default de Python. Se comprobó
+    # sobre el servidor ya desplegado.
+    import re
+    raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    with open(os.path.join(raiz, "docker-compose.yml"), encoding="utf-8") as f:
+        compose = f.read()
+    m = re.search(r"BASELINE_OPENAI_MODEL:\s*\$\{BASELINE_OPENAI_MODEL:-([^}]+)\}", compose)
+    assert m, "no encontré el default de BASELINE_OPENAI_MODEL en docker-compose.yml"
+    assert m.group(1).strip() not in apagados, (
+        f"el compose despliega {m.group(1)}, que está dado de baja")
