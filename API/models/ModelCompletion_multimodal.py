@@ -276,8 +276,18 @@ class ModelCompletion(Completion):
                     model=model,
                     messages=self._normalize_messages(message),
                     max_tokens=self.max_tokens,
-                    temperature=0.7,
-                    top_p=0.95,
+                    # 0, no 0.7. Acá no se quiere variedad: se quiere que la
+                    # misma pregunta con el mismo contexto dé siempre la
+                    # misma respuesta. Con 0.7, cualquier medición que se
+                    # reporte deja de ser reproducible — alguien que repita
+                    # la prueba puede ver otra cosa.
+                    #
+                    # Solo afecta a esta rama, la de texto. Cuando se
+                    # adjuntan los planos se va por Responses, que no acepta
+                    # temperature: ahí las respuestas ya son estables
+                    # (medido: cinco corridas idénticas).
+                    temperature=0,
+                    top_p=1,
                 )
                 anotar_consumo(self.query_id, model, getattr(resp, "usage", None))
                 content = resp.choices[0].message.content if resp and resp.choices else ""
