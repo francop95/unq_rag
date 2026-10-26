@@ -643,3 +643,54 @@ def test_los_prompts_no_nombran_archivos_de_plano_a_mano():
 def test_un_nombre_de_plano_aproximado_no_cuesta_la_cita(real, declarado, esperado):
     from qnas.RetrieverQna_multimodal import RetrieverQna
     assert RetrieverQna._dato_declarado(real, [(declarado, "sí")]) == esperado
+
+
+# ───────────────────── la línea base de la comparación no ve imágenes
+
+def test_la_linea_base_nunca_recibe_una_imagen():
+    """Es lo único que sostiene la comparación de la tesis.
+
+    La defensa era "usa un modelo sin visión", y eso venció: el 23/10/2026
+    OpenAI apagó gpt-4-0613 —el que usaba la línea base— junto con
+    gpt-3.5-turbo y o3-mini, y todos los modelos de chat que quedan aceptan
+    imágenes. La visión dejó de ser una variante que se pueda elegir.
+
+    Lo que aísla la comparación es el experimento, no el producto: a la línea
+    base se le sacan los planos y se le anulan las fuentes visuales, así que
+    nunca recibe una imagen. Un modelo con visión que no recibe imágenes se
+    comporta como uno sin visión.
+
+    Se construye el modelo pidiéndole EXPLÍCITAMENTE que adjunte los planos,
+    que es el caso que el parche tiene que ganar: si alguien lo revierte, la
+    columna "solo texto + OCR" empieza a leer planos y la comparación deja de
+    medir lo que dice medir, sin que nada falle a la vista.
+    """
+    import app_baseline  # noqa: F401 — importarlo aplica los parches
+    from models.ModelCompletion_multimodal import ModelCompletion
+    from qnas.RetrieverQna_multimodal import RetrieverQna
+
+    modelo = ModelCompletion(
+        {"query_id": "prueba", "electric_diagram_path": "/no/existe.pdf",
+         "tben_diagram_path": "/no/existe2.pdf",
+         "attach_electric_diagrams": True,
+         "completion_failure": "", "completion_success": "",
+         "openai_model": "gpt-4.1", "openai_keys": "sk-de-prueba"},
+        "openai")
+
+    assert modelo.attach_electric_diagrams is False, (
+        "la línea base volvió a adjuntar los planos")
+    assert RetrieverQna._attached_plan_sources({}, ["un_plano.pdf"]) == [], (
+        "la línea base volvió a ofrecer los planos como fuente")
+
+
+def test_la_linea_base_no_apunta_a_un_modelo_apagado():
+    """gpt-4-0613 se apagó el 23/10/2026 y nadie se enteró: toda consulta a
+    la línea base devolvía "I don't know" sin fuentes, porque la llamada
+    fallaba con 404 y la excepción se capturaba. La comparación de la tesis
+    estuvo rota y ninguna prueba lo vio."""
+    import app_baseline
+
+    apagados = {"gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-16k",
+                "o3-mini", "o4-mini", "gpt-4-turbo"}
+    assert app_baseline.BASELINE_MODEL not in apagados, (
+        f"{app_baseline.BASELINE_MODEL} está dado de baja en OpenAI")

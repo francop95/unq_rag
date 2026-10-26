@@ -81,13 +81,33 @@ Configuration.chroma_local_path = INDEX_PATH
 # fuentes que recupera), así que entra — pero por eso se baja max_tokens de
 # 4000 a 2000, para no pasarse de los 8192 al sumar la respuesta.
 #
-# Configurable: BASELINE_OPENAI_MODEL=gpt-3.5-turbo (16k) si preferís más
-# contexto, o =gpt-4.1 para volver a igualar el modelo de las dos versiones y
-# aislar solo el efecto de la ingesta.
-BASELINE_MODEL = os.getenv("BASELINE_OPENAI_MODEL", "gpt-4-0613")
+# Era gpt-4-0613, y OpenAI lo apagó el 23/10/2026. Toda consulta a la línea
+# base devolvía "I don't know" sin fuentes: la llamada fallaba con 404, la
+# excepción se capturaba y la respuesta salía vacía. No se notó en ninguna
+# prueba porque la comparación no está cubierta por la suite.
+#
+# El reemplazo es gpt-4.1, el MISMO modelo que la otra columna. Eso no es
+# resignación: es mejor comparación. Con dos modelos distintos, parte de la
+# diferencia medida era "uno es más nuevo", que no es mérito de la ingesta.
+# Igualando el modelo, lo que queda es exactamente el efecto de lo que se
+# construyó: 771 vectores de solo texto contra 6155 con visión, OCR y tablas.
+#
+# Antes la línea base se defendía diciendo "usa un modelo sin visión". Eso ya
+# no se puede sostener: en la misma tanda del 23/10 se apagaron gpt-3.5-turbo
+# y o3-mini, y todos los modelos de chat que quedan aceptan imágenes
+# —comprobado contra la cuenta—. La visión dejó de ser una variante.
+#
+# Lo que aísla la comparación no es el modelo sino el experimento: más abajo
+# se le sacan los planos y se anulan las fuentes visuales, así que la línea
+# base NUNCA recibe una imagen. Un modelo con visión que no recibe imágenes
+# se comporta como uno sin visión, y esa propiedad no se la puede apagar
+# nadie. Hay una prueba que falla si alguien vuelve a habilitarlos.
+BASELINE_MODEL = os.getenv("BASELINE_OPENAI_MODEL", "gpt-4.1")
 Configuration.OPENAI_MODEL = BASELINE_MODEL
 
 # Los modelos de 8k no toleran 4000 tokens de salida sobre un prompt de 3k.
+# Con gpt-4.1 (128k) no hace falta, pero se deja por si se vuelve a fijar un
+# modelo viejo con BASELINE_OPENAI_MODEL.
 if BASELINE_MODEL.startswith(("gpt-4-0", "gpt-4-32k")):
     Configuration.RETRIEVER_QNA_MAX_TOKENS = int(
         os.getenv("BASELINE_MAX_TOKENS", "2000")
