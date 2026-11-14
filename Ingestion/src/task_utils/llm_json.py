@@ -13,6 +13,7 @@ Concentra dos cosas que antes estaban duplicadas o ausentes:
 """
 
 import json
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -25,6 +26,9 @@ from task_utils.model_params import (
 )
 
 logger = Logger.get_logger(__name__)
+
+# .../Ingestion, subiendo desde src/task_utils/
+_RAIZ_INGESTA = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from openai import RateLimitError, APIConnectionError, APITimeoutError
@@ -155,6 +159,30 @@ def parse_json_response(text: str) -> Optional[Any]:
 
     logger.debug(f"No se pudo parsear JSON de la respuesta: {cleaned[:200]}")
     return None
+
+
+def cliente_openai(base_url: Optional[str] = None):
+    """Un cliente de OpenAI con la clave del `.env` de la ingesta.
+
+    `OpenAI()` a secas solo encuentra la clave si OPENAI_API_KEY está exportada
+    en el entorno. Desde la terminal de siempre eso se cumple y todo anda;
+    desde la pantalla de revisión —otro proceso, otro entorno— muere con
+    "api_key must be set", y recién después de aceptar el trabajo. Ya pasó dos
+    veces, en dos scripts distintos, porque cada uno armaba su propio cliente.
+    Por eso vive acá, al lado de lo único que lo consume.
+
+    El `.env` se lee por ruta absoluta a propósito: estos scripts se corren
+    tanto desde `Ingestion/` como desde la raíz del repo, y además como
+    subproceso de la ingesta, que no hereda el directorio de trabajo de nadie.
+    """
+    from openai import OpenAI
+    from config.config_reader import ConfigReader
+
+    cfg = ConfigReader(os.path.join(_RAIZ_INGESTA, ".env"))
+    clave = (cfg.get("OPENAI_API_KEY") or cfg.get("openai_key")
+             or os.getenv("OPENAI_API_KEY"))
+    url = base_url or cfg.get("openai_url")
+    return OpenAI(api_key=clave, base_url=url) if url else OpenAI(api_key=clave)
 
 
 class LLMJsonClient:

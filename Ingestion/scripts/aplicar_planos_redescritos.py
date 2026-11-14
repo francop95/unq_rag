@@ -86,8 +86,7 @@ def main() -> int:
 
     from configs.Configuration import Configuration as C
     from configs.entidades import etiquetas, componentes_del_documento
-    from openai import OpenAI
-    from task_utils.llm_json import LLMJsonClient, text_content_part
+    from task_utils.llm_json import LLMJsonClient, cliente_openai, text_content_part
     from task_utils.embedding_provider import EmbeddingProvider
     import chromadb
 
@@ -123,12 +122,12 @@ def main() -> int:
                 hijos[claves[k]].append(cid)
         off += len(b["ids"])
 
-    llm = LLMJsonClient(client=OpenAI(), model=args.modelo_preguntas,
+    llm = LLMJsonClient(client=cliente_openai(), model=args.modelo_preguntas,
                         temperature=0.0, max_output_tokens=800,
                         etapa="preguntas_planos")
     emb = EmbeddingProvider(provider="openai", model=C.EMBEDDING_MODEL
                             if hasattr(C, "EMBEDDING_MODEL") else "text-embedding-3-large",
-                            openai_client=OpenAI())
+                            openai_client=cliente_openai())
 
     a_borrar, nuevos = [], []
     for p in planos:

@@ -514,20 +514,15 @@ def cliente_llm(modelo: str = None):
     usar el mismo modelo y la misma temperatura: si releyera con otros, el
     texto que se aprueba no sería el que produce esta herramienta.
     """
-    from openai import OpenAI
-    from task_utils.llm_json import LLMJsonClient
+    from task_utils.llm_json import LLMJsonClient, cliente_openai
     from config.config_reader import ConfigReader
 
-    # El .env por ruta absoluta y la clave de ahí, no del entorno. Era
-    # `OpenAI()` a secas, que solo anda con OPENAI_API_KEY exportada: corrido
-    # desde la terminal de siempre funcionaba, y desde la pantalla de revisión
-    # —otro proceso, otro entorno— moría con "api_key must be set" recién
-    # después de aceptar el trabajo.
-    cfg = ConfigReader(os.path.join(RAIZ, ".env"))
-    clave = cfg.get("OPENAI_API_KEY") or cfg.get("openai_key") or os.getenv("OPENAI_API_KEY")
-    url = cfg.get("openai_url")
-    cliente = OpenAI(api_key=clave, base_url=url) if url else OpenAI(api_key=clave)
+    # La clave sale del .env por ruta absoluta, no del entorno: por qué, en
+    # `cliente_openai`. Acá se arma el cliente con ese helper para que haya una
+    # sola definición, y no dos que se arreglan de a una.
+    cliente = cliente_openai()
 
+    cfg = ConfigReader(os.path.join(RAIZ, ".env"))
     modelo = modelo or cfg.get("multimodal_model", "gpt-4o")
     return LLMJsonClient(client=cliente, model=modelo, temperature=0.0,
                          max_output_tokens=4000, etapa="redescripcion_figuras")

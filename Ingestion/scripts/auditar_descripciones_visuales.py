@@ -237,15 +237,15 @@ def main() -> int:
     if not figuras:
         return 0
 
-    from openai import OpenAI
     from task_utils.llm_json import (
-        LLMJsonClient, image_content_part, text_content_part, run_parallel,
+        LLMJsonClient, cliente_openai, image_content_part, text_content_part,
+        run_parallel,
     )
     from config.config_reader import ConfigReader
 
     cfg = ConfigReader()
     modelo = args.modelo or cfg.get("multimodal_model", "gpt-4o")
-    llm = LLMJsonClient(client=OpenAI(), model=modelo, temperature=0.0,
+    llm = LLMJsonClient(client=cliente_openai(), model=modelo, temperature=0.0,
                         max_output_tokens=4000 if args.valores else 600,
                         etapa="auditoria_valores" if args.valores else "auditoria_figuras")
     print(f"Modelo: {modelo}\n")

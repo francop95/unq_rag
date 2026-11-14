@@ -107,7 +107,7 @@ def main() -> int:
     args = ap.parse_args()
 
     from configs.Configuration import Configuration as C
-    from openai import OpenAI
+    from task_utils.llm_json import cliente_openai
     from task_utils.chunk_text import ROTULO_CONEXIONES
     from task_utils.embedding_provider import EmbeddingProvider
     import chromadb
@@ -153,7 +153,7 @@ def main() -> int:
                 emb = EmbeddingProvider(
                     provider="openai",
                     model=getattr(C, "EMBEDDING_MODEL", "text-embedding-3-large"),
-                    openai_client=OpenAI(),
+                    openai_client=cliente_openai(),
                 )
             print(f"{col.name}: embebiendo {len(textos)} textos con {emb.model}...")
             vectores = []
