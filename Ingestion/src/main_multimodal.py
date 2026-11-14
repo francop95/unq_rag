@@ -311,6 +311,10 @@ def _parse_args():
                         "el modelo de visión")
     p.add_argument("--dry-run", action="store_true",
                    help="lista los documentos que se procesarían y termina, sin gastar nada")
+    p.add_argument("--sin-releer-planos", action="store_true",
+                   dest="sin_releer_planos",
+                   help="saltear la relectura de planos a alta resolución. "
+                        "Es cara; se saltea para probar el resto del pipeline")
     p.add_argument("--forzar", action="store_true",
                    help="trocea aunque el manifiesto diga que el documento no cambió. "
                         "Es lo que hace falta para volver a trocear uno ya ingestado: "
@@ -398,6 +402,45 @@ if __name__ == "__main__":
 
                 chunks_dir = chunk_result.payload["chunks"]
                 print(f"✅ Chunking OK. Carpeta: {chunks_dir}")
+
+            # --------------------
+            # 1.2) PLANOS: RELEERLOS A UNA RESOLUCIÓN QUE SE PUEDA LEER
+            # --------------------
+            # El troceo rasteriza la página a 144 dpi y la API de visión
+            # además reescala el lado corto a 768 px: un plano A4 denso le
+            # llega al modelo con los rótulos en unos pocos píxeles. A esa
+            # altura "30mA" y "30A" son el mismo manchón, y de ahí salió un
+            # "interruptor de 30A" que no existe en el tablero.
+            #
+            # Esto era un script aparte que había que acordarse de correr, y
+            # que además escribía en el índice y no en el troceo: así
+            # quedaron 72 figuras con un texto en disco y otro en Chroma, y
+            # reindexar cualquiera de ellas la empeoraba. Ahora corre acá, y
+            # escribe en el JSON — que es lo que después mira la revisión y
+            # lo que se indexa.
+            #
+            # Va ANTES de la compuerta a propósito: quien revisa tiene que
+            # ver el texto corregido, no el que se va a reemplazar.
+            if not args.sin_releer_planos:
+                try:
+                    sys.path.insert(0, os.path.join(project_root, "scripts"))
+                    from redescribir_planos import objetivos_desde_chunks
+
+                    planos = objetivos_desde_chunks(chunks_dir)
+                    if planos:
+                        print(f"\n🔍 {len(planos)} plano(s): releyendo a alta "
+                              f"resolución")
+                        import subprocess
+                        r = subprocess.run(
+                            [sys.executable, "scripts/redescribir_planos.py",
+                             "--desde-chunks", chunks_dir],
+                            cwd=project_root)
+                        if r.returncode != 0:
+                            print(f"   ⚠️  la relectura de planos falló "
+                                  f"(código {r.returncode}); sigue con lo que "
+                                  f"dejó el troceo")
+                except Exception as e:  # noqa: BLE001 — no puede tumbar la ingesta
+                    print(f"   ⚠️  no se pudieron releer los planos: {e}")
 
             # --------------------
             # 1.25) COMPUERTA DE REVISIÓN

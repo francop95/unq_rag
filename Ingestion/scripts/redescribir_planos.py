@@ -57,6 +57,7 @@ No toca el índice. Escribe un JSON para revisar antes de aplicar nada.
 import argparse
 import io
 import json
+import unicodedata
 import os
 import re
 import sys
@@ -85,29 +86,58 @@ ZOOM_INGESTA = 2.0
 LADO_TILE = 1400
 SOLAPE = 0.15
 
-# Los planos de ESTA instalación. El manual del fabricante queda afuera a
-# propósito: son figuras de media página dentro de documentación de terceros, y
-# el coste de equivocarse ahí es mucho menor que en el plano del secadero.
-DOCUMENTOS_PLANO = {
-    "0_Construcción y automatización de un secadero de pastas industrial CORREGIDO (2).pdf":
-        {26, 53, 87, 88},
-    "1_Plano distribucion electrica_v1.pdf": None,          # None = todas
-    "2_Planos_secadero_codificados_propuesta.pdf": None,
-    "conexionadoTben.pdf": None,
-    "Poster_didactico_secadero_componentes_y_planos.pdf": None,
-    "Inventario_secadero_revision_Pablo_v2.xlsx": None,
-}
+# A qué figuras aplicarlo. Dos filtros, y cada uno resuelve algo distinto.
+#
+# 1. EL DOCUMENTO. Los manuales de fabricante quedan afuera a propósito: son
+#    figuras de media página dentro de documentación de terceros, y el coste
+#    de equivocarse ahí es mucho menor que en el plano del secadero. Esta
+#    pasada es cara —rasteriza a 432 dpi y manda varios mosaicos por figura—
+#    y sobre el corpus actual incluirlos agregaría 15 figuras de manuales.
+#
+#    Es una lista, sí, pero de DOCUMENTOS y no de páginas. La que había antes
+#    enumeraba páginas concretas de la tesis ({26, 53, 87, 88}) y estaba mal
+#    en las dos direcciones: se perdía la 23, que es un wiring_diagram de la
+#    instalación, y había que mantenerla a mano cada vez que algo se
+#    re-troceaba y cambiaba de página.
+#
+# 2. EL TIPO, que lo asignó el troceo. Dentro de los documentos propios casi
+#    no filtra —de 15 figuras, 11 son wiring_diagram, 3 connection_diagram y
+#    1 layout— pero es lo que evita gastar la pasada en una foto si alguno de
+#    esos documentos llega a tener una.
+#
+# `layout` entra: la página 53 de la tesis es la disposición del tablero, y
+# tiene los mismos rótulos finos que el resto.
+DOCUMENTOS_PROPIOS = (
+    "0_Construcción", "1_Plano", "2_Planos", "conexionadoTben",
+    "Poster_didactico", "Inventario_secadero", "Secadero v01",
+)
 
-def _nfc(s: str) -> str:
-    """Nombre de archivo comparable.
+TIPOS_PLANO = ("wiring_diagram", "connection_diagram", "schematic",
+               "circuit_diagram", "layout", "panel_layout")
 
-    El índice guarda los nombres tal como los dio macOS, en NFD: la "ó" de
-    "Construcción" son dos code points. Un literal escrito en este archivo está
-    en NFC y es un code point. Son cadenas distintas para Python aunque se vean
-    idénticas, y sin esto el filtro por documento no matchea nada.
+
+def _es_de_la_instalacion(file_name: str) -> bool:
+    """¿El documento es nuestro, o es un manual de un tercero?
+
+    Los dos lados se normalizan a NFC antes de comparar. El índice guarda los
+    nombres tal como los dio macOS, en NFD —la "ó" de "Construcción" son dos
+    code points— y un literal escrito en este archivo está en NFC. Sin
+    normalizar, "0_Construcción" no matchea su propio nombre y las cuatro
+    páginas de planos de la tesis quedan afuera en silencio. Comparar por
+    fragmento no alcanza: sigue siendo comparar code points.
     """
-    import unicodedata
-    return unicodedata.normalize("NFC", s or "")
+    nombre = unicodedata.normalize("NFC", file_name or "")
+    return any(unicodedata.normalize("NFC", f) in nombre for f in DOCUMENTOS_PROPIOS)
+
+
+def _es_plano(texto: str) -> bool:
+    """¿El troceo clasificó esta figura como un plano?
+
+    Se lee del texto del chunk y no de la metadata porque es ahí donde el
+    renderizador deja el tipo: la línea "Tipo: wiring_diagram".
+    """
+    linea = next((l for l in (texto or "").split("\n") if l.startswith("Tipo: ")), "")
+    return linea[len("Tipo: "):].strip() in TIPOS_PLANO
 
 
 SISTEMA_ORIENTACION = """Mirás un plano técnico. Decime cuántos grados hay que
@@ -270,6 +300,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--solo", type=int, default=None, help="una sola página")
     ap.add_argument("--documento", default=None, help="filtrar por nombre de archivo")
+    ap.add_argument("--desde-chunks", default=None, metavar="CARPETA",
+                    dest="desde_chunks",
+                    help="tomar los planos de una corrida de troceo en vez del "
+                         "índice, y escribir la corrección en su JSON. Es el "
+                         "modo que usa la ingesta: durante el pipeline los "
+                         "chunks todavía no están indexados")
+    ap.add_argument("--todos-los-documentos", action="store_true",
+                    dest="todos_los_documentos",
+                    help="incluir también los manuales de fabricante, que por "
+                         "defecto quedan afuera por costo")
     ap.add_argument("--modelo", default="gpt-4.1")
     ap.add_argument("--zoom", type=float, default=ZOOM_ALTA)
     # Rehacer los tiles es lo caro; podar el resultado no. Con esto se repasa
@@ -279,12 +319,11 @@ def main() -> int:
     args = ap.parse_args()
 
     from configs.Configuration import Configuration as C
-    from openai import OpenAI
-    from task_utils.llm_json import LLMJsonClient, text_content_part
+    from task_utils.llm_json import LLMJsonClient, cliente_openai, text_content_part
     import chromadb
 
     if args.revisar:
-        llm = LLMJsonClient(client=OpenAI(), model=args.modelo, temperature=0.0,
+        llm = LLMJsonClient(client=cliente_openai(), model=args.modelo, temperature=0.0,
                             max_output_tokens=2500, etapa="revision_planos")
         with open(SALIDA, encoding="utf-8") as f:
             previos = json.load(f)
@@ -312,6 +351,15 @@ def main() -> int:
         print(f"\nEscrito: {SALIDA}")
         return 0
 
+    if args.desde_chunks:
+        objetivos = objetivos_desde_chunks(args.desde_chunks)
+        if args.solo:
+            objetivos = [o for o in objetivos if o["pagina"] == args.solo]
+        print(f"Planos a redescribir: {len(objetivos)}\n")
+        if not objetivos:
+            return 0
+        return _procesar(objetivos, args, desde_chunks=True)
+
     cli = chromadb.PersistentClient(path=C.chroma_local_path)
     col = cli.get_collection(C.AppSettings__ChromaIndex)
 
@@ -327,15 +375,13 @@ def main() -> int:
             if not mp.lower().endswith(".png"):
                 continue
             fn = m.get("file_name") or ""
-            clave = next((k for k in DOCUMENTOS_PLANO if _nfc(k) == _nfc(fn)), None)
-            if clave is None:
+            if not _es_plano(doc):
                 continue
-            paginas = DOCUMENTOS_PLANO[clave]
+            if not args.todos_los_documentos and not _es_de_la_instalacion(fn):
+                continue
             try:
                 pg = int(m.get("page_num"))
             except (TypeError, ValueError):
-                continue
-            if paginas is not None and pg not in paginas:
                 continue
             if args.solo and pg != args.solo:
                 continue
@@ -348,15 +394,32 @@ def main() -> int:
     print(f"Planos a redescribir: {len(objetivos)}\n")
     if not objetivos:
         return 0
+    return _procesar(objetivos, args, desde_chunks=False)
 
-    llm = LLMJsonClient(client=OpenAI(), model=args.modelo, temperature=0.0,
+
+def _procesar(objetivos, args, desde_chunks: bool) -> int:
+    """La pasada en sí. La comparten el modo índice y el modo chunks.
+
+    Lo único que cambia entre los dos es de dónde salieron los objetivos y
+    adónde va el resultado; el procedimiento —rasterizar a alta, localizar el
+    recorte, enderezar, cortar en mosaicos, transcribir y componer— es el
+    mismo, y tiene que seguir siéndolo: si divergieran, una figura corregida
+    durante la ingesta diría algo distinto que la misma figura reparada
+    después.
+    """
+    from task_utils.llm_json import LLMJsonClient, cliente_openai, text_content_part
+
+    llm = LLMJsonClient(client=cliente_openai(), model=args.modelo, temperature=0.0,
                         max_output_tokens=2500, etapa="redescripcion_planos")
 
     resultados = []
     for o in objetivos:
         print(f"── {o['archivo'][:46]}  pág.{o['pagina']}")
-        ruta_crop = os.path.join(RAIZ, "data", "media",
-                                 o["media_path"].split("media/", 1)[-1])
+        # En modo chunks el recorte vive en la propia corrida y la ruta ya
+        # es absoluta; en modo índice hay que reconstruirla bajo data/media.
+        ruta_crop = (o["media_path"] if os.path.exists(o["media_path"])
+                     else os.path.join(RAIZ, "data", "media",
+                                       o["media_path"].split("media/", 1)[-1]))
         pdf = os.path.join(RAIZ, "data", "raw_data", o["archivo"])
         if not os.path.exists(pdf):
             for sub in ("hardware", "old"):
@@ -440,11 +503,139 @@ def main() -> int:
                   f"   conexiones: {len(final.get('conexiones') or [])}"
                   f"   dudas: {len(final.get('dudas') or [])}")
 
+    if desde_chunks:
+        escritos = aplicar_a_chunks(resultados)
+        # La lectura cruda —las transcripciones de cada mosaico, cuántos
+        # salieron, la descripción antes de podarla— queda al lado de los
+        # chunks y no en `data/`: pertenece a ESTA corrida, y es con lo que
+        # después se puede responder "¿de dónde salió esto?" sin volver a
+        # pagar las llamadas. Se descartaba, y por eso no se podía rehacer
+        # el pegado sin releer el plano entero.
+        evidencia = os.path.join(args.desde_chunks, "planos_relectura.json")
+        with open(evidencia, "w", encoding="utf-8") as f:
+            json.dump(resultados, f, ensure_ascii=False, indent=2)
+        print(f"\n   ✅ {escritos} figura(s) corregidas en el JSON del troceo")
+        print(f"   📄 lectura cruda: {os.path.basename(evidencia)}")
+        return 0
+
     with open(SALIDA, "w", encoding="utf-8") as f:
         json.dump(resultados, f, ensure_ascii=False, indent=2)
     print(f"\nEscrito: {SALIDA}")
     print("Revisalo antes de aplicarlo al índice.")
     return 0
+
+
+
+# ─────────────────────── la misma pasada, pero sobre el troceo en disco
+
+def objetivos_desde_chunks(chunks_dir: str):
+    """Los planos de una corrida recién troceada, leídos del disco.
+
+    El modo de siempre recorre el índice, y eso solo sirve para reparar algo
+    ya indexado. Durante la ingesta los chunks todavía no están en Chroma: si
+    la corrección no puede correr acá, queda como un script suelto que alguien
+    tiene que acordarse de ejecutar — y si se olvida, el índice se queda con
+    la lectura de baja resolución para siempre.
+    """
+    import glob
+
+    objetivos = []
+    for ruta in sorted(glob.glob(os.path.join(chunks_dir, "*", "*.json"))):
+        try:
+            with open(ruta, encoding="utf-8") as f:
+                datos = json.load(f)
+        except (OSError, ValueError):
+            continue
+        for i, chunk in enumerate(datos if isinstance(datos, list) else [datos]):
+            if not isinstance(chunk, dict):
+                continue
+            if (chunk.get("content_type") or "") not in ("diagram_visual", "image"):
+                continue
+            original = chunk.get("original_chunk")
+            if isinstance(original, str):
+                try:
+                    original = json.loads(original)
+                except ValueError:
+                    continue
+            if not isinstance(original, dict):
+                continue
+            notas = original.get("notes")
+            if not isinstance(notas, dict):
+                continue
+            if (notas.get("diagram_type") or "") not in TIPOS_PLANO:
+                continue
+            media = original.get("image_path") or original.get("media_path") or ""
+            if not str(media).lower().endswith(".png") or not os.path.exists(media):
+                continue
+            objetivos.append({
+                "ruta_json": ruta, "indice_en_json": i,
+                "archivo": chunk.get("file_name") or "",
+                "pagina": int(chunk.get("page_num") or 0),
+                "media_path": media,
+                "descripcion_vieja": "",
+            })
+    return objetivos
+
+
+def aplicar_a_chunks(resultados) -> int:
+    """Escribe las descripciones nuevas en el JSON del troceo.
+
+    En el JSON y no en el índice: así el artefacto de disco es la verdad y el
+    índice vuelve a ser un render de él. Mientras la corrección viva solo en
+    Chroma, reindexar la destruye y la pantalla de revisión muestra una
+    versión que no es la que responde.
+    """
+    from task_utils.chunk_text import notas_desde_relectura
+
+    por_archivo = {}
+    for r in resultados:
+        if r.get("descripcion_nueva") and r.get("ruta_json"):
+            por_archivo.setdefault(r["ruta_json"], []).append(r)
+
+    escritos = 0
+    for ruta, rs in por_archivo.items():
+        with open(ruta, encoding="utf-8") as f:
+            datos = json.load(f)
+        lista = datos if isinstance(datos, list) else [datos]
+        for r in rs:
+            chunk = lista[r["indice_en_json"]]
+            original = chunk.get("original_chunk")
+            if isinstance(original, str):
+                original = json.loads(original)
+            viejas = original.get("notes") or {}
+            # La lectura cruda anterior se conserva: es la evidencia de qué
+            # había que corregir, y sin ella no se puede medir si la pasada
+            # de alta resolución mejora o empeora.
+            original.setdefault("notes_troceo", original.get("notes"))
+
+            nuevas = notas_desde_relectura(r["descripcion_nueva"])
+            # Los recorridos los sigue poniendo el troceo, no la relectura.
+            # Cada pasada ve una cosa distinta: el troceo mira la hoja entera
+            # a 144 dpi —borrosa, pero puede seguir una línea de punta a
+            # punta— y la relectura mira mosaicos a 6x, donde el texto se lee
+            # pero los conductores se cortan en el borde de cada mosaico. La
+            # propia relectura lo dice: "no se puede asegurar la continuidad
+            # de todas las conexiones entre fragmentos".
+            #
+            # Medido en el plano codificado: el troceo da 16 aristas con
+            # código (QD01 → QF01), la relectura 22 pero nombradas por el
+            # rótulo impreso ("Inter. dif. In: 40A 30mA"). La tabla de
+            # conexiones se siembra de acá y se cruza contra los códigos del
+            # inventario: con los rótulos no engancha ninguno, y quien revisa
+            # pasa de corregir detalles a escribir la tabla de cero, que es
+            # justo lo que esta pantalla existe para evitar.
+            #
+            # Las de la relectura no se tiran: son aristas que el troceo no
+            # vio (QF04 → PS01, Arduino → Servo) y quedan como evidencia.
+            if viejas.get("connections"):
+                nuevas["connections_relectura"] = nuevas.get("connections")
+                nuevas["connections"] = viejas["connections"]
+            original["notes"] = nuevas
+            chunk["original_chunk"] = json.dumps(original, ensure_ascii=False)
+            escritos += 1
+        with open(ruta, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False, indent=2)
+    return escritos
 
 
 if __name__ == "__main__":

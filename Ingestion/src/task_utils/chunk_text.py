@@ -13,6 +13,7 @@ se perdieron en silencio justamente por eso.
 """
 
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 # Cuántos elementos de cada lista de la descripción estructurada se incluyen.
@@ -210,3 +211,60 @@ def texto_del_chunk(n: Dict[str, Any]) -> str:
     if n.get("dudas"):
         partes.append("No legible en la figura: " + "; ".join(str(d) for d in n["dudas"]))
     return "\n".join(p for p in partes if p)
+
+
+# Cómo se llama en `notes` cada campo que devuelve una relectura. Las dos
+# pasadas de corrección —redescribir_planos y redescribir_figuras_con_valores—
+# responden en español; `notes` es lo que escribió el troceo, en inglés.
+#
+# Sin este mapeo la corrección no se puede guardar en el JSON del troceo y hay
+# que meterla directo en el índice, que es exactamente lo que dejó 72 figuras
+# con un texto en disco y otro distinto en Chroma.
+_CAMPOS_DE_RELECTURA = (
+    ("resumen", "description"),
+    ("tipo", "diagram_type"),
+    ("dispositivos", "components"),
+    ("conexiones", "connections"),
+    ("textos_en_la_figura", "labels"),
+    ("valores_nominales", "ratings"),
+    ("dudas", "ilegible"),
+)
+
+
+def _una_linea(x: Any) -> str:
+    """Aplasta a un renglón lo que en el dibujo venía en varios.
+
+    Los rótulos de un plano están partidos como entran en la chapa ("Inter.
+    dif.\\nIn: 40A\\n30mA"), y la relectura por mosaicos los devuelve tal cual.
+    Esas listas se renderizan unidas por comas: un salto de línea en el medio
+    corta el renglón al mostrarlo y, en la tabla de conexiones, parte el
+    nombre del componente en tres.
+    """
+    return re.sub(r"\s+", " ", str(x)).strip()
+
+
+def notas_desde_relectura(nueva: Dict[str, Any]) -> Dict[str, Any]:
+    """Lleva una descripción recién leída a la forma que guarda el troceo.
+
+    Los dispositivos vienen como dicts `{rotulo, que_es}` y se aplanan igual
+    que en `texto_del_chunk`, para que las dos formas de renderizar la misma
+    figura digan lo mismo.
+    """
+    def rot(x):
+        if isinstance(x, dict):
+            r = x.get("rotulo") or ""
+            q = x.get("que_es") or ""
+            return _una_linea(f"{r} ({q})" if q else r)
+        return _una_linea(x)
+
+    notas: Dict[str, Any] = {}
+    for origen, destino in _CAMPOS_DE_RELECTURA:
+        valor = nueva.get(origen)
+        if not valor:
+            continue
+        if origen == "dispositivos":
+            valor = [rot(x) for x in valor if rot(x).strip()]
+        elif isinstance(valor, list):
+            valor = [_una_linea(x) for x in valor]
+        notas[destino] = valor
+    return notas

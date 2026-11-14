@@ -1331,3 +1331,68 @@ def test_solo_las_figuras_con_topologia_son_candidatas(corrida_en_disco):
     figura(6, "chunk_1_visual", "connection_diagram")
 
     assert corrida_en_disco.paginas_con_topologia("doc", "20260101_000000") == ["4", "6"]
+
+
+# ────────────────────────────────── relectura de planos pegada al JSON del troceo
+
+def test_la_relectura_de_un_plano_no_se_lleva_puestos_los_recorridos(tmp_path):
+    """Las dos pasadas ven cosas distintas y cada una gana en lo suyo.
+
+    El troceo mira la hoja entera a 144 dpi: borrosa, pero puede seguir un
+    conductor de punta a punta y nombra por código. La relectura mira mosaicos
+    a 6x: lee el texto chico, pero los conductores se cortan en el borde de
+    cada mosaico y nombra por el rótulo impreso.
+
+    Medido en el plano codificado: 16 aristas con código contra 22 con rótulos
+    tipo "Inter. dif. In: 40A 30mA". La tabla de conexiones se siembra de
+    `connections` y se cruza contra los códigos del inventario; con los
+    rótulos no engancha ninguno y quien revisa pasa de corregir detalles a
+    escribir la tabla de cero.
+    """
+    sys.path.insert(0, os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "scripts")))
+    import redescribir_planos as R
+
+    ruta = tmp_path / "chunk_1_visual.json"
+    ruta.write_text(json.dumps([{
+        "content_type": "diagram_visual", "page_num": 1,
+        "original_chunk": json.dumps({"notes": {
+            "description": "vieja", "diagram_type": "wiring_diagram",
+            "connections": ["QD01 → QF01", "QF03 → IF01"]}}),
+    }]), encoding="utf-8")
+
+    escritos = R.aplicar_a_chunks([{
+        "ruta_json": str(ruta), "indice_en_json": 0,
+        "descripcion_nueva": {
+            "resumen": "releída", "tipo": "wiring_diagram",
+            "conexiones": ["T -> Inter. dif.\nIn: 40A", "QF04 -> PS01"],
+            "textos_en_la_figura": ["Inter. Ter.\nIn: 25A"],
+        },
+    }])
+
+    assert escritos == 1
+    notas = json.loads(json.loads(ruta.read_text(encoding="utf-8"))[0]["original_chunk"])
+    assert notas["notes"]["connections"] == ["QD01 → QF01", "QF03 → IF01"], \
+        "los recorridos con código los sigue poniendo el troceo"
+    assert notas["notes"]["description"] == "releída", "lo demás sí se reemplaza"
+    assert notas["notes"]["connections_relectura"] == [
+        "T -> Inter. dif. In: 40A", "QF04 -> PS01"], \
+        "las de la relectura no se tiran: son aristas que el troceo no vio"
+    assert notas["notes_troceo"]["description"] == "vieja", \
+        "queda la evidencia de qué había que corregir"
+
+
+def test_un_rotulo_partido_en_el_dibujo_llega_en_un_solo_renglon():
+    """En la chapa "Inter. dif. / In: 40A / 30mA" entra en tres renglones, y la
+    relectura lo devuelve con los saltos. Esas listas se renderizan unidas por
+    comas: el salto corta el renglón al mostrarlo y, en la tabla de conexiones,
+    parte el nombre del componente en tres filas que no son nada.
+    """
+    from task_utils.chunk_text import notas_desde_relectura
+
+    notas = notas_desde_relectura({
+        "textos_en_la_figura": ["Inter. dif.\nIn: 40A\n30mA"],
+        "dispositivos": [{"rotulo": "QF01\n(reserva)", "que_es": "interruptor"}],
+    })
+    assert notas["labels"] == ["Inter. dif. In: 40A 30mA"]
+    assert notas["components"] == ["QF01 (reserva) (interruptor)"]
