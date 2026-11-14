@@ -421,6 +421,14 @@ if __name__ == "__main__":
             #
             # Va ANTES de la compuerta a propósito: quien revisa tiene que
             # ver el texto corregido, no el que se va a reemplazar.
+            #
+            # Y por eso mismo tiene que ser idempotente: trocear e indexar son
+            # dos corridas sobre la misma carpeta y las dos pasan por acá, así
+            # que `objetivos_desde_chunks` saltea los planos que ya releyó.
+            # Si no, apretar "Indexar" se queda minutos releyendo para llegar
+            # al mismo texto —y encima antes de la compuerta, con lo cual lo
+            # paga incluso cuando después se niega a indexar por falta de
+            # aprobación.
             if not args.sin_releer_planos:
                 try:
                     sys.path.insert(0, os.path.join(project_root, "scripts"))

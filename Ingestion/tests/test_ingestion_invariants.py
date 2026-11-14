@@ -1396,3 +1396,38 @@ def test_un_rotulo_partido_en_el_dibujo_llega_en_un_solo_renglon():
     })
     assert notas["labels"] == ["Inter. dif. In: 40A 30mA"]
     assert notas["components"] == ["QF01 (reserva) (interruptor)"]
+
+
+def test_un_plano_ya_releido_no_se_vuelve_a_releer(tmp_path):
+    """Trocear e indexar son dos corridas del pipeline sobre la MISMA carpeta,
+    y el paso de relectura corre en las dos. Sin salteo son varios minutos de
+    llamadas de visión pagadas dos veces para llegar al mismo texto; en la
+    pantalla, apretar "Indexar" se quedaba pensando sin que nada cambiara.
+
+    El salteo mira `notes_troceo`, que solo escribe `aplicar_a_chunks`: si
+    está, esta pasada ya corrió sobre esa figura.
+    """
+    sys.path.insert(0, os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "scripts")))
+    import redescribir_planos as R
+
+    png = tmp_path / "plano.png"
+    png.write_bytes(b"")
+    carpeta = tmp_path / "pagina_1"
+    carpeta.mkdir()
+
+    def escribir(nombre, notas):
+        (carpeta / nombre).write_text(json.dumps([{
+            "content_type": "diagram_visual", "page_num": 1, "file_name": "d.pdf",
+            "original_chunk": json.dumps({"image_path": str(png), **notas}),
+        }]), encoding="utf-8")
+
+    escribir("sin_releer.json", {"notes": {"diagram_type": "wiring_diagram"}})
+    assert len(R.objetivos_desde_chunks(str(tmp_path))) == 1
+
+    escribir("sin_releer.json", {"notes": {"diagram_type": "wiring_diagram"},
+                                 "notes_troceo": {"diagram_type": "wiring_diagram"}})
+    assert R.objetivos_desde_chunks(str(tmp_path)) == [], \
+        "ya tiene la lectura de alta resolución: no se vuelve a pagar"
+    assert len(R.objetivos_desde_chunks(str(tmp_path), releer_todo=True)) == 1, \
+        "pero se puede forzar"

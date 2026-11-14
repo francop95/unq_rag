@@ -310,6 +310,9 @@ def main() -> int:
                     dest="todos_los_documentos",
                     help="incluir también los manuales de fabricante, que por "
                          "defecto quedan afuera por costo")
+    ap.add_argument("--releer-todo", action="store_true", dest="releer_todo",
+                    help="con --desde-chunks: releer también los planos que ya "
+                         "se releyeron (si no, se saltean)")
     ap.add_argument("--modelo", default="gpt-4.1")
     ap.add_argument("--zoom", type=float, default=ZOOM_ALTA)
     # Rehacer los tiles es lo caro; podar el resultado no. Con esto se repasa
@@ -352,7 +355,7 @@ def main() -> int:
         return 0
 
     if args.desde_chunks:
-        objetivos = objetivos_desde_chunks(args.desde_chunks)
+        objetivos = objetivos_desde_chunks(args.desde_chunks, args.releer_todo)
         if args.solo:
             objetivos = [o for o in objetivos if o["pagina"] == args.solo]
         print(f"Planos a redescribir: {len(objetivos)}\n")
@@ -528,7 +531,7 @@ def _procesar(objetivos, args, desde_chunks: bool) -> int:
 
 # ─────────────────────── la misma pasada, pero sobre el troceo en disco
 
-def objetivos_desde_chunks(chunks_dir: str):
+def objetivos_desde_chunks(chunks_dir: str, releer_todo: bool = False):
     """Los planos de una corrida recién troceada, leídos del disco.
 
     El modo de siempre recorre el índice, y eso solo sirve para reparar algo
@@ -536,6 +539,13 @@ def objetivos_desde_chunks(chunks_dir: str):
     la corrección no puede correr acá, queda como un script suelto que alguien
     tiene que acordarse de ejecutar — y si se olvida, el índice se queda con
     la lectura de baja resolución para siempre.
+
+    Las figuras que ya tienen `notes_troceo` se saltean: ese campo lo escribe
+    `aplicar_a_chunks` y solo existe si esta pasada ya corrió sobre ellas. Sin
+    el salteo la relectura se repite en cada corrida del pipeline sobre la
+    misma carpeta —trocear y después indexar son dos— y son varios minutos de
+    llamadas de visión pagadas dos veces para llegar al mismo texto. Una
+    corrida nueva arranca sin el campo, así que trocear de nuevo sí relee.
     """
     import glob
 
@@ -558,6 +568,8 @@ def objetivos_desde_chunks(chunks_dir: str):
                 except ValueError:
                     continue
             if not isinstance(original, dict):
+                continue
+            if original.get("notes_troceo") and not releer_todo:
                 continue
             notas = original.get("notes")
             if not isinstance(notas, dict):
