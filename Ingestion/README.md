@@ -401,7 +401,9 @@ python scripts/revisar_web.py              # pantalla de revisión: http://127.0
 La pantalla de revisión es la forma recomendada de ingestar un documento
 nuevo: trocea, muestra cada figura con su recorte al lado de la descripción
 que se va a indexar, deja dictaminarlas una por una y recién después indexa.
-Cómo funciona la compuerta y qué significa cada veredicto está en
+Cómo operarla —el paso a paso de un documento nuevo, qué hace cada botón y qué
+cuesta plata— está en **[REVISION.md](REVISION.md)**. Por qué existe la
+compuerta y qué significa cada veredicto, en
 [INGESTA.md](INGESTA.md#12-la-revisión-antes-de-indexar); la versión de
 consola es `scripts/revisar_ingesta.py`.
 
